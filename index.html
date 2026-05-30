@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>软微 420 学习台</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-density="focus">
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="主导航">
+        <div class="brand">
+          <div class="brand-mark">420</div>
+          <div>
+            <h1>软微 420</h1>
+          <p>计划 · 记录 · 复盘</p>
+          </div>
+        </div>
+      <div class="sidebar-status">
+        <div>
+          <span>当前阶段</span>
+          <strong id="sidePhase">阶段 A</strong>
+        </div>
+        <div>
+          <span>本周</span>
+          <strong id="sideWeek">0 / 22h</strong>
+        </div>
+      </div>
+      <nav class="nav-list">
+        <div class="nav-section">
+          <span class="nav-label">执行</span>
+          <button type="button" class="nav-item active" data-view="dashboard" data-title="总览" data-icon="home" aria-label="总览">
+            <i class="nav-ico nav-ico-home" aria-hidden="true"></i><span class="nav-text">总览</span><em id="navRiskDot">待记录</em>
+          </button>
+          <button type="button" class="nav-item" data-view="today" data-title="今日" data-icon="today" aria-label="今日">
+            <i class="nav-ico nav-ico-today" aria-hidden="true"></i><span class="nav-text">今日</span><em id="navTaskCount">3 项</em>
+          </button>
+          <button type="button" class="nav-item" data-view="week" data-title="周计划" data-icon="week" aria-label="周计划">
+            <i class="nav-ico nav-ico-week" aria-hidden="true"></i><span class="nav-text">周计划</span><em id="navWeekPlan">7 天</em>
+          </button>
+          <button type="button" class="nav-item" data-view="foundation" data-title="路径" data-icon="path" aria-label="路径">
+            <i class="nav-ico nav-ico-path" aria-hidden="true"></i><span class="nav-text">路径</span><em>阶段</em>
+          </button>
+          <button type="button" class="nav-item" data-view="syllabus" data-title="考点" data-icon="grid" aria-label="考点">
+            <i class="nav-ico nav-ico-grid" aria-hidden="true"></i><span class="nav-text">考点</span><em id="navSyllabusProgress">0%</em>
+          </button>
+        </div>
+        <div class="nav-section">
+          <span class="nav-label">监测</span>
+          <button type="button" class="nav-item" data-view="records" data-title="记录" data-icon="records" aria-label="记录">
+            <i class="nav-ico nav-ico-records" aria-hidden="true"></i><span class="nav-text">记录</span><em id="navRecordDays">0 天</em>
+          </button>
+          <button type="button" class="nav-item" data-view="review" data-title="复盘" data-icon="review" aria-label="复盘">
+            <i class="nav-ico nav-ico-review" aria-hidden="true"></i><span class="nav-text">复盘</span><em id="navReviewDue">0 到期</em>
+          </button>
+          <button type="button" class="nav-item" data-view="scores" data-title="模考" data-icon="scores" aria-label="模考">
+            <i class="nav-ico nav-ico-scores" aria-hidden="true"></i><span class="nav-text">模考</span><em id="navScoreAvg">--</em>
+          </button>
+        </div>
+        <div class="nav-section">
+          <span class="nav-label">资产</span>
+          <button type="button" class="nav-item" data-view="resources" data-title="资料" data-icon="resources" aria-label="资料">
+            <i class="nav-ico nav-ico-resources" aria-hidden="true"></i><span class="nav-text">资料</span><em>版本</em>
+          </button>
+          <button type="button" class="nav-item" data-view="settings" data-title="设置" data-icon="settings" aria-label="设置">
+            <i class="nav-ico nav-ico-settings" aria-hidden="true"></i><span class="nav-text">设置</span><em>自定义</em>
+          </button>
+        </div>
+      </nav>
+      <div class="side-card">
+        <span>今日底线</span>
+        <strong id="minimumTarget">数学 45m · 408 45m · 英语 20m</strong>
+        <div class="side-progress">
+          <span id="sideCoreLabel">核心占比 0%</span>
+          <div class="progress-track slim"><div class="progress-fill" id="sideCoreFill"></div></div>
+        </div>
+      </div>
+      <div class="side-card side-data-card">
+        <span>本地数据</span>
+        <strong id="sideDataCount">0 条记录</strong>
+        <div class="side-progress">
+          <span id="sideDataSave">尚未保存</span>
+          <div class="progress-track slim"><div class="progress-fill" id="sideDataFill"></div></div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main" id="main-content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="officialBasisText">科目以北大软微 2026 已发布信息为备考基准；2027 年 12 月为推算窗口，官方日期待发布。</p>
+          <h2 id="viewTitle">总览</h2>
+        </div>
+          <div class="top-actions">
+            <div class="sync-pill" id="syncPill">
+              <span id="syncStatusText">仅本机保存</span>
+              <button type="button" id="syncNowBtn" aria-label="立即同步数据"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>同步</span></button>
+            </div>
+          <button class="ghost-button" id="authOpenBtn" type="button" aria-label="账号管理"><i data-lucide="user-round" aria-hidden="true"></i><span>账号</span></button>
+          <div class="density-toggle" role="group" aria-label="信息密度切换">
+            <button type="button" data-density="focus" aria-label="专注模式">专注</button>
+            <button type="button" data-density="balanced" aria-label="平衡模式">平衡</button>
+            <button type="button" data-density="detail" aria-label="详尽模式">详尽</button>
+          </div>
+          <button class="ghost-button" id="exportBtn" type="button" aria-label="导出全部数据"><i data-lucide="download" aria-hidden="true"></i><span>导出</span></button>
+          <label class="import-label" aria-label="导入数据文件">
+            <i data-lucide="upload" aria-hidden="true"></i><span>导入</span>
+            <input type="file" id="importFile" accept="application/json" aria-label="选择 JSON 数据文件">
+          </label>
+        </div>
+      </header>
+
+      <section class="view active" id="dashboard">
+        <section class="command-panel">
+          <div>
+            <span class="command-label">2026-06-01 起点 · 9 月起加压 · 目标日期待官方复核</span>
+            <h3>今日入口</h3>
+            <p id="commandText">先执行任务，再保存记录；复盘到期时优先处理。</p>
+          </div>
+          <div class="command-metrics">
+            <span><strong>420</strong>目标总分</span>
+            <span><strong>65%+</strong>数学+408</span>
+            <span><strong>D+30</strong>复盘闭环</span>
+          </div>
+        </section>
+
+        <section class="focus-board">
+          <article class="focus-primary">
+            <div>
+              <span class="focus-kicker">下一步行动</span>
+              <strong id="focusPrimarySubject">未生成</strong>
+              <p id="focusPrimaryTask">进入今日页生成任务。</p>
+            </div>
+            <div class="focus-action">
+              <em id="focusPrimaryTime">--m</em>
+              <button class="primary-button" type="button" data-jump="today">开始今日任务</button>
+            </div>
+          </article>
+          <article class="focus-card">
+            <span>今日配套</span>
+            <div class="focus-list" id="focusSupportTasks"></div>
+          </article>
+          <article class="focus-card">
+            <span>复盘</span>
+            <strong id="focusReviewCount">0 项</strong>
+            <p id="focusRecordHint">保存记录后进入闭环。</p>
+          </article>
+          <article class="focus-card">
+            <span>本周状态</span>
+            <strong id="focusPace">待记录</strong>
+            <div class="focus-progress"><span id="focusWeekFill"></span></div>
+          </article>
+        </section>
+
+        <section class="target-lane" aria-label="420 内部校准线">
+          <article class="target-status-card">
+            <span>420+ 内部校准线</span>
+            <strong id="targetGateTitle">等待记录</strong>
+            <p id="targetGateText">按累计小时、阶段节点、核心占比和模考均分校准风险。</p>
+            <div class="target-gate-meta">
+              <em id="targetGateHours">累计 --h</em>
+              <em id="targetGateScore">监测：--</em>
+            </div>
+          </article>
+          <article class="score-split-card">
+            <div class="target-head">
+              <span>目标分结构</span>
+              <strong>75 / 80 / 130 / 135</strong>
+            </div>
+            <div class="score-split-bars" id="targetSubjectGrid"></div>
+          </article>
+          <article class="loop-audit-card">
+            <div class="target-head">
+              <span>今日闭环</span>
+              <strong id="targetLoopScore">0/4</strong>
+            </div>
+            <div class="audit-list" id="targetLoopAudit"></div>
+          </article>
+        </section>
+
+        <div class="metric-grid">
+          <article class="metric-card">
+            <span>距离初试</span>
+            <strong id="daysLeft">--</strong>
+            <p id="examDateStatus">2027-12-25 · 推算排程日，非官方初试日期</p>
+          </article>
+          <article class="metric-card">
+            <span>本周有效学习</span>
+            <strong id="weekHours">0h</strong>
+            <p id="weekTargetText">按阶段目标推进</p>
+          </article>
+          <article class="metric-card risk" id="riskCard">
+            <span>当前风险</span>
+            <strong id="riskLabel">待记录</strong>
+            <p id="riskText">填入 3 天数据后更准确</p>
+          </article>
+          <article class="metric-card">
+            <span>核心占比</span>
+            <strong id="coreRatioMetric">0%</strong>
+            <p>数学 + 408 目标 65%+</p>
+          </article>
+        </div>
+
+        <section class="coach-strip">
+          <div>
+            <span class="coach-kicker">阶段教练</span>
+            <strong id="coachTitle">先启动，再加速</strong>
+            <p id="coachText">根据当前阶段、最近 7 天数据和考纲完成度给出建议。</p>
+          </div>
+          <div class="coach-actions">
+            <span id="streakBadge">连续 0 天</span>
+            <span id="paceBadge">节奏未建立</span>
+          </div>
+        </section>
+
+        <details class="detail-section loop-details">
+          <summary>
+            <span>数据闭环</span>
+            <em>流程状态 / 本地备份</em>
+          </summary>
+          <section class="ops-board">
+            <article class="workflow-card">
+              <div class="panel-head tight">
+                <div>
+                  <h3>全流程闭环</h3>
+                  <p>任务、记录、复盘、模考保持同一套数据。</p>
+                </div>
+              </div>
+              <div class="workflow-rail" id="workflowRail"></div>
+            </article>
+            <article class="storage-card">
+              <div class="panel-head tight">
+                <div>
+                  <h3>数据保险</h3>
+                  <p>本机保存，建议每周导出。</p>
+                </div>
+              </div>
+              <div class="storage-status" id="storageStatus"></div>
+            </article>
+          </section>
+        </details>
+
+
+        <details class="detail-section">
+          <summary>
+            <span>趋势图表</span>
+            <em>进度环 / 科目分布 / 14 天趋势</em>
+          </summary>
+          <section class="visual-board">
+            <article class="panel visual-panel">
+              <div class="panel-head">
+                <div>
+                  <h3>进度环</h3>
+                  <p>总量、月度、周计划、核心占比。</p>
+                </div>
+              </div>
+              <div class="ring-grid" id="ringGrid"></div>
+            </article>
+            <article class="panel visual-panel">
+              <div class="panel-head">
+                <div>
+                  <h3>本周科目分布</h3>
+                  <p>检查数学和 408 占比。</p>
+                </div>
+              </div>
+              <div class="subject-chart" id="subjectChart"></div>
+            </article>
+            <article class="panel visual-panel">
+              <div class="panel-head">
+                <div>
+                  <h3>14 天趋势</h3>
+                  <p>按天查看投入变化。</p>
+                </div>
+              </div>
+              <div class="trend-chart" id="trendChart"></div>
+            </article>
+          </section>
+        </details>
+
+        <details class="detail-section">
+          <summary>
+            <span>完整监测</span>
+            <em>周配额 / 目标分 / 今日预览 / 规则 / 热力图</em>
+          </summary>
+          <div class="metric-grid secondary-metrics">
+            <article class="metric-card">
+              <span>累计有效学习</span>
+              <strong id="totalHours">0h</strong>
+              <p id="totalProgressText">目标 2600h</p>
+            </article>
+            <article class="metric-card">
+              <span>本月完成率</span>
+              <strong id="monthProgressMetric">0%</strong>
+              <p id="monthProgressText">对齐月度总控表</p>
+            </article>
+          </div>
+          <div class="content-grid">
+            <section class="panel wide">
+              <div class="panel-head">
+                <div>
+                  <h3>本周配额</h3>
+                  <p>按阶段分配本周时间。</p>
+                </div>
+                <span class="badge" id="currentPhaseBadge">阶段 A</span>
+              </div>
+              <div class="quota-grid" id="quotaGrid"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h3>目标分结构</h3>
+                  <p>分科目标用于校准模考。</p>
+                </div>
+              </div>
+              <div class="score-targets" id="scoreTargets"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h3>今日任务预览</h3>
+                  <p id="todayPhaseText">根据当前阶段生成</p>
+                </div>
+              <button class="icon-button" id="regenTasks" type="button" title="刷新今日任务" aria-label="刷新今日任务">↻</button>
+              </div>
+              <div class="task-list" id="todayTasksPreview"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h3>考纲图谱</h3>
+                  <p>四科进度和下一考点。</p>
+                </div>
+              </div>
+              <div class="syllabus-mini" id="syllabusMini"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h3>系统规则</h3>
+                  <p>任务、复盘和核心占比规则。</p>
+                </div>
+              </div>
+              <div class="rule-stack" id="ruleStack"></div>
+            </section>
+
+            <section class="panel wide">
+              <div class="panel-head">
+                <div>
+                  <h3>最近 28 天热力图</h3>
+                  <p>最近 28 天投入记录。</p>
+                </div>
+              </div>
+              <div class="heatmap" id="heatmap"></div>
+            </section>
+          </div>
+        </details>
+
+      </section>
+
+      <section class="view" id="today">
+        <div class="today-workbench">
+          <section class="panel hero-panel today-plan-panel">
+            <div class="panel-head">
+              <div>
+                <h3>今日计划</h3>
+                <p id="dailyPlanMeta">按时间预算、阶段和复盘队列生成。</p>
+              </div>
+              <button class="primary-button" id="generatePlanBtn" type="button">重新生成</button>
+            </div>
+            <div class="daily-progress" id="dailyTaskProgress"></div>
+            <div class="daily-plan" id="dailyPlan"></div>
+          </section>
+
+          <section class="panel wide task-flow-panel">
+            <div class="panel-head">
+              <div>
+                <h3>今日任务结构图</h3>
+                <p>按顺序执行，完成后再切换。</p>
+              </div>
+            </div>
+            <div class="task-flow" id="taskFlow"></div>
+          </section>
+
+          <section class="panel today-entry-panel">
+            <div class="panel-head">
+              <div>
+                <h3>今日学习输入</h3>
+                <p>填分钟、题量、错题和明日任务。</p>
+              </div>
+              <input class="date-input" type="date" id="entryDate">
+            </div>
+            <div class="quick-row">
+              <div class="quick-group" role="group" aria-label="今日节奏档位">
+                <button type="button" class="quick-chip" data-preset="minimum">底线日</button>
+                <button type="button" class="quick-chip" data-preset="normal">正常日</button>
+                <button type="button" class="quick-chip" data-preset="strong">加强日</button>
+              </div>
+              <div class="quick-group" role="group" aria-label="快速加时">
+                <button type="button" class="quick-chip" data-add="mathMin:25">数学 +25</button>
+                <button type="button" class="quick-chip" data-add="csMin:25">408 +25</button>
+                <button type="button" class="quick-chip" data-add="engMin:20">英语 +20</button>
+              </div>
+            </div>
+            <form class="entry-form" id="entryForm">
+              <label>数学分钟<input type="number" min="0" id="mathMin" inputmode="numeric"></label>
+              <label>408 分钟<input type="number" min="0" id="csMin" inputmode="numeric"></label>
+              <label>英语分钟<input type="number" min="0" id="engMin" inputmode="numeric"></label>
+              <label>政治分钟<input type="number" min="0" id="polMin" inputmode="numeric"></label>
+              <label>项目分钟<input type="number" min="0" id="projectMin" inputmode="numeric"></label>
+              <label>质量评分<input type="number" min="1" max="5" id="qualityScore" inputmode="numeric" placeholder="1-5"></label>
+              <label>数学题数<input type="number" min="0" id="mathProblems" inputmode="numeric"></label>
+              <label>408 题数<input type="number" min="0" id="csProblems" inputmode="numeric"></label>
+              <label>阅读篇数<input type="number" min="0" id="readingCount" inputmode="numeric"></label>
+              <label>新增错题<input type="number" min="0" id="newMistakes" inputmode="numeric"></label>
+              <label>回炉错题<input type="number" min="0" id="fixedMistakes" inputmode="numeric"></label>
+              <label class="span-2">明日第一任务<input type="text" id="nextTask" placeholder="例如：高数极限习题 20 道"></label>
+              <label class="span-2">备注<input type="text" id="note" placeholder="可空，记录卡点即可"></label>
+              <button type="submit" class="primary-button">保存今日记录</button>
+            </form>
+          </section>
+
+          <section class="panel today-review-panel">
+            <div class="panel-head">
+              <div>
+                <h3>今日复盘队列</h3>
+                <p>D+1 / D+3 / D+7 / D+14 / D+30</p>
+              </div>
+            </div>
+            <div class="review-queue" id="reviewQueue"></div>
+          </section>
+
+          <details class="detail-section wide today-detail-panel">
+            <summary>
+              <span>任务细则与过关标准</span>
+              <em>作业单 / 验收线 / 第一个月清单</em>
+            </summary>
+            <div class="content-grid nested-grid">
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h3>今日建议清单</h3>
+                    <p>按阶段和弱项自动生成</p>
+                  </div>
+                </div>
+                <div class="task-list large" id="todayTasks"></div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h3>今日过关标准</h3>
+                <p>每项任务都要有题量或产出。</p>
+                  </div>
+                </div>
+                <div class="acceptance-list" id="acceptanceList"></div>
+              </section>
+
+              <section class="panel wide">
+                <div class="panel-head">
+                  <div>
+                    <h3>第一个月行动清单</h3>
+                    <p>首月按周推进，月底复盘。</p>
+                  </div>
+                </div>
+                <div class="first-month-grid" id="firstMonthGrid"></div>
+              </section>
+            </div>
+          </details>
+
+          <details class="detail-section wide today-reviewlog-panel">
+            <summary>
+              <span>复盘规则与最近记录</span>
+              <em>D+1 / D+3 / D+7 / D+14 / D+30</em>
+            </summary>
+            <div class="content-grid nested-grid">
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h3>记忆曲线</h3>
+                    <p>按遗忘速度安排轻量回炉</p>
+                  </div>
+                </div>
+                <div class="memory-curve" id="memoryCurve"></div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h3>最近记录</h3>
+                    <p>按日期回看投入和产出。</p>
+                  </div>
+                </div>
+                <div class="log-list" id="recentLogs"></div>
+              </section>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="view" id="week">
+        <div class="content-grid">
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>7 日周计划</h3>
+                <p>生成未来 7 天；锁定项不会被覆盖。</p>
+              </div>
+              <div class="record-tools">
+                <button class="ghost-button" id="generateWeekBtn" type="button" aria-label="生成 7 天周计划">生成 7 天</button>
+                <button class="ghost-button" id="clearUnlockedWeekBtn" type="button" aria-label="清理未锁定的任务">清理未锁定</button>
+              </div>
+            </div>
+            <div class="week-planner" id="weekPlanner"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>执行规则</h3>
+                <p>每天 3-4 项；未完成自动顺延。</p>
+              </div>
+            </div>
+            <div class="rule-stack">
+              <div class="rule-item"><strong>1</strong><div><span>先核心</span><p>数学和 408 默认占 65%。</p></div></div>
+              <div class="rule-item"><strong>2</strong><div><span>可锁定</span><p>锁定后重新生成不会覆盖，适合固定课程日。</p></div></div>
+              <div class="rule-item"><strong>3</strong><div><span>可顺延</span><p>明天继续当前任务。</p></div></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="foundation">
+        <div class="content-grid">
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>学习路径地图</h3>
+                <p>按阶段推进数学、408、英语和政治。</p>
+              </div>
+            </div>
+            <div class="path-rail" id="pathRail"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>本周路径</h3>
+                <p>把长期计划压缩成可执行的 7 天动作</p>
+              </div>
+            </div>
+            <div class="week-path" id="weekPath"></div>
+          </section>
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>零基础路线</h3>
+                <p>前置能力、主干学习、题型训练分层推进。</p>
+              </div>
+            </div>
+            <div class="foundation-grid" id="foundationGrid"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="syllabus">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h3>考纲与能力图谱</h3>
+              <p>官方范围映射、预备能力和备考补充分层展示；条目为备考拆解，不等同官方逐字大纲。</p>
+            </div>
+            <div class="segmented">
+              <button class="seg active" type="button" data-syllabus="math">数学一</button>
+              <button class="seg" type="button" data-syllabus="cs408">408</button>
+              <button class="seg" type="button" data-syllabus="english">英语一</button>
+              <button class="seg" type="button" data-syllabus="politics">政治</button>
+            </div>
+          </div>
+          <div class="syllabus-dashboard" id="syllabusDashboard"></div>
+          <div class="syllabus-board" id="syllabusBoard"></div>
+        </div>
+      </section>
+
+      <section class="view" id="records">
+        <div class="content-grid">
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>每日记录库</h3>
+                <p>所有记录都保存在本浏览器，可导出备份，也可删除错误记录</p>
+              </div>
+              <div class="record-tools">
+                <input class="date-input" type="month" id="recordMonth">
+                <button class="ghost-button" id="clearMonthFilter" type="button">全部</button>
+                <button class="ghost-button" id="exportCsvBtn" type="button">导出 CSV</button>
+              </div>
+            </div>
+            <div class="records-table" id="recordsTable"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>记录统计</h3>
+                <p>快速看本月和累计情况</p>
+              </div>
+            </div>
+            <div class="record-summary" id="recordSummary"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="review">
+        <div class="content-grid">
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>周复盘</h3>
+                <p>四个指标足够判断是否偏航</p>
+              </div>
+            </div>
+            <div class="review-grid" id="weeklyReview"></div>
+          </section>
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>下一里程碑</h3>
+                <p>当前累计小时和最近节点。</p>
+              </div>
+            </div>
+            <div class="milestone-card" id="milestoneCard"></div>
+          </section>
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>月度路线</h3>
+                <p>按 2026-06-01 到 2027 年 12 月推算窗口的累计目标推进，官方日期发布后必须更新</p>
+              </div>
+            </div>
+            <div class="month-table" id="monthTable"></div>
+          </section>
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>间隔复盘队列</h3>
+                <p>完成任务后进入 D+1 到 D+30 复盘。</p>
+              </div>
+            </div>
+            <div class="review-policy" id="reviewPolicy"></div>
+            <div class="spaced-review-list" id="spacedReviewList"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="scores">
+        <div class="content-grid">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>新增模考</h3>
+                <p>保存分科分数和错因。</p>
+              </div>
+            </div>
+            <form class="score-form" id="scoreForm">
+              <label>日期<input type="date" id="scoreDate"></label>
+              <label>名称<input type="text" id="scoreName" placeholder="例如：数一真题 2021"></label>
+              <label>政治<input type="number" min="0" max="100" id="scorePol"></label>
+              <label>英语<input type="number" min="0" max="100" id="scoreEng"></label>
+              <label>数学<input type="number" min="0" max="150" id="scoreMath"></label>
+              <label>408<input type="number" min="0" max="150" id="scoreCs"></label>
+              <label class="span-2">错因备注<input type="text" id="scoreNote" placeholder="例如：线代计算慢，计组 Cache 丢分"></label>
+              <button type="submit" class="primary-button">保存模考</button>
+            </form>
+          </section>
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>模考趋势</h3>
+                <p>近 5 套看方向，近 10 套看稳定性</p>
+              </div>
+            </div>
+            <div class="score-summary" id="scoreSummary"></div>
+            <div class="score-list" id="scoreList"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="resources">
+        <div class="content-grid">
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>资料路线</h3>
+                <p>官方大纲决定范围，资料只服务执行；当前推荐均为备考建议，不是官方指定资料，当年最新版需出版后确认</p>
+              </div>
+            </div>
+            <div class="resource-grid" id="resourceGrid"></div>
+          </section>
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>资料完成率</h3>
+                <p>一份资料完成 70% 以上，再考虑加资料</p>
+              </div>
+            </div>
+            <div class="resource-progress" id="resourceProgress"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>项目与复试</h3>
+                <p>跨考要能讲清楚自己做过什么</p>
+              </div>
+            </div>
+            <div class="checklist" id="projectChecklist"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="settings">
+        <div class="content-grid">
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>计划设置</h3>
+                <p>自主编辑每天能学多久、任务数量和复盘间隔</p>
+              </div>
+            </div>
+            <form class="settings-form" id="settingsForm">
+              <label>工作日基础上限<input type="number" min="90" max="600" id="settingWeekdayMinutes"></label>
+              <label>周末基础上限<input type="number" min="120" max="720" id="settingWeekendMinutes"></label>
+              <label>每日必做任务数<input type="number" min="3" max="4" id="settingTaskCount"></label>
+              <label>核心占比目标 %<input type="number" min="55" max="85" id="settingCoreRatio"></label>
+              <label>推算排程日期<input type="date" id="settingTargetExamDate"><span class="field-hint" id="settingsExamDateStatus">推算排程日，非官方初试日期</span></label>
+              <label class="span-2">复盘间隔天数<input type="text" id="settingReviewDays" placeholder="1,3,7,14,30"></label>
+              <button type="submit" class="primary-button">保存设置</button>
+            </form>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>验收标准</h3>
+                <p>用于判断任务是否完成。</p>
+              </div>
+            </div>
+            <div class="standards-list" id="standardsList"></div>
+          </section>
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>自定义任务模板</h3>
+                <p>固定任务会参与今日计划。</p>
+              </div>
+            </div>
+            <form class="custom-task-form" id="customTaskForm">
+              <label>科目<input type="text" id="customSubject" placeholder="例如：数学"></label>
+              <label>任务<input type="text" id="customText" placeholder="例如：高数极限错题回炉"></label>
+              <label>分钟<input type="number" min="10" max="240" id="customMinutes"></label>
+              <button type="submit" class="primary-button">添加模板</button>
+            </form>
+            <div class="custom-task-list" id="customTaskList"></div>
+          </section>
+
+          <section class="panel wide deploy-panel">
+            <div class="panel-head">
+              <div>
+                <h3>部署与备份</h3>
+                <p>当前版本是 Vite 应用。开发、构建、预览都必须走 npm 脚本；直接静态打开会导致 Supabase 模块无法加载。</p>
+              </div>
+            </div>
+            <div class="deploy-grid">
+              <article class="deploy-card">
+                <span>本机使用</span>
+                <strong>一键启动</strong>
+                <code>npm run start:local</code>
+                <p>自动安装依赖、寻找空闲端口、启动 Vite，并打开浏览器。</p>
+              </article>
+              <article class="deploy-card">
+                <span>生产检查</span>
+                <strong>构建预览</strong>
+                <code>npm run build &amp;&amp; npm run preview</code>
+                <p>预览的是 dist 产物，用来检查上线前的真实页面表现。</p>
+              </article>
+              <article class="deploy-card">
+                <span>Vercel</span>
+                <strong>推荐部署</strong>
+                <code>Build: npm run build / Output: dist</code>
+                <p>导入 GitHub 仓库，框架选择 Vite，环境变量在 Vercel 项目设置中添加。</p>
+              </article>
+              <article class="deploy-card">
+                <span>Supabase</span>
+                <strong>云同步</strong>
+                <code>执行 supabase/schema.sql</code>
+                <p>开启邮箱密码登录，配置 RLS，不在前端使用 service role key。</p>
+              </article>
+              <article class="deploy-card deploy-warning">
+                <span>数据规则</span>
+                <strong>双保险</strong>
+                <code>云同步 + 每周 JSON</code>
+                <p>登录后云端为主，本机保留离线草稿；每周仍建议导出一次 JSON。</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>来源核验</h3>
+                <p>招生、科目、同步和部署只采信官方来源；计划时长和任务量标为推导或建议。</p>
+              </div>
+            </div>
+            <div class="source-grid" id="sourceRegistry"></div>
+          </section>
+
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>产品取法</h3>
+                <p>只借鉴成熟系统里的有效机制，不照搬界面，不堆无关功能。</p>
+              </div>
+            </div>
+            <div class="design-grid" id="designReferences"></div>
+          </section>
+
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>执行边界</h3>
+                <p>计划生成和复盘的边界规则。</p>
+              </div>
+            </div>
+            <div class="boundary-grid" id="executionBoundaries"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog class="auth-dialog" id="authDialog">
+    <form class="auth-card" id="authForm" method="dialog">
+      <div class="panel-head">
+        <div>
+          <h3>账号与云同步</h3>
+          <p id="authHint">登录后可在多设备同步计划、记录、复盘和模考。</p>
+        </div>
+        <button class="icon-button" id="authCloseBtn" type="submit" aria-label="关闭账号对话框">×</button>
+      </div>
+      <label>邮箱<input type="email" id="authEmail" autocomplete="email" placeholder="you@example.com"></label>
+      <label>密码<input type="password" id="authPassword" autocomplete="current-password" placeholder="至少 6 位"></label>
+      <div class="auth-actions">
+        <button class="primary-button" id="signInBtn" type="button">登录</button>
+        <button class="ghost-button" id="signUpBtn" type="button">注册</button>
+        <button class="ghost-button" id="signOutBtn" type="button">退出</button>
+      </div>
+      <div class="migration-box" id="migrationBox">
+        <strong>本地数据迁移</strong>
+        <p>检测到旧版本地数据时，先下载备份，再决定是否导入云端。</p>
+        <div class="auth-actions">
+          <button class="ghost-button" id="downloadBackupBtn" type="button">下载备份</button>
+          <button class="ghost-button" id="pushLocalBtn" type="button">导入云端</button>
+          <button class="ghost-button" id="keepLocalBtn" type="button">保留本机</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

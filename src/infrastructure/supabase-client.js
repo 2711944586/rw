@@ -1,0 +1,28 @@
+/**
+ * Supabase Client — thin wrapper exporting the configured Supabase client instance.
+ *
+ * Centralizes Supabase initialization so all infrastructure modules
+ * share a single client instance.
+ */
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+
+export const supabaseConfigured = Boolean(supabaseUrl && supabaseKey);
+
+export const supabase = supabaseConfigured
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
+
+/**
+ * Get the currently authenticated user, or null.
+ * @returns {Promise<Object|null>}
+ */
+export async function getCurrentUser() {
+  if (!supabase) return null;
+  const { data, error } = await supabase.auth.getUser();
+  if (error) return null;
+  return data.user || null;
+}
