@@ -33,7 +33,10 @@ export async function signInWithEmail(email, password) {
   if (!supabase) throw new Error("Supabase is not configured.");
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
-  return data.user;
+  return {
+    user: data.user,
+    session: data.session
+  };
 }
 
 export async function signUpWithEmail(email, password) {

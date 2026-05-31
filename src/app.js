@@ -161,6 +161,11 @@ let currentUser = null;
 let syncTimer = null;
 let appStarted = false;
 let legacyImportPending = Boolean(readStorage(LEGACY_STORAGE_KEY) && !readStorage(STORAGE_KEY));
+let lastAuthResult = {
+  status: "idle",
+  title: "账号状态",
+  message: "填写邮箱和密码后，可以注册新账号或登录同步。"
+};
 
 const phases = [
   {
@@ -1672,20 +1677,30 @@ async function authAction(mode) {
   const email = document.getElementById("authEmail")?.value.trim();
   const password = document.getElementById("authPassword")?.value;
   if (!email || !password) {
-    showToast("请先填写邮箱和密码。");
+    setAuthResult("error", "缺少邮箱或密码", "请先填写邮箱和至少 6 位密码。");
+    return;
+  }
+  if (!isLikelyEmail(email)) {
+    setAuthResult("error", "邮箱格式不正确", "请填写真实可用邮箱。Supabase 会拒绝 example.com 等测试域名。");
+    return;
+  }
+  if (password.length < 6) {
+    setAuthResult("error", "密码太短", "Supabase 要求密码至少 6 位。建议使用字母、数字和符号组合。");
     return;
   }
   if (!supabaseConfigured) {
-    showToast("还没有配置 Supabase 环境变量。");
+    setAuthResult("error", "云端未配置", "Vercel 还没有配置 Supabase URL 或 publishable key。");
     return;
   }
   try {
+    setAuthBusy(true);
+    setAuthResult("pending", mode === "signup" ? "正在注册" : "正在登录", "正在连接 Supabase Auth，请稍等。");
     const result = mode === "signup" ? await signUpWithEmail(email, password) : await signInWithEmail(email, password);
     if (mode === "signup" && result?.needsEmailConfirmation) {
       currentUser = null;
       state.user = null;
       renderAuthPanel();
-      showToast("注册已提交。请先打开邮箱确认链接，再回到这里登录。");
+      setAuthResult("pending", "注册已提交，等待邮箱确认", "请打开确认邮件；确认后回到这里点击“登录并同步”。当前本机数据不会丢。");
       return;
     }
     currentUser = result?.user || result || null;
@@ -1695,16 +1710,19 @@ async function authAction(mode) {
       await syncNow();
       renderAll();
       renderAuthPanel();
+      setAuthResult("success", mode === "signup" ? "注册成功" : "登录成功", `当前账号：${currentUser.email || email}。数据已开启云同步。`);
       showToast(mode === "signup" ? "注册成功，已登录并开启云同步。" : "登录成功，数据已同步。");
       return;
     }
     state.user = null;
     renderAuthPanel();
-    showToast(result?.needsEmailConfirmation
-      ? "注册已提交。请先打开邮箱确认链接，再回到这里登录。"
-      : "注册已提交。如未自动登录，请检查邮箱确认后再登录。");
+    setAuthResult("pending", "注册已提交", result?.needsEmailConfirmation
+      ? "请先打开邮箱确认链接，再回到这里登录。"
+      : "如未自动登录，请检查邮箱确认后再登录。");
   } catch (error) {
-    showToast(`${mode === "signup" ? "注册" : "登录"}失败：${error.message || error}`);
+    setAuthResult("error", `${mode === "signup" ? "注册" : "登录"}失败`, friendlyAuthError(error));
+  } finally {
+    setAuthBusy(false);
   }
 }
 
@@ -1716,11 +1734,51 @@ function renderAuthPanel() {
     : "未登录时也可先在本机记录。";
   setText("authHint", `${configured} · ${storageText}。${userText}`);
   setText("authBuildText", `版本 ${APP_BUILD}`);
+  renderAuthResult();
   const migrationBox = document.getElementById("migrationBox");
   if (migrationBox) {
     const shouldShow = Boolean(state.sync?.localImportPending || legacyImportPending);
     migrationBox.hidden = !shouldShow;
   }
+}
+
+function isLikelyEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function setAuthBusy(isBusy) {
+  ["signInBtn", "signUpBtn", "signOutBtn"].forEach((id) => {
+    const button = document.getElementById(id);
+    if (button) button.disabled = isBusy;
+  });
+}
+
+function setAuthResult(status, title, message) {
+  lastAuthResult = { status, title, message };
+  renderAuthResult();
+  showToast(message);
+}
+
+function renderAuthResult() {
+  const box = document.getElementById("authResult");
+  if (!box) return;
+  box.dataset.status = lastAuthResult.status || "idle";
+  box.innerHTML = `
+    <strong>${escapeHtml(lastAuthResult.title || "账号状态")}</strong>
+    <p>${escapeHtml(lastAuthResult.message || "")}</p>
+  `;
+}
+
+function friendlyAuthError(error) {
+  const text = String(error?.message || error || "未知错误");
+  const lower = text.toLowerCase();
+  if (lower.includes("invalid login credentials")) return "邮箱或密码不正确。如果是刚注册，请确认是否已完成邮箱确认。";
+  if (lower.includes("email not confirmed")) return "邮箱还没有确认。请打开确认邮件后再登录。";
+  if (lower.includes("user already registered") || lower.includes("already registered")) return "这个邮箱已经注册过，请直接点击“登录并同步”。";
+  if (lower.includes("invalid email")) return "邮箱地址被 Supabase 判定为无效。请换成真实常用邮箱。";
+  if (lower.includes("password")) return `密码不符合要求：${text}`;
+  if (lower.includes("rate limit") || lower.includes("too many")) return "请求太频繁，请等一会儿再试。";
+  return text;
 }
 
 function resetLocalData() {

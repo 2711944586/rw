@@ -7206,6 +7206,57 @@ body {
   margin: -4px 0 0;
 }
 
+.auth-result {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.auth-result strong {
+  color: #1d4ed8;
+  font-size: 13px;
+}
+
+.auth-result p {
+  margin: 0;
+  color: #1e3a8a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.auth-result[data-status="success"] {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.auth-result[data-status="success"] strong,
+.auth-result[data-status="success"] p {
+  color: #166534;
+}
+
+.auth-result[data-status="error"] {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.auth-result[data-status="error"] strong,
+.auth-result[data-status="error"] p {
+  color: #991b1b;
+}
+
+.auth-result[data-status="pending"] {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.auth-result[data-status="pending"] strong,
+.auth-result[data-status="pending"] p {
+  color: #92400e;
+}
+
 .auth-danger {
   display: grid;
   gap: 8px;
