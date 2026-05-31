@@ -802,6 +802,12 @@
                 <code>云同步 + 每周 JSON</code>
                 <p>登录后云端为主，本机保留离线草稿；每周仍建议导出一次 JSON。</p>
               </article>
+              <article class="deploy-card">
+                <span>运行状态</span>
+                <strong id="storageHealthText">本机缓存检测中</strong>
+                <code id="appBuildText">版本检测中</code>
+                <p>线上异常时先确认版本号；必要时使用账号弹窗里的清理本机缓存。</p>
+              </article>
             </div>
           </section>
 
@@ -845,16 +851,18 @@
         <div>
           <h3>账号与云同步</h3>
           <p id="authHint">登录后可在多设备同步计划、记录、复盘和模考。</p>
+          <span class="auth-build" id="authBuildText">版本检测中</span>
         </div>
         <button class="icon-button" id="authCloseBtn" type="button" aria-label="关闭账号对话框">×</button>
       </div>
       <label>邮箱<input type="email" id="authEmail" autocomplete="email" placeholder="you@example.com"></label>
       <label>密码<input type="password" id="authPassword" autocomplete="current-password" placeholder="至少 6 位"></label>
       <div class="auth-actions">
-        <button class="primary-button" id="signInBtn" type="button">登录</button>
-        <button class="ghost-button" id="signUpBtn" type="button">注册</button>
+        <button class="primary-button" id="signInBtn" type="button">登录并同步</button>
+        <button class="ghost-button" id="signUpBtn" type="button">注册新账号</button>
         <button class="ghost-button" id="signOutBtn" type="button">退出</button>
       </div>
+      <p class="auth-help">首次使用：填写邮箱和密码后点“注册新账号”。如果邮箱确认已开启，请先打开确认邮件，再回到这里登录。</p>
       <div class="migration-box" id="migrationBox">
         <strong>本地数据迁移</strong>
         <p>检测到旧版本地数据时，先下载备份，再决定是否导入云端。</p>
@@ -863,6 +871,11 @@
           <button class="ghost-button" id="pushLocalBtn" type="button">导入云端</button>
           <button class="ghost-button" id="keepLocalBtn" type="button">保留本机</button>
         </div>
+      </div>
+      <div class="auth-danger">
+        <strong>页面异常修复</strong>
+        <p>如果线上一直停在总览、按钮没反应，先导出备份，再清理本机缓存。</p>
+        <button class="ghost-button" id="resetLocalBtn" type="button">清理本机缓存</button>
       </div>
     </form>
   </dialog>

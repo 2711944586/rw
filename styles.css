@@ -7188,6 +7188,44 @@ body {
   background: #f8fafc;
 }
 
+.auth-build,
+.auth-help,
+.auth-danger p {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.auth-build {
+  display: inline-block;
+  margin-top: 6px;
+  font-family: var(--mono);
+}
+
+.auth-help {
+  margin: -4px 0 0;
+}
+
+.auth-danger {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+}
+
+.auth-danger strong {
+  color: #9a3412;
+  font-size: 13px;
+}
+
+.auth-danger .ghost-button {
+  justify-self: start;
+  border-color: #fdba74;
+  color: #9a3412;
+}
+
 .task-item,
 .week-task,
 .review-queue-item,
@@ -7279,6 +7317,10 @@ body {
 
   .auth-actions button {
     flex: 1 1 auto;
+  }
+
+  .auth-danger .ghost-button {
+    justify-self: stretch;
   }
 }
 

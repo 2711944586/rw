@@ -38,9 +38,18 @@ export async function signInWithEmail(email, password) {
 
 export async function signUpWithEmail(email, password) {
   if (!supabase) throw new Error("Supabase is not configured.");
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const redirectTo = typeof window === "undefined" ? undefined : window.location.origin;
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: redirectTo ? { emailRedirectTo: redirectTo } : undefined
+  });
   if (error) throw error;
-  return data.user;
+  return {
+    user: data.user,
+    session: data.session,
+    needsEmailConfirmation: Boolean(data.user && !data.session)
+  };
 }
 
 export async function signOut() {

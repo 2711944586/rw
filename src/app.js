@@ -51,6 +51,7 @@ const STORAGE_KEY = "pku_swm_420_dashboard_v3";
 const LEGACY_STORAGE_KEY = "pku_swm_420_dashboard_v1";
 const SCHEMA_VERSION = 3;
 const PLAN_LOGIC_VERSION = "3.3-start-2026-06-ramp";
+const APP_BUILD = "2026-06-01-route-auth-recovery";
 const DEFAULT_EXAM_DATE = "2027-12-25";
 const DEFAULT_EXAM_DATE_STATUS = "推算排程日，非官方初试日期";
 const PLAN_START_DATE = "2026-06-01";
@@ -86,6 +87,62 @@ const defaultSettings = {
   reviewDays: [1, 3, 7, 14, 30]
 };
 
+let storageAvailable = true;
+
+function readStorage(key) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    storageAvailable = false;
+    return null;
+  }
+}
+
+function writeStorage(key, value) {
+  try {
+    window.localStorage.setItem(key, value);
+    storageAvailable = true;
+    return true;
+  } catch {
+    storageAvailable = false;
+    return false;
+  }
+}
+
+function removeStorage(key) {
+  try {
+    window.localStorage.removeItem(key);
+    storageAvailable = true;
+  } catch {
+    storageAvailable = false;
+  }
+}
+
+function clearAppLocalStorage() {
+  [
+    STORAGE_KEY,
+    LEGACY_STORAGE_KEY,
+    "pku_swm_420_state",
+    "pku_swm_dirty_map",
+    "pku_swm_offline_cache",
+    "pku_swm_dirty_queue"
+  ].forEach(removeStorage);
+}
+
+function consumeResetRequest() {
+  try {
+    const url = new URL(window.location.href);
+    const resetValue = url.searchParams.get("reset");
+    if (!["1", "true", "yes"].includes(String(resetValue || "").toLowerCase())) return false;
+    clearAppLocalStorage();
+    url.searchParams.delete("reset");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash || "#dashboard"}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const rampBudgets = [
   { start: "2026-06-01", end: "2026-06-30", weekday: 90, weekend: 150, note: "上课期低强度启动" },
   { start: "2026-07-01", end: "2026-07-31", weekday: 120, weekend: 210, note: "暑假前段稳步加量" },
@@ -98,10 +155,12 @@ const rampBudgets = [
   { start: "2027-11-01", end: DEFAULT_EXAM_DATE, weekday: 300, weekend: 420, note: "考前收束期" }
 ];
 
+const resetApplied = consumeResetRequest();
 let state = loadState();
 let currentUser = null;
 let syncTimer = null;
-let legacyImportPending = Boolean(localStorage.getItem(LEGACY_STORAGE_KEY) && !localStorage.getItem(STORAGE_KEY));
+let appStarted = false;
+let legacyImportPending = Boolean(readStorage(LEGACY_STORAGE_KEY) && !readStorage(STORAGE_KEY));
 
 const phases = [
   {
@@ -648,25 +707,39 @@ const projectItems = [
   "跨考动机解释"
 ];
 
-document.addEventListener("DOMContentLoaded", async () => {
-  setDefaultDates();
-  hydrateIcons();
-  bindNavigation();
-  bindDensityControls();
-  bindForms();
-  bindSyllabusTabs();
-  bindImportExport();
-  bindQuickEntry();
-  bindRecords();
-  bindSettings();
-  bindAuth();
-  bindWeekPlanner();
-  bindNetworkStatus();
-  upgradeGeneratedPlans();
-  await initCloudSession();
-  renderAll();
-  initRoute();
-});
+async function bootstrapApp() {
+  try {
+    setDefaultDates();
+    hydrateIcons();
+    bindNavigation();
+    bindDensityControls();
+    bindForms();
+    bindSyllabusTabs();
+    bindImportExport();
+    bindQuickEntry();
+    bindRecords();
+    bindSettings();
+    bindAuth();
+    bindWeekPlanner();
+    bindNetworkStatus();
+    upgradeGeneratedPlans();
+    await initCloudSession();
+    renderAll();
+    initRoute();
+    appStarted = true;
+    if (resetApplied) showToast("已清理本机缓存，当前为全新本机数据。");
+    if (!storageAvailable) showToast("浏览器暂时禁止本机存储，页面可操作，但刷新后本机数据可能不会保留。");
+  } catch (error) {
+    console.error("[rw] app initialization failed", error);
+    installRecoveryMode(error);
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bootstrapApp, { once: true });
+} else {
+  bootstrapApp();
+}
 
 function hydrateIcons(root = document) {
   document.querySelectorAll(".nav-item[data-icon]").forEach((button) => {
@@ -703,8 +776,8 @@ function navIconName(icon) {
 }
 
 function loadState() {
-  const currentRaw = localStorage.getItem(STORAGE_KEY);
-  const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
+  const currentRaw = readStorage(STORAGE_KEY);
+  const legacyRaw = readStorage(LEGACY_STORAGE_KEY);
   const raw = currentRaw || legacyRaw;
   if (!raw) return freshState();
   try {
@@ -990,24 +1063,32 @@ function freshState() {
 function saveState(options = {}) {
   state.schemaVersion = SCHEMA_VERSION;
   state.settings.lastSavedAt = new Date().toISOString();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const saved = writeStorage(STORAGE_KEY, JSON.stringify(state));
+  if (!saved) {
+    state.sync = { ...state.sync, status: "local", lastError: "local-storage-unavailable", pending: false };
+  }
   renderSyncStatus();
   if (!options.skipCloud) queueCloudSync();
 }
 
 async function initCloudSession() {
-  currentUser = await getCurrentUser();
-  if (currentUser) {
-    state.user = { id: currentUser.id, email: currentUser.email || "" };
-    await pullCloudState();
+  try {
+    currentUser = await getCurrentUser();
+    if (currentUser) {
+      state.user = { id: currentUser.id, email: currentUser.email || "" };
+      await pullCloudState();
+    }
+    onAuthChange(async (user) => {
+      currentUser = user;
+      state.user = user ? { id: user.id, email: user.email || "" } : null;
+      if (user) await pullCloudState();
+      renderSyncStatus();
+      renderAll();
+    });
+  } catch (error) {
+    currentUser = null;
+    state.sync = { ...state.sync, status: "error", lastError: error.message || String(error), pending: false };
   }
-  onAuthChange(async (user) => {
-    currentUser = user;
-    state.user = user ? { id: user.id, email: user.email || "" } : null;
-    if (user) await pullCloudState();
-    renderSyncStatus();
-    renderAll();
-  });
   renderSyncStatus();
 }
 
@@ -1244,7 +1325,8 @@ function getCurrentPhase(dateValue = planTodayISO()) {
 
 function bindNavigation() {
   document.querySelectorAll(".nav-item").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
       setRoute(button.dataset.view);
     });
   });
@@ -1254,14 +1336,31 @@ function bindNavigation() {
     event.preventDefault();
     setRoute(button.dataset.view);
   });
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const button = target.closest(".nav-item[data-view], [data-jump]");
+    if (!button) return;
+    const view = button.dataset.view || button.dataset.jump;
+    if (!isValidView(view)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setRoute(view);
+  }, true);
 
   window.addEventListener("hashchange", () => {
-    const view = window.location.hash.replace("#", "");
+    const view = currentHashView();
     if (view) switchView(view);
   });
 
+  window.addEventListener("pageshow", () => {
+    const view = currentHashView() || activeViewId() || "dashboard";
+    switchView(isValidView(view) ? view : "dashboard");
+  });
+
   document.querySelectorAll("[data-jump]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
       setRoute(button.dataset.jump);
     });
   });
@@ -1308,17 +1407,35 @@ function applyDensityMode() {
 }
 
 function initRoute() {
-  const view = window.location.hash.replace("#", "");
-  if (view && document.getElementById(view)) switchView(view);
+  const view = currentHashView();
+  switchView(isValidView(view) ? view : "dashboard");
   scrollToTop();
 }
 
 function setRoute(viewId) {
+  if (!isValidView(viewId)) return false;
   switchView(viewId);
   if (window.location.hash !== `#${viewId}`) {
     window.history.replaceState(null, "", `#${viewId}`);
   }
   scrollToTop();
+  return true;
+}
+
+function isValidView(viewId) {
+  return Boolean(viewId && document.getElementById(viewId)?.classList.contains("view"));
+}
+
+function currentHashView() {
+  try {
+    return decodeURIComponent(window.location.hash.replace(/^#/, "")).trim();
+  } catch {
+    return window.location.hash.replace(/^#/, "").trim();
+  }
+}
+
+function activeViewId() {
+  return document.querySelector(".view.active")?.id || "";
 }
 
 function bindForms() {
@@ -1548,6 +1665,7 @@ function bindAuth() {
     renderAuthPanel();
     document.getElementById("authDialog")?.close();
   });
+  document.getElementById("resetLocalBtn")?.addEventListener("click", resetLocalData);
 }
 
 async function authAction(mode) {
@@ -1562,13 +1680,29 @@ async function authAction(mode) {
     return;
   }
   try {
-    currentUser = mode === "signup" ? await signUpWithEmail(email, password) : await signInWithEmail(email, password);
-    state.user = currentUser ? { id: currentUser.id, email: currentUser.email || email } : null;
-    await pullCloudState();
-    await syncNow();
-    renderAll();
+    const result = mode === "signup" ? await signUpWithEmail(email, password) : await signInWithEmail(email, password);
+    if (mode === "signup" && result?.needsEmailConfirmation) {
+      currentUser = null;
+      state.user = null;
+      renderAuthPanel();
+      showToast("注册已提交。请先打开邮箱确认链接，再回到这里登录。");
+      return;
+    }
+    currentUser = result?.user || result || null;
+    if (currentUser) {
+      state.user = { id: currentUser.id, email: currentUser.email || email };
+      await pullCloudState();
+      await syncNow();
+      renderAll();
+      renderAuthPanel();
+      showToast(mode === "signup" ? "注册成功，已登录并开启云同步。" : "登录成功，数据已同步。");
+      return;
+    }
+    state.user = null;
     renderAuthPanel();
-    showToast(mode === "signup" ? "注册完成，已准备云同步。" : "登录成功，数据已同步。");
+    showToast(result?.needsEmailConfirmation
+      ? "注册已提交。请先打开邮箱确认链接，再回到这里登录。"
+      : "注册已提交。如未自动登录，请检查邮箱确认后再登录。");
   } catch (error) {
     showToast(`${mode === "signup" ? "注册" : "登录"}失败：${error.message || error}`);
   }
@@ -1576,13 +1710,29 @@ async function authAction(mode) {
 
 function renderAuthPanel() {
   const configured = supabaseConfigured ? "云端已配置" : "未配置 Supabase 环境变量";
-  const userText = currentUser ? `当前账号：${currentUser.email || "已登录"}` : "当前未登录，本机仍可使用。";
-  setText("authHint", `${configured}。${userText}`);
+  const storageText = storageAvailable ? "本机缓存正常" : "本机缓存不可用";
+  const userText = currentUser
+    ? `当前账号：${currentUser.email || "已登录"}`
+    : "未登录时也可先在本机记录。";
+  setText("authHint", `${configured} · ${storageText}。${userText}`);
+  setText("authBuildText", `版本 ${APP_BUILD}`);
   const migrationBox = document.getElementById("migrationBox");
   if (migrationBox) {
     const shouldShow = Boolean(state.sync?.localImportPending || legacyImportPending);
     migrationBox.hidden = !shouldShow;
   }
+}
+
+function resetLocalData() {
+  if (!window.confirm("确认清理本浏览器里的学习数据和缓存？建议先导出备份。")) return;
+  clearAppLocalStorage();
+  state = freshState();
+  legacyImportPending = false;
+  saveState({ skipCloud: true });
+  renderAll();
+  initRoute();
+  renderAuthPanel();
+  showToast("已清理本机缓存。");
 }
 
 function bindNetworkStatus() {
@@ -4045,6 +4195,8 @@ function renderSettings() {
   document.getElementById("settingTargetExamDate").value = state.settings.targetExamDate || DEFAULT_EXAM_DATE;
   document.getElementById("settingReviewDays").value = state.settings.reviewDays.join(",");
   setText("settingsExamDateStatus", examDateStatusText());
+  setText("appBuildText", APP_BUILD);
+  setText("storageHealthText", storageAvailable ? "本机缓存正常" : "本机缓存不可用，建议检查浏览器隐私/存储权限");
 
   document.getElementById("standardsList").innerHTML = [
     ["渐进时长", "2026 年 6 月从工作日 90m、周末 150m 起步；7 月约 120/210m，8 月约 150/240m；9 月起进入第一轮主干强度。"],
@@ -4130,6 +4282,7 @@ function sumMinutesForMonth(month) {
 
 function showToast(message) {
   const toast = document.getElementById("toast");
+  if (!toast) return;
   toast.textContent = message;
   toast.classList.add("show");
   window.clearTimeout(showToast.timer);
@@ -4137,3 +4290,33 @@ function showToast(message) {
     toast.classList.remove("show");
   }, 2200);
 }
+
+function installRecoveryMode(error) {
+  hydrateIcons();
+  bindNavigation();
+  state = freshState();
+  renderAuthPanel();
+  initRoute();
+  setText("syncStatusText", "恢复模式");
+  setText("sideDataSave", "恢复模式");
+  showToast(`页面已进入恢复模式：${error?.message || error || "初始化失败"}`);
+}
+
+window.__rwDebug = {
+  build: APP_BUILD,
+  route: setRoute,
+  view: activeViewId,
+  resetLocal: () => {
+    clearAppLocalStorage();
+    window.location.href = "/?reset=1";
+  },
+  health: () => ({
+    build: APP_BUILD,
+    appStarted,
+    storageAvailable,
+    activeView: activeViewId(),
+    hash: window.location.hash,
+    supabaseConfigured,
+    user: currentUser?.email || null
+  })
+};
