@@ -111,7 +111,7 @@ function computeWeeklyMetrics(weekDates) {
 function signalBadge(signal, label) {
   const colors = { green: 'var(--green)', yellow: 'var(--amber)', red: 'var(--red)' };
   const bgColors = { green: 'var(--green-soft)', yellow: 'var(--amber-soft)', red: 'var(--red-soft)' };
-  return `<span class="signal-badge" style="background:${bgColors[signal]};color:${colors[signal]};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:720;">${label}: ${signal === 'green' ? '达标' : signal === 'yellow' ? '注意' : '警告'}</span>`;
+  return `<span class="signal-badge" style="background:${bgColors[signal]};color:${colors[signal]};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:720;">${label}: ${signal === 'green' ? '正常' : signal === 'yellow' ? '注意' : '需调整'}</span>`;
 }
 
 /**
@@ -200,7 +200,7 @@ function render() {
         </div>
         <p style="margin-top:12px;color:var(--muted);font-size:13px;">
           整体信号: <strong style="color:${retro.overallSignal === 'green' ? 'var(--green)' : 'var(--red)'}">
-            ${retro.overallSignal === 'green' ? '✓ 本周达标' : '⚠ 需要调整'}
+            ${retro.overallSignal === 'green' ? '本周节奏正常' : '需要调整'}
           </strong>
         </p>
       </section>

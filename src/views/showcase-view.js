@@ -10,6 +10,7 @@
 
 import { desensitizeData, validateShowcaseItem } from '../domain/project-showcase.js';
 import { StateManager } from '../core/state-manager.js';
+import { escapeAttr, escapeHTML, safeExternalUrl } from '../utils/html.js';
 
 /** @type {HTMLElement|null} */
 let containerEl = null;
@@ -122,7 +123,7 @@ function renderPrivateShowcase() {
       <div style="padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:#fff;font-size:12px;">
         <strong style="color:var(--ink);display:block;">${escapeHTML(item.artifact_type || '')}</strong>
         ${item.item_date ? `<span style="color:var(--muted);">${item.item_date}</span>` : ''}
-        ${item.output_link ? `<a href="${escapeHTML(item.output_link)}" target="_blank" rel="noopener" style="display:block;font-size:11px;margin-top:4px;">查看链接</a>` : ''}
+        ${item.output_link ? `<a href="${escapeAttr(safeExternalUrl(item.output_link))}" target="_blank" rel="noopener noreferrer" style="display:block;font-size:11px;margin-top:4px;">查看链接</a>` : ''}
         ${item.description ? `<p style="margin:4px 0 0;color:var(--text);line-height:1.4;">${escapeHTML(item.description)}</p>` : ''}
       </div>
     `).join('');
@@ -186,7 +187,7 @@ function renderSubmitForm() {
  */
 function renderTechStack() {
   const links = TECH_STACK.map(t =>
-    `<a href="${t.url}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:var(--radius);background:#fbfcfa;color:var(--blue);font-size:13px;font-weight:720;text-decoration:none;">${t.name}</a>`
+    `<a href="${escapeAttr(safeExternalUrl(t.url))}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:var(--radius);background:#fbfcfa;color:var(--blue);font-size:13px;font-weight:720;text-decoration:none;">${escapeHTML(t.name)}</a>`
   ).join('');
 
   return `
@@ -206,14 +207,6 @@ function render() {
       ${renderTechStack()}
     </section>
   `;
-}
-
-function escapeHTML(str) {
-  return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 /**

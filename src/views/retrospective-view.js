@@ -69,7 +69,7 @@ function getDailyRetroInput() {
 function signalDot(signal, label) {
   const colors = { green: 'var(--green)', yellow: 'var(--amber)', red: 'var(--red)' };
   const bgColors = { green: 'var(--green-soft)', yellow: 'var(--amber-soft)', red: 'var(--red-soft)' };
-  const labels = { green: '达标', yellow: '注意', red: '警告' };
+  const labels = { green: '正常', yellow: '注意', red: '需调整' };
   return `
     <div class="metric-card" style="border-left:3px solid ${colors[signal]};">
       <span>${label}</span>
@@ -154,7 +154,7 @@ function renderWeeklyRetro() {
         }).join('')}
       </div>
       <p style="font-size:13px;color:${result.overallSignal === 'green' ? 'var(--green)' : 'var(--red)'};">
-        整体: ${result.overallSignal === 'green' ? '✓ 本周达标' : '⚠ 存在红色警告'}
+        整体: ${result.overallSignal === 'green' ? '本周节奏正常' : '需要调整下周任务'}
       </p>
     </section>
   `;
@@ -336,7 +336,7 @@ function showTierModal() {
       </div>
     `).join('');
   } else {
-    content.innerHTML = '<p>当前预测在目标线上方，无需梯度调整。</p>';
+    content.innerHTML = '<p>当前监测值在内部目标线上方，暂不需要调整院校梯度。</p>';
   }
 
   modal.style.display = 'grid';

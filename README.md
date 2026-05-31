@@ -53,11 +53,11 @@ npm run quality
 │  ├─ main.js                # Vite 入口
 │  ├─ app.js                 # 主界面渲染和交互编排
 │  ├─ referenceData.js       # 官方来源、设计参考、执行边界
-│  ├─ core/                  # 路由、事件总线、状态管理
-│  ├─ domain/                # 计划、顺延、复盘、校准、来源等领域逻辑
-│  ├─ infrastructure/        # Supabase 客户端和离线缓存
+│  ├─ core/                  # 可拆分架构的路由、事件总线、状态适配层
+│  ├─ domain/                # 计划、顺延、复盘、校准、来源等可测试领域逻辑
+│  ├─ infrastructure/        # 可拆分架构的 Supabase 客户端和离线缓存
 │  ├─ utils/                 # HTML 转义等通用工具
-│  └─ views/                 # 可拆分页面视图
+│  └─ views/                 # 可拆分页面视图，当前生产入口仍由 app.js 编排
 ├─ tests/
 │  ├─ unit/                  # 单元测试
 │  └─ properties/            # fast-check 性质测试
@@ -75,6 +75,27 @@ npm run quality
 生成目录不需要提交：`node_modules/`、`dist/`、`test-results/`、`playwright-report/`、`output/playwright/` 中的截图和日志。
 
 ## 部署总览
+
+推荐零基础先看：
+
+- API 密钥获取和填写清单：[docs/API_KEYS_CHECKLIST.md](docs/API_KEYS_CHECKLIST.md)
+- 全自动部署流程：[docs/AUTO_DEPLOY.md](docs/AUTO_DEPLOY.md)
+
+已经准备好的自动化命令：
+
+```powershell
+npm run deploy:all   # 部署 Preview，默认安全入口
+npm run deploy:prod  # 部署 Production
+```
+
+自动化脚本会读取本机 `.env.deploy`，执行质量检查、Supabase schema、GitHub push、Vercel 环境变量和部署，并做上线健康检查。先复制 `.env.deploy.example`：
+
+```powershell
+Copy-Item .env.deploy.example .env.deploy
+notepad .env.deploy
+```
+
+`.env.deploy` 只放在本机，不要提交。生产部署后仍需在 Supabase `Authentication -> URL Configuration` 中核对生产域名。
 
 推荐顺序：
 
@@ -154,6 +175,8 @@ project_showcase_items
 ```
 
 所有用户数据表都应启用 RLS。策略必须保证用户只能访问自己的 `user_id = auth.uid()` 数据。
+
+如果是旧 Supabase 项目，先确认已经按顺序执行 `supabase/migrations/` 中的迁移，至少包含 `010_profile_plan_defaults.sql`。新项目直接执行完整 `supabase/schema.sql` 即可。
 
 ## 4. 配置 Supabase Auth
 
@@ -419,9 +442,9 @@ Redirect URLs
 
 ## 学习系统边界
 
-- 每日任务默认 3 项，最多 4 项。
+- 每日任务默认 3 项，最多 4 项；顺延或底线日可降到 2 项。
 - 数学一和 408 默认占核心时间 65%。
-- 未完成任务自动顺延，并减少当天新增任务。
+- 未完成任务自动顺延，并减少当天新增任务；顺延或底线日可降到 2 项，避免补偿式超载。
 - 到期复盘每天最多压入 1 项必做，其余保留在复盘队列。
 - 考点没有题量、正确率或交付证据，不能直接标为已掌握。
 - 2027 年 9-10 月必须重新核验招生说明、专业目录、考试科目、招生人数、报名要求和初试日期。

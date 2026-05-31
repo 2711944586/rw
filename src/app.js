@@ -88,10 +88,10 @@ const defaultSettings = {
 
 const rampBudgets = [
   { start: "2026-06-01", end: "2026-06-30", weekday: 90, weekend: 150, note: "上课期低强度启动" },
-  { start: "2026-07-01", end: "2026-07-31", weekday: 210, weekend: 300, note: "暑假逐步加长" },
-  { start: "2026-08-01", end: "2026-08-31", weekday: 240, weekend: 360, note: "暑假稳定加量" },
+  { start: "2026-07-01", end: "2026-07-31", weekday: 120, weekend: 210, note: "暑假前段稳步加量" },
+  { start: "2026-08-01", end: "2026-08-31", weekday: 150, weekend: 240, note: "暑假后段稳定加量" },
   { start: "2026-09-01", end: "2026-12-31", weekday: 300, weekend: 420, note: "9 月起第一轮主干加压" },
-  { start: "2027-01-01", end: "2027-02-28", weekday: 360, weekend: 480, note: "寒假闭环加量" },
+  { start: "2027-01-01", end: "2027-02-28", weekday: 360, weekend: 480, note: "寒假第一轮收口" },
   { start: "2027-03-01", end: "2027-06-30", weekday: 270, weekend: 390, note: "强化期稳定推进" },
   { start: "2027-07-01", end: "2027-08-31", weekday: 420, weekend: 540, note: "第二暑假套卷期" },
   { start: "2027-09-01", end: "2027-10-31", weekday: 300, weekend: 420, note: "报名与套卷期" },
@@ -125,15 +125,15 @@ const phases = [
     name: "第一暑假奠基期",
     start: "2026-07-01",
     end: "2026-08-31",
-    weeklyTarget: 34,
+    weeklyTarget: 19,
     cumulativeTarget: 340,
-    quotas: { math: 13, cs408: 14, english: 5, politics: 0, project: 2 },
+    quotas: { math: 8, cs408: 8, english: 3, politics: 0, project: 0 },
     focus: "暑假逐步拉长学习时间，高数基础、数据结构第一轮和英语阅读精读同步推进。",
     tasks: [
-      ["数学", "高数积分/中值定理或线代矩阵题", 150],
-      ["408", "数据结构章节学习与代码实现", 150],
-      ["英语", "单词 + 阅读精读 1 篇", 60],
-      ["复盘", "错题回炉，更新考纲状态", 30]
+      ["数学", "高数基础题与定义整理", 75],
+      ["408", "C 语言/数据结构章节题与代码", 75],
+      ["英语", "单词 + 长难句或阅读精读", 35],
+      ["复盘", "错题回炉，更新考纲状态", 20]
     ]
   },
   {
@@ -154,7 +154,7 @@ const phases = [
   },
   {
     id: "D",
-    name: "寒假闭环期",
+    name: "寒假收口期",
     start: "2027-01-01",
     end: "2027-02-28",
     weeklyTarget: 48,
@@ -208,7 +208,7 @@ const phases = [
     weeklyTarget: 32,
     cumulativeTarget: 2500,
     quotas: { math: 12, cs408: 12, english: 4, politics: 4, project: 0 },
-    focus: "核验招生信息，报名确认，近 5 套全科均分冲 405+。",
+    focus: "核验招生信息，完成报名确认，近 5 套全科均分稳定在 405+ 区间。",
     tasks: [
       ["数学", "套卷限时 + 48 小时错题回炉", 120],
       ["408", "套卷限时 + 四门错题归档", 120],
@@ -224,7 +224,7 @@ const phases = [
     weeklyTarget: 34,
     cumulativeTarget: 2600,
     quotas: { math: 11, cs408: 11, english: 5, politics: 7, project: 0 },
-    focus: "模拟、错题、背诵、保持手感，近 10 套均分冲 415+。",
+    focus: "模拟、错题、背诵和手感维持，近 10 套均分稳定在 415+ 区间。",
     tasks: [
       ["数学", "模拟卷错题回炉 + 公式定理默写", 110],
       ["408", "真题错题重做 + 大题表达规范", 110],
@@ -236,8 +236,8 @@ const phases = [
 
 const monthlyPlan = [
   ["2026-06", 50, 50, "函数、极限预备", "C 语言入门", "单词、长难句", "不测"],
-  ["2026-07", 140, 190, "极限、导数启动", "C 语言、线性表", "阅读入门", "不测"],
-  ["2026-08", 150, 340, "高数基础、线代预热", "数据结构第一轮", "阅读精读", "不测"],
+  ["2026-07", 90, 140, "极限、导数启动", "C 语言、线性表", "阅读入门", "不测"],
+  ["2026-08", 110, 250, "高数基础、线代预热", "数据结构第一轮", "阅读精读", "不测"],
   ["2026-09", 160, 500, "高数推进", "数据结构二轮、计组", "阅读真题", "章节小测"],
   ["2026-10", 170, 670, "线代推进", "计组", "阅读真题", "章节小测"],
   ["2026-11", 165, 835, "概率启动", "计组、OS", "翻译小练", "章节小测"],
@@ -253,14 +253,14 @@ const monthlyPlan = [
   ["2027-09", 125, 2375, "套卷", "套卷", "作文定稿、政治", "全科400+"],
   ["2027-10", 125, 2500, "套卷稳定", "套卷稳定", "政治强化", "近 5 套 405+"],
   ["2027-11", 100, 2600, "模拟错题", "模拟错题", "背诵", "近10套415+"],
-  ["2027-12", 60, 2660, "保持手感", "保持手感", "背诵收束", "冲420"]
+  ["2027-12", 60, 2660, "保持手感", "保持手感", "背诵收束", "目标420"]
 ];
 
 const scoreTargets = [
   ["政治", 75, "后期稳定拿分"],
   ["英语一", 80, "长期积累，不拖后腿"],
   ["数学一", 130, "决定上限的第一核心"],
-  ["408", 135, "跨考成功的第二核心"]
+  ["408", 135, "跨考最需要稳定的第二核心"]
 ];
 
 const firstMonthActions = [
@@ -508,7 +508,7 @@ const learningPath = [
   { id: "start", name: "启动", range: "2026.06", goal: "低强度建立记录、补数学预备和 C 语言", deliverable: "连续记录 7 天，完成 50h 起步" },
   { id: "base", name: "奠基", range: "2026.07-08", goal: "暑假逐步加长，高数基础、线代启动、数据结构第一轮", deliverable: "线性表/树/图能做基础题" },
   { id: "map", name: "加压", range: "2026.09-12", goal: "9 月起提高强度，数学一和 408 主干过第一轮", deliverable: "数学一 70% 框架，408 至少两门" },
-  { id: "close", name: "闭环", range: "2027.01-02", goal: "四门 408 和数学一第一轮闭合", deliverable: "数学 90+，408 85+" },
+  { id: "close", name: "收口", range: "2027.01-02", goal: "四门 408 和数学一第一轮收口", deliverable: "数学 90+，408 85+" },
   { id: "strength", name: "强化", range: "2027.03-06", goal: "题型化、真题分章节、项目可运行", deliverable: "数学 110，408 105" },
   { id: "battle", name: "套卷", range: "2027.07-08", goal: "真题套卷和政治启动", deliverable: "全科 390+" },
   { id: "rank", name: "排位", range: "2027.09-10", goal: "报名、套卷稳定、近 5 套 405+", deliverable: "确定报考和院校梯队" },
@@ -564,9 +564,16 @@ const highStandards = [
 const systemRules = [
   ["01", "渐进加量", "2026 年 6 月低强度启动；7-8 月逐步加长；9 月起提高到第一轮主干强度。"],
   ["02", "核心优先", "数学一和 408 优先分配时间，周核心占比低于 65% 就预警。"],
-  ["03", "未完成顺延", "昨天没有完成的任务进入今天，原任务保留为已顺延。"],
+  ["03", "未完成顺延", "昨天没有完成的任务进入今天，同时压缩新增内容，避免补偿式超载。"],
   ["04", "先交付再加量", "每个任务必须有题量、错因、图示或代码交付，只看视频不算真正完成。"],
   ["05", "错题进复盘", "勾选完成后自动安排 D+1 / D+3 / D+7 / D+14 / D+30。"]
+];
+
+const methodEvidence = [
+  ["主动回忆", "做题、闭卷默写和自测优先于反复看讲义。"],
+  ["分散复盘", "D+1/D+3/D+7/D+14/D+30 是轻量回炉，不把复盘堆成第二套课。"],
+  ["交错练习", "数学和 408 后期在章节题、真题和错题间切换，避免只会单章套路。"],
+  ["可完成负荷", "任务默认 3 项，顺延时削减新增内容；连续低完成时降到底线日。"]
 ];
 
 const memoryCurveRules = [
@@ -606,7 +613,7 @@ const taskBlueprints = {
   "补弱": {
     output: "交付：只补一个弱项，写清弱在哪里、下次如何提前识别。",
     steps: ["定位一个弱点", "补基础定义或错题", "写下下一步动作"],
-    metric: "弱项闭环"
+    metric: "弱项处理"
   },
   "项目": {
     output: "交付：一个可运行小功能、README 说明或一段可讲技术点。",
@@ -724,36 +731,35 @@ function migrateState(parsed) {
       if (!parsed.settings || parsed.settings.density === "balanced") settings.density = "focus";
       settings.efficiencyModeApplied = true;
     }
-    settings.taskCount = Math.min(4, Math.max(3, settings.taskCount || defaultSettings.taskCount));
+    settings.weekdayMinutes = sanitizeInteger(settings.weekdayMinutes || defaultSettings.weekdayMinutes, 60, 720);
+    settings.weekendMinutes = sanitizeInteger(settings.weekendMinutes || defaultSettings.weekendMinutes, 60, 840);
+    settings.taskCount = sanitizeInteger(settings.taskCount || defaultSettings.taskCount, 3, 4);
+    settings.coreRatio = sanitizeInteger(settings.coreRatio || defaultSettings.coreRatio, 55, 85);
+    if (!["focus", "balanced", "detail"].includes(settings.density)) settings.density = "focus";
     settings.targetExamDate = settings.targetExamDate || DEFAULT_EXAM_DATE;
-    settings.reviewDays = Array.isArray(settings.reviewDays) ? settings.reviewDays : [...defaultSettings.reviewDays];
+    settings.reviewDays = Array.isArray(settings.reviewDays)
+      ? [...new Set(settings.reviewDays.map((day) => sanitizeInteger(day, 1, 365)).filter(Boolean))].sort((a, b) => a - b)
+      : [...defaultSettings.reviewDays];
+    const entries = sanitizeEntries(parsed.entries || {});
+    const scores = sanitizeScores(parsed.scores || []);
+    const resourcesState = sanitizeNumericObject(parsed.resources || {}, 0, 100);
+    const topics = sanitizeNumericObject(parsed.topics || {}, 0, 2, true);
+    const deleted = sanitizeDeleted(parsed.deleted || {});
     return {
       schemaVersion: SCHEMA_VERSION,
-      entries: parsed.entries || {},
-      scores: parsed.scores || [],
-      topics: parsed.topics || {},
-      topicEvidence: parsed.topicEvidence || {},
+      entries,
+      scores,
+      topics,
+      topicEvidence: sanitizeTopicEvidence(parsed.topicEvidence || {}),
       tasks: parsed.tasks || {},
-      weekPlans: parsed.weekPlans || {},
+      weekPlans: sanitizeWeekPlans(parsed.weekPlans || {}),
       project: parsed.project || {},
-      resources: parsed.resources || {},
+      resources: resourcesState,
       settings,
-      customTasks: parsed.customTasks || [],
-      reviewItems: (parsed.reviewItems || []).map((item) => ({
-        ...item,
-        status: item.status || (item.done ? "done" : "due"),
-        delayCount: item.delayCount || 0,
-        failureReason: item.failureReason || "",
-        quality: item.quality || 0
-      })),
-      deleted: {
-        records: [],
-        scores: [],
-        tasks: [],
-        reviews: [],
-        ...(parsed.deleted || {})
-      },
-      snapshots: parsed.snapshots || [],
+      customTasks: sanitizeCustomTasks(parsed.customTasks || []),
+      reviewItems: sanitizeReviewItems(parsed.reviewItems || []),
+      deleted,
+      snapshots: sanitizeSnapshots(parsed.snapshots || []),
       sync: {
         status: "local",
         lastSyncAt: "",
@@ -763,11 +769,201 @@ function migrateState(parsed) {
         cloudPaused: false,
         ...(parsed.sync || {})
       },
-      user: parsed.user || null
+      user: sanitizeUser(parsed.user)
     };
   } catch {
     return freshState();
   }
+}
+
+function sanitizeNumber(value, min = 0, max = Number.POSITIVE_INFINITY) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return min;
+  return Math.min(max, Math.max(min, number));
+}
+
+function sanitizeInteger(value, min = 0, max = Number.POSITIVE_INFINITY) {
+  return Math.round(sanitizeNumber(value, min, max));
+}
+
+function sanitizeEntries(entries) {
+  return Object.fromEntries(Object.entries(entries || {}).map(([date, entry]) => {
+    const row = entry || {};
+    return [date, {
+      math: sanitizeNumber(row.math),
+      cs408: sanitizeNumber(row.cs408),
+      english: sanitizeNumber(row.english),
+      politics: sanitizeNumber(row.politics),
+      project: sanitizeNumber(row.project),
+      mathProblems: sanitizeNumber(row.mathProblems),
+      csProblems: sanitizeNumber(row.csProblems),
+      reading: sanitizeNumber(row.reading),
+      newMistakes: sanitizeNumber(row.newMistakes),
+      fixedMistakes: sanitizeNumber(row.fixedMistakes),
+      quality: sanitizeNumber(row.quality || 3, 1, 5),
+      nextTask: String(row.nextTask || ""),
+      note: String(row.note || ""),
+      updatedAt: String(row.updatedAt || "")
+    }];
+  }));
+}
+
+function sanitizeScores(scores) {
+  return (Array.isArray(scores) ? scores : []).map((score) => {
+    const row = score || {};
+    const politics = sanitizeNumber(row.politics, 0, 100);
+    const english = sanitizeNumber(row.english, 0, 100);
+    const math = sanitizeNumber(row.math, 0, 150);
+    const cs408 = sanitizeNumber(row.cs408, 0, 150);
+    return {
+      id: String(row.id || uid("score")),
+      date: String(row.date || planTodayISO()),
+      name: String(row.name || "未命名模考"),
+      politics,
+      english,
+      math,
+      cs408,
+      total: politics + english + math + cs408,
+      note: String(row.note || ""),
+      updatedAt: String(row.updatedAt || "")
+    };
+  });
+}
+
+function sanitizeNumericObject(object, min = 0, max = Number.POSITIVE_INFINITY, integer = false) {
+  return Object.fromEntries(Object.entries(object || {}).map(([key, value]) => [
+    key,
+    integer ? sanitizeInteger(value, min, max) : sanitizeNumber(value, min, max)
+  ]));
+}
+
+function sanitizeTopicEvidence(evidenceMap) {
+  return Object.fromEntries(Object.entries(evidenceMap || {}).map(([topicId, evidence]) => {
+    const row = evidence || {};
+    return [topicId, {
+      problems: sanitizeNumber(row.problems),
+      accuracy: sanitizeNumber(row.accuracy, 0, 100),
+      evidence: String(row.evidence || ""),
+      lastReviewDate: String(row.lastReviewDate || ""),
+      totalProblems: sanitizeNumber(row.totalProblems ?? row.total_problems),
+      recent14dAccuracy: normalizeRatio(row.recent14dAccuracy ?? row.recent_14d_accuracy),
+      lastReviewAt: String(row.lastReviewAt || row.last_review_at || ""),
+      masteryStatus: String(row.masteryStatus || row.mastery_status || ""),
+      prerequisites: Array.isArray(row.prerequisites) ? row.prerequisites.map((item) => String(item)) : []
+    }];
+  }));
+}
+
+function sanitizeWeekPlans(weekPlans) {
+  return Object.fromEntries(Object.entries(weekPlans || {}).map(([date, tasks]) => [
+    date,
+    (Array.isArray(tasks) ? tasks : []).filter(Boolean).map((task, index) => sanitizeTask(task, date, index))
+  ]));
+}
+
+function sanitizeTask(task, date, index = 0) {
+  const row = task || {};
+  const status = ["todo", "done", "shifted", "delayed", "failed"].includes(row.status) ? row.status : "todo";
+  return {
+    id: String(row.id || `${date}-${index}`),
+    date: String(row.date || date),
+    subject: String(row.subject || "复盘"),
+    text: String(row.text || "回炉错题，写明下次识别信号"),
+    topicId: String(row.topicId || row.topic_id || ""),
+    minutes: sanitizeInteger(row.minutes, 0, 240),
+    priority: sanitizeInteger(row.priority || index + 1, 1, 99),
+    status,
+    locked: Boolean(row.locked),
+    source: String(row.source || "generated"),
+    sourceTaskId: String(row.sourceTaskId || row.source_task_id || ""),
+    carriedFrom: String(row.carriedFrom || row.carried_from || ""),
+    shiftedTo: String(row.shiftedTo || row.shifted_to || ""),
+    reviewItemId: String(row.reviewItemId || ""),
+    completedAt: String(row.completedAt || row.completed_at || ""),
+    recordApplied: Boolean(row.recordApplied),
+    updatedAt: String(row.updatedAt || row.updated_at || ""),
+    contractType: String(row.contractType || row.contract_type || "problems"),
+    requiredProblemCount: sanitizeInteger(row.requiredProblemCount ?? row.required_problem_count, 0, 999),
+    requiredAccuracy: normalizeRatio(row.requiredAccuracy ?? row.required_accuracy),
+    requiredArtifacts: Array.isArray(row.requiredArtifacts || row.required_artifacts)
+      ? (row.requiredArtifacts || row.required_artifacts).map((item) => String(item)).slice(0, 8)
+      : [],
+    minutesMin: sanitizeInteger(row.minutesMin ?? row.minutes_min, 0, 240),
+    minutesMax: sanitizeInteger(row.minutesMax ?? row.minutes_max, 0, 240),
+    actualProblems: sanitizeInteger(row.actualProblems ?? row.actual_problems, 0, 999),
+    actualCorrect: sanitizeInteger(row.actualCorrect ?? row.actual_correct, 0, 999),
+    actualMinutes: sanitizeInteger(row.actualMinutes ?? row.actual_minutes, 0, 720),
+    evidenceSubmitted: Boolean(row.evidenceSubmitted || row.evidence_submitted)
+  };
+}
+
+function sanitizeReviewItems(items) {
+  return (Array.isArray(items) ? items : []).filter(Boolean).map((item) => {
+    const status = ["due", "done", "delayed", "failed"].includes(item.status) ? item.status : (item.done ? "done" : "due");
+    return {
+      id: String(item.id || uid("review")),
+      sourceTaskId: String(item.sourceTaskId || item.source_task_id || ""),
+      subject: String(item.subject || "复盘"),
+      text: String(item.text || item.title || ""),
+      round: String(item.round || item.review_round || ""),
+      dueDate: String(item.dueDate || item.due_date || planTodayISO()),
+      status,
+      done: Boolean(item.done || status === "done"),
+      delayCount: sanitizeInteger(item.delayCount ?? item.delay_count, 0, 99),
+      failureReason: String(item.failureReason || item.failure_reason || ""),
+      quality: sanitizeInteger(item.quality ?? item.quality_score, 0, 5),
+      completedAt: String(item.completedAt || item.completed_at || ""),
+      intervalIndex: sanitizeInteger(item.intervalIndex ?? item.interval_index, 0, 99),
+      failStreak: sanitizeInteger(item.failStreak ?? item.fail_streak, 0, 99),
+      lastResult: String(item.lastResult || item.last_result || ""),
+      lastSubmittedDate: String(item.lastSubmittedDate || item.last_submitted_date || ""),
+      topicId: String(item.topicId || item.topic_id || ""),
+      updatedAt: String(item.updatedAt || item.updated_at || "")
+    };
+  });
+}
+
+function sanitizeCustomTasks(tasks) {
+  return (Array.isArray(tasks) ? tasks : []).filter(Boolean).map((task) => ({
+    id: String(task.id || uid("custom")),
+    subject: String(task.subject || "复盘"),
+    text: String(task.text || ""),
+    minutes: sanitizeInteger(task.minutes, 10, 240)
+  })).filter((task) => task.text);
+}
+
+function sanitizeDeleted(deleted) {
+  const asArray = (value) => Array.isArray(value) ? value.map((item) => String(item)) : [];
+  return {
+    records: asArray(deleted.records),
+    scores: asArray(deleted.scores),
+    tasks: asArray(deleted.tasks),
+    reviews: asArray(deleted.reviews)
+  };
+}
+
+function normalizeRatio(value) {
+  const number = sanitizeNumber(value, 0, 100);
+  return number > 1 ? number / 100 : number;
+}
+
+function sanitizeSnapshots(snapshots) {
+  return (Array.isArray(snapshots) ? snapshots : []).slice(0, 5).map((snapshot) => {
+    const row = snapshot || {};
+    return {
+      reason: String(row.reason || "manual"),
+      createdAt: String(row.createdAt || row.created_at || ""),
+      payload: row.payload && typeof row.payload === "object" ? row.payload : row
+    };
+  });
+}
+
+function sanitizeUser(user) {
+  if (!user || typeof user !== "object") return null;
+  return {
+    id: String(user.id || ""),
+    email: String(user.email || "")
+  };
 }
 
 function freshState() {
@@ -1015,8 +1211,12 @@ function todayISO() {
   return new Date(now.getTime() - offset * 60000).toISOString().slice(0, 10);
 }
 
+function planTodayISO() {
+  return todayISO() < PLAN_START_DATE ? PLAN_START_DATE : todayISO();
+}
+
 function setDefaultDates() {
-  const today = todayISO();
+  const today = planTodayISO();
   document.getElementById("entryDate").value = today;
   document.getElementById("scoreDate").value = today;
 }
@@ -1036,7 +1236,7 @@ function formatDateISO(date) {
   return `${year}-${month}-${day}`;
 }
 
-function getCurrentPhase(dateValue = todayISO()) {
+function getCurrentPhase(dateValue = planTodayISO()) {
   const current = parseDate(dateValue);
   return phases.find((phase) => current >= parseDate(phase.start) && current <= parseDate(phase.end)) || phases[0];
 }
@@ -1116,7 +1316,7 @@ function bindForms() {
   document.getElementById("entryDate").addEventListener("change", loadEntryForm);
   document.getElementById("entryForm").addEventListener("submit", (event) => {
     event.preventDefault();
-    const date = document.getElementById("entryDate").value || todayISO();
+    const date = document.getElementById("entryDate").value || planTodayISO();
     state.entries[date] = {
       math: readNumber("mathMin"),
       cs408: readNumber("csMin"),
@@ -1142,7 +1342,7 @@ function bindForms() {
     event.preventDefault();
     const score = {
       id: window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : String(Date.now()),
-      date: document.getElementById("scoreDate").value || todayISO(),
+      date: document.getElementById("scoreDate").value || planTodayISO(),
       name: document.getElementById("scoreName").value.trim() || "未命名模考",
       politics: readNumber("scorePol"),
       english: readNumber("scoreEng"),
@@ -1164,7 +1364,7 @@ function bindForms() {
     state.scores.sort((a, b) => a.date.localeCompare(b.date));
     saveState();
     event.target.reset();
-    document.getElementById("scoreDate").value = todayISO();
+    document.getElementById("scoreDate").value = planTodayISO();
     renderAll();
     showToast("模考成绩已保存。");
   });
@@ -1208,7 +1408,7 @@ function bindImportExport() {
         renderAll();
         showToast("导入完成，已保留导入前快照。");
       } catch {
-        alert("导入失败：不是有效的 JSON 数据。");
+        showToast("导入失败：不是有效的 JSON 数据。");
       }
     };
     reader.readAsText(file);
@@ -1256,7 +1456,7 @@ function bindQuickEntry() {
 function bindRecords() {
   const monthInput = document.getElementById("recordMonth");
   if (monthInput) {
-    monthInput.value = todayISO().slice(0, 7);
+    monthInput.value = planTodayISO().slice(0, 7);
     monthInput.addEventListener("change", renderRecords);
   }
   document.getElementById("clearMonthFilter")?.addEventListener("click", () => {
@@ -1295,6 +1495,10 @@ function bindSettings() {
 }
 
 function bindAuth() {
+  document.getElementById("authForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    authAction("login");
+  });
   document.getElementById("authOpenBtn")?.addEventListener("click", () => {
     renderAuthPanel();
     document.getElementById("authDialog")?.showModal();
@@ -1459,7 +1663,7 @@ function readNumber(id) {
 }
 
 function loadEntryForm() {
-  const date = document.getElementById("entryDate").value || todayISO();
+  const date = document.getElementById("entryDate").value || planTodayISO();
   const entry = state.entries[date] || {};
   setValue("mathMin", entry.math);
   setValue("csMin", entry.cs408);
@@ -1500,8 +1704,8 @@ function renderAll() {
 }
 
 function getEntryTotals(entry) {
-  const total = (entry.math || 0) + (entry.cs408 || 0) + (entry.english || 0) + (entry.politics || 0) + (entry.project || 0);
-  const core = (entry.math || 0) + (entry.cs408 || 0);
+  const total = sanitizeNumber(entry.math) + sanitizeNumber(entry.cs408) + sanitizeNumber(entry.english) + sanitizeNumber(entry.politics) + sanitizeNumber(entry.project);
+  const core = sanitizeNumber(entry.math) + sanitizeNumber(entry.cs408);
   return { total, core };
 }
 
@@ -1516,7 +1720,7 @@ function sumMinutes(entries, key) {
 }
 
 function lastDaysEntries(days) {
-  const today = parseDate(todayISO());
+  const today = parseDate(planTodayISO());
   const start = new Date(today);
   start.setDate(today.getDate() - days + 1);
   return entriesArray().filter((entry) => {
@@ -1532,10 +1736,11 @@ function renderDashboard() {
   const totalMinutes = sumMinutes(all, "total");
   const weekMinutes = sumMinutes(week, "total");
   const coreMinutes = sumMinutes(week, "core");
-  const daysLeft = Math.ceil((parseDate(state.settings.targetExamDate || DEFAULT_EXAM_DATE) - parseDate(todayISO())) / 86400000);
+  const daysLeft = Math.ceil((parseDate(state.settings.targetExamDate || DEFAULT_EXAM_DATE) - parseDate(planTodayISO())) / 86400000);
   const dateStatus = examDateStatusText();
-  const currentMonth = monthlyPlan.find((row) => todayISO().startsWith(row[0]));
-  const monthMinutes = sumMinutes(entriesArray().filter((entry) => entry.date.startsWith(todayISO().slice(0, 7))), "total");
+  const planDate = planTodayISO();
+  const currentMonth = monthlyPlan.find((row) => planDate.startsWith(row[0]));
+  const monthMinutes = sumMinutes(entriesArray().filter((entry) => entry.date.startsWith(planDate.slice(0, 7))), "total");
   const monthTarget = currentMonth ? currentMonth[1] : phase.weeklyTarget * 4;
   const monthProgress = monthTarget ? Math.min(999, monthMinutes / 60 / monthTarget * 100) : 0;
 
@@ -1634,7 +1839,7 @@ function renderSideNav(week, phase) {
   const weekHours = sumMinutes(week, "total") / 60;
   const totalMinutes = sumMinutes(week, "total");
   const corePercent = totalMinutes ? Math.round(sumMinutes(week, "core") / totalMinutes * 100) : 0;
-  const dueCount = state.reviewItems.filter((item) => !item.done && item.dueDate <= todayISO()).length;
+  const dueCount = state.reviewItems.filter((item) => !item.done && item.dueDate <= planTodayISO()).length;
   const activeDays = entriesArray().filter((entry) => entry.total > 0).length;
   const avgSyllabus = Math.round(["math", "cs408", "english", "politics"].reduce((sum, subject) => sum + syllabusProgress(subject).percent, 0) / 4);
   const last5 = [...state.scores].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
@@ -1668,9 +1873,10 @@ function renderWorkflowRail() {
   if (!container) return;
   const tasks = buildDailyTasks();
   const doneTasks = tasks.filter((task) => isTaskDone(task, state.tasks)).length;
-  const todayEntry = state.entries[todayISO()];
-  const dueCount = state.reviewItems.filter((item) => !item.done && item.dueDate <= todayISO()).length;
-  const recentScores = state.scores.filter((score) => score.date >= formatDateISO(addDays(parseDate(todayISO()), -45))).length;
+  const planDate = planTodayISO();
+  const todayEntry = state.entries[planDate];
+  const dueCount = state.reviewItems.filter((item) => !item.done && item.dueDate <= planDate).length;
+  const recentScores = state.scores.filter((score) => score.date >= formatDateISO(addDays(parseDate(planDate), -45))).length;
   const avgSyllabus = Math.round(["math", "cs408", "english", "politics"].reduce((sum, subject) => sum + syllabusProgress(subject).percent, 0) / 4);
   const steps = [
     ["计划", `${tasks.length} 项`, tasks.length ? "done" : "wait"],
@@ -1691,16 +1897,16 @@ function renderWorkflowRail() {
 
 function renderTargetLane({ phase, week, totalMinutes, monthTarget, monthMinutes }) {
   const totalHours = totalMinutes / 60;
-  const next = nextMilestone();
-  const [month, , cumulative, mathFocus, csFocus, otherFocus, scoreWatch] = next;
-  const remaining = Math.max(0, cumulative - totalHours);
+    const next = nextMilestone();
+    const [month, , cumulative, mathFocus, csFocus, otherFocus, scoreWatch] = next;
+    const remaining = Math.max(0, cumulative - totalHours);
   const weekMinutes = sumMinutes(week, "total");
   const coreRatio = weekMinutes ? sumMinutes(week, "core") / weekMinutes : 0;
   const monthPercent = monthTarget ? (monthMinutes / 60 / monthTarget) * 100 : 0;
   const last5 = [...state.scores].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   const scoreAvg = averageScores(last5).total;
 
-  let title = `${month} 节点：还差 ${remaining.toFixed(0)}h`;
+    let title = `${month} 节点还差 ${remaining.toFixed(0)}h`;
   let text = `本阶段重点：${mathFocus}；${csFocus}。完成后记录题量、错因和复盘日期。`;
   if (totalHours >= cumulative) {
     title = `${month} 节点已达累计线`;
@@ -1709,7 +1915,7 @@ function renderTargetLane({ phase, week, totalMinutes, monthTarget, monthMinutes
     title = "核心占比偏低";
     text = "本周优先安排数学和 408，减少非核心任务。";
   } else if (monthPercent >= 90) {
-    title = "本月节奏接近达标";
+    title = "本月节奏接近目标";
     text = `继续按阶段验收推进。监测口径：${scoreWatch}。`;
   }
 
@@ -1740,8 +1946,9 @@ function renderTargetLane({ phase, week, totalMinutes, monthTarget, monthMinutes
 
   const tasks = buildDailyTasks();
   const doneTasks = tasks.filter((task) => isTaskDone(task, state.tasks)).length;
-  const todayEntry = state.entries[todayISO()];
-  const dueCount = state.reviewItems.filter((item) => !item.done && item.dueDate <= todayISO()).length;
+  const planDate = planTodayISO();
+  const todayEntry = state.entries[planDate];
+  const dueCount = state.reviewItems.filter((item) => !item.done && item.dueDate <= planDate).length;
   const activeCore = weekMinutes ? Math.round(coreRatio * 100) : 0;
   const checks = [
     ["任务", doneTasks >= Math.min(2, tasks.length), `${doneTasks}/${tasks.length}`],
@@ -1933,7 +2140,7 @@ function renderSubjectChart(week, phase) {
 function renderTrendChart() {
   const container = document.getElementById("trendChart");
   if (!container) return;
-  const today = parseDate(todayISO());
+  const today = parseDate(planTodayISO());
   const days = [];
   for (let index = 13; index >= 0; index -= 1) {
     const date = new Date(today);
@@ -1965,7 +2172,7 @@ function renderScoreTargets() {
   `).join("");
 }
 
-function renderTasks(force = false, date = todayISO()) {
+function renderTasks(force = false, date = planTodayISO()) {
   const phase = getCurrentPhase(date);
   const tasks = buildDailyTasks(force, date);
 
@@ -2050,7 +2257,7 @@ function renderTasks(force = false, date = todayISO()) {
 }
 
 function applyTaskToEntry(task) {
-  const date = task.date || todayISO();
+  const date = task.date || planTodayISO();
   const entry = state.entries[date] || {};
   const key = subjectToEntryKey(task.subject);
   if (key) entry[key] = (entry[key] || 0) + (task.minutes || 0);
@@ -2062,7 +2269,7 @@ function applyTaskToEntry(task) {
   entry.note = entry.note || "";
   entry.updatedAt = new Date().toISOString();
   state.entries[date] = entry;
-  if (date === (document.getElementById("entryDate")?.value || todayISO())) loadEntryForm();
+  if (date === (document.getElementById("entryDate")?.value || planTodayISO())) loadEntryForm();
 }
 
 function subjectToEntryKey(subject) {
@@ -2077,7 +2284,7 @@ function subjectToEntryKey(subject) {
   }[subject] || null;
 }
 
-function nextSevenDates(startDate = todayISO()) {
+function nextSevenDates(startDate = planTodayISO()) {
   const start = parseDate(startDate);
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(start);
@@ -2105,7 +2312,7 @@ function renderWeekPlanner() {
     const total = visibleTasks.reduce((sum, task) => sum + (task.minutes || 0), 0);
     const percent = visibleTasks.length ? Math.round(done / visibleTasks.length * 100) : 0;
     const subjects = [...new Set(visibleTasks.map((task) => task.subject))];
-    const isToday = date === todayISO();
+    const isToday = date === planTodayISO();
     const shortDate = date.slice(5).replace("-", "/");
     return `
       <article class="week-day-card ${isToday ? "today" : ""}">
@@ -2245,7 +2452,7 @@ function renderFocusBoard(tasks) {
   const phase = getCurrentPhase();
   const week = lastDaysEntries(7);
   const weekHours = sumMinutes(week, "total") / 60;
-  const dueCount = state.reviewItems.filter((item) => !item.done && item.dueDate <= todayISO()).length;
+  const dueCount = state.reviewItems.filter((item) => !item.done && item.dueDate <= planTodayISO()).length;
   const primary = tasks[0];
   const support = tasks.slice(1, 3);
   const weekPercent = phase.weeklyTarget ? Math.min(100, Math.round(weekHours / phase.weeklyTarget * 100)) : 0;
@@ -2255,7 +2462,7 @@ function renderFocusBoard(tasks) {
   setText("focusPrimaryTime", primary ? `${primary.minutes}m` : "--m");
   setText("focusReviewCount", `${dueCount} 项`);
   setText("focusPace", `${weekHours.toFixed(1)} / ${phase.weeklyTarget}h`);
-  setText("focusRecordHint", dueCount ? "先处理到期复盘。" : "保存记录后进入闭环。");
+    setText("focusRecordHint", dueCount ? "先处理到期复盘。" : "完成后保存记录。");
   setStyleWidth("focusWeekFill", `${weekPercent}%`);
 
   const supportNode = document.getElementById("focusSupportTasks");
@@ -2270,12 +2477,15 @@ function renderFocusBoard(tasks) {
   }
 }
 
-function buildDailyTasks(force = false, date = todayISO()) {
+function buildDailyTasks(force = false, date = planTodayISO()) {
   const existing = state.weekPlans[date] || [];
   let carried = [];
-  if (date === todayISO()) {
+  if (date === planTodayISO()) {
+    const budget = dailyBudgetMinutes(date);
+    const carryLimit = carryoverLimitForBudget(budget, state.settings.taskCount || 3);
     carried = collectCarryoverTasks(state.weekPlans, state.tasks, date, {
-      limit: Math.min(2, Math.max(1, (state.settings.taskCount || 3) - 2))
+      limit: carryLimit,
+      maxMinutes: carryLimit >= 2 ? 75 : 90
     });
     if (carried.length) markCarriedSourceTasks(state.weekPlans, carried, state.tasks);
   }
@@ -2296,11 +2506,12 @@ function buildDailyTasks(force = false, date = todayISO()) {
   const generated = createDailyTasks(date);
   const targetCount = Math.min(4, Math.max(3, state.settings.taskCount || 3));
   const merged = [...lockedActive];
+  const budget = dailyBudgetMinutes(date);
   generated.forEach((task) => {
     if (merged.length >= targetCount) return;
     if (!merged.some((item) => item.subject === task.subject && item.text === task.text)) merged.push(task);
   });
-  const nextTasks = normalizeTaskList(merged.slice(0, targetCount), date);
+  const nextTasks = normalizeTaskList(trimTasksToBudget(merged.slice(0, targetCount), budget, targetCount), date);
   const nextIds = new Set(nextTasks.map((task) => task.id));
   existing
     .filter((task) => task.status !== "shifted" && !task.locked && !nextIds.has(task.id))
@@ -2315,7 +2526,13 @@ function buildDailyTasks(force = false, date = todayISO()) {
   return state.weekPlans[date].filter((task) => task.status !== "shifted");
 }
 
-function createDailyTasks(date = todayISO()) {
+function carryoverLimitForBudget(budget, taskCount) {
+  if (budget <= bottomLineMinutes(getCurrentPhase())) return 1;
+  if (taskCount <= 3) return 1;
+  return 2;
+}
+
+function createDailyTasks(date = planTodayISO()) {
   const phase = getCurrentPhase(date);
   const weak = getWeakSubject();
   const topicMath = topicForDate("math", date);
@@ -2342,7 +2559,7 @@ function createDailyTasks(date = todayISO()) {
   if (topicPolitics && politicsDay) {
     tasks.push(topicTask(date, phase, "政治", topicPolitics, politicsMinutes, "基础框架、选择题、背诵"));
   } else {
-    tasks.push(topicTask(date, phase, "英语", topicEnglish, englishMinutes, "单词、长难句、真题阅读闭环"));
+    tasks.push(topicTask(date, phase, "英语", topicEnglish, englishMinutes, "单词、长难句、真题阅读"));
   }
 
   if (topicPolitics && !politicsDay && tasks.length < targetCount) {
@@ -2415,26 +2632,28 @@ function normalizeTaskList(tasks, date) {
     .map((task, index) => ({ ...task, priority: task.status === "shifted" ? task.priority : index + 1 }));
 }
 
-function dailyBudgetMinutes(date = todayISO()) {
+function dailyBudgetMinutes(date = planTodayISO()) {
   const phase = getCurrentPhase(date);
   const day = parseDate(date).getDay();
   const isWeekend = day === 0 || day === 6;
   const ramp = rampBudgetForDate(date);
   const settingCap = isWeekend ? state.settings.weekendMinutes : state.settings.weekdayMinutes;
   const rampCap = isWeekend ? ramp.weekend : ramp.weekday;
-  const userCap = Math.max(settingCap, rampCap);
+  const current = parseDate(date);
+  const earlyRampEnd = parseDate("2026-08-31");
+  const userCap = current <= earlyRampEnd ? Math.min(settingCap || rampCap, rampCap) : Math.max(settingCap, rampCap);
   const floor = bottomLineMinutes(phase);
   const normalBudget = phase.id === "A" ? Math.min(userCap, Math.max(Math.min(floor, userCap), rampCap)) : Math.max(floor, userCap);
   return shouldUseMinimumDay(date) ? Math.min(normalBudget, bottomLineMinutes(phase)) : normalBudget;
 }
 
-function rampBudgetForDate(date = todayISO()) {
+function rampBudgetForDate(date = planTodayISO()) {
   const current = parseDate(date);
   if (current < parseDate(rampBudgets[0].start)) return rampBudgets[0];
   return rampBudgets.find((item) => current >= parseDate(item.start) && current <= parseDate(item.end)) || rampBudgets[rampBudgets.length - 1];
 }
 
-function shouldUseMinimumDay(date = todayISO()) {
+function shouldUseMinimumDay(date = planTodayISO()) {
   const cursor = parseDate(date);
   let lowDays = 0;
   for (let index = 1; index <= 3; index += 1) {
@@ -2454,24 +2673,50 @@ function bottomLineMinutes(phase = getCurrentPhase()) {
 }
 
 function trimTasksToBudget(tasks, budget, targetCount) {
-  const minCount = Math.max(3, Math.min(targetCount, tasks.length));
+  const hardBudget = Math.max(0, budget || 0);
+  const hasCarryover = tasks.some((task) => task.source === "carryover");
+  const desiredCount = Math.min(targetCount, tasks.length);
+  const minCount = Math.min(desiredCount, hasCarryover ? 2 : 3);
   let selected = tasks.slice(0, Math.min(6, Math.max(minCount, targetCount)));
-  while (selected.length > minCount && selected.reduce((sum, task) => sum + task.minutes, 0) > budget) {
+  while (selected.length > minCount && selected.reduce((sum, task) => sum + task.minutes, 0) > hardBudget) {
     selected.pop();
   }
   const total = selected.reduce((sum, task) => sum + task.minutes, 0);
-  if (total > budget && total > 0) {
-    const scale = budget / total;
+  if (total > hardBudget && total > 0) {
+    const scale = hardBudget / total;
     selected = selected.map((task) => {
       const floor = task.subject === "数学" || task.subject === "408" ? 30 : task.subject === "复盘" ? 15 : 15;
-      return { ...task, minutes: Math.max(floor, roundToFive(task.minutes * scale)) };
+      return { ...task, minutes: Math.max(floor, floorToFive(task.minutes * scale)) };
     });
+  }
+  while (selected.length > 1 && selected.reduce((sum, task) => sum + task.minutes, 0) > hardBudget) {
+    const removableIndex = findLowestValueTaskIndex(selected);
+    selected.splice(removableIndex, 1);
   }
   return selected;
 }
 
+function findLowestValueTaskIndex(tasks) {
+  const rank = { "项目": 6, "政治": 5, "英语": 4, "补弱": 3, "数学": 2, "408": 2, "复盘": 1 };
+  let index = tasks.length - 1;
+  let worst = -1;
+  tasks.forEach((task, taskIndex) => {
+    const score = (rank[task.subject] || 3) * 1000 + (task.priority || taskIndex);
+    if (task.source === "carryover" || task.reviewItemId) return;
+    if (score >= worst) {
+      worst = score;
+      index = taskIndex;
+    }
+  });
+  return index;
+}
+
 function roundToFive(value) {
   return Math.round(value / 5) * 5;
+}
+
+function floorToFive(value) {
+  return Math.floor(value / 5) * 5;
 }
 
 function taskBlueprint(task) {
@@ -2553,15 +2798,15 @@ function renderTaskFlow(tasks) {
   }).join("");
 }
 
-function topicForDate(subject, date = todayISO()) {
+function topicForDate(subject, date = planTodayISO()) {
   const curated = firstMonthTopicOverride(subject, date);
   if (curated) return curated;
   const candidates = nextTopics(subject, 30);
-  const dayOffset = Math.max(0, Math.floor((parseDate(date) - parseDate(todayISO())) / 86400000));
+  const dayOffset = Math.max(0, Math.floor((parseDate(date) - parseDate(planTodayISO())) / 86400000));
   return candidates[Math.min(dayOffset, Math.max(0, candidates.length - 1))] || candidates[0];
 }
 
-function firstMonthTopicOverride(subject, date = todayISO()) {
+function firstMonthTopicOverride(subject, date = planTodayISO()) {
   const start = parseDate(PLAN_START_DATE);
   const current = parseDate(date);
   const index = Math.floor((current - start) / 86400000);
@@ -2594,7 +2839,7 @@ function topicTask(date, phase, subject, topic, minutes, fallback) {
 
 function scheduleReviewForTask(taskId, task) {
   if (!task || state.reviewItems.some((item) => item.sourceTaskId === taskId)) return;
-  const base = parseDate(task.date || todayISO());
+  const base = parseDate(task.date || planTodayISO());
   const items = state.settings.reviewDays.map((days) => {
     const due = new Date(base);
     due.setDate(base.getDate() + days);
@@ -2615,7 +2860,7 @@ function scheduleReviewForTask(taskId, task) {
   state.reviewItems.push(...items);
 }
 
-function dueReviewTasks(date = todayISO()) {
+function dueReviewTasks(date = planTodayISO()) {
   return state.reviewItems
     .filter((item) => !item.done && item.status !== "done" && item.dueDate <= date)
     .slice(0, 1)
@@ -2629,8 +2874,9 @@ function dueReviewTasks(date = todayISO()) {
 }
 
 function renderReviewQueue() {
-  const due = state.reviewItems.filter((item) => !item.done && item.status !== "done" && item.dueDate <= todayISO());
-  const upcoming = state.reviewItems.filter((item) => !item.done && item.status !== "done" && item.dueDate > todayISO()).slice(0, 8);
+  const planDate = planTodayISO();
+  const due = state.reviewItems.filter((item) => !item.done && item.status !== "done" && item.dueDate <= planDate);
+  const upcoming = state.reviewItems.filter((item) => !item.done && item.status !== "done" && item.dueDate > planDate).slice(0, 8);
   const todayHtml = due.length ? due.map(renderReviewItem).join("") : `<div class="empty-state">今天没有到期复盘。完成任务后会自动安排 D+1/D+3/D+7/D+14/D+30。</div>`;
   document.getElementById("reviewQueue").innerHTML = todayHtml;
   document.getElementById("spacedReviewList").innerHTML = [...due, ...upcoming].length ? [...due, ...upcoming].map(renderReviewItem).join("") : `<div class="empty-state">复盘队列为空。先完成今日任务，系统会自动生成复盘。</div>`;
@@ -2696,7 +2942,7 @@ function failReview(id) {
 }
 
 function cloneShortReview(item, reason) {
-  const due = addDays(parseDate(todayISO()), 1);
+  const due = addDays(parseDate(planTodayISO()), 1);
   state.reviewItems.push({
     id: `${item.id}-retry-${Date.now()}`,
     sourceTaskId: item.sourceTaskId,
@@ -2730,7 +2976,7 @@ function renderReviewPolicy(dueCount, upcomingCount) {
 }
 
 function renderReviewItem(item) {
-  const due = item.dueDate <= todayISO() ? "due" : "";
+  const due = item.dueDate <= planTodayISO() ? "due" : "";
   return `
     <article class="review-queue-item ${due}">
       <div>
@@ -2976,7 +3222,7 @@ function csvCell(value) {
 
 function renderRecordSummary() {
   const all = entriesArray();
-  const currentMonth = todayISO().slice(0, 7);
+  const currentMonth = planTodayISO().slice(0, 7);
   const monthEntries = all.filter((entry) => entry.date.startsWith(currentMonth));
   const totalHours = sumMinutes(all, "total") / 60;
   const monthHours = sumMinutes(monthEntries, "total") / 60;
@@ -3050,11 +3296,11 @@ function renderSyllabus(selected = document.querySelector(".seg.active")?.datase
           <div>
             <span class="syllabus-type-pill ${groupType.type}">${escapeHtml(groupType.label)}</span>
             <strong>${escapeHtml(group)}</strong>
-            <span>${progress.done}/${progress.total} 已掌握 · ${progress.review} 需复盘 · ${escapeHtml(groupType.note)}</span>
+            <span>${sanitizeNumber(progress.done)}/${sanitizeNumber(progress.total)} 已掌握 · ${sanitizeNumber(progress.review)} 需复盘 · ${escapeHtml(groupType.note)}</span>
           </div>
-          <em>${progress.percent}%</em>
+          <em>${sanitizeNumber(progress.percent, 0, 100)}%</em>
         </summary>
-        <div class="progress-track slim"><div class="progress-fill" style="width:${progress.percent}%"></div></div>
+        <div class="progress-track slim"><div class="progress-fill" style="width:${sanitizeNumber(progress.percent, 0, 100)}%"></div></div>
         <div class="topic-list">
           ${topics.map((topic) => renderTopic(selected, group, topic)).join("")}
         </div>
@@ -3096,7 +3342,7 @@ function captureTopicEvidence(id) {
     problems,
     accuracy,
     evidence: text.trim(),
-    lastReviewDate: todayISO()
+    lastReviewDate: planTodayISO()
   };
 }
 
@@ -3110,12 +3356,12 @@ function renderSyllabusDashboard(selected) {
   `).join("");
   container.innerHTML = `
     <section class="syllabus-hero">
-      <div class="ring syllabus-ring" style="--value:${detail.percent}">
-        <span>${detail.percent}%</span>
+      <div class="ring syllabus-ring" style="--value:${sanitizeNumber(detail.percent, 0, 100)}">
+        <span>${sanitizeNumber(detail.percent, 0, 100)}%</span>
       </div>
       <div>
         <strong>${syllabus[selected].title} 图谱</strong>
-        <p>已掌握 ${detail.done} / ${detail.total}，需复盘 ${detail.review}，未开始 ${detail.todo}。点击任一考点可在“未开始 / 需复盘 / 已掌握”之间切换。条目为备考拆解，不等同官方逐字大纲。</p>
+        <p>已掌握 ${sanitizeNumber(detail.done)} / ${sanitizeNumber(detail.total)}，需复盘 ${sanitizeNumber(detail.review)}，未开始 ${sanitizeNumber(detail.todo)}。点击任一考点可在“未开始 / 需复盘 / 已掌握”之间切换。条目为备考拆解，不等同官方逐字大纲。</p>
         <div class="syllabus-legend" aria-label="考纲条目类型">${legend}</div>
       </div>
     </section>
@@ -3518,7 +3764,7 @@ function renderReview() {
   document.getElementById("monthTable").innerHTML = monthlyPlan.map((row) => {
     const [month, target, cumulative, math, cs408, other, score] = row;
     const reached = totalHours >= cumulative;
-    const current = todayISO().startsWith(month) ? " current" : "";
+    const current = planTodayISO().startsWith(month) ? " current" : "";
     return `
       <div class="month-row${current}">
         <div class="month-row-head">
@@ -3569,7 +3815,7 @@ function renderCoach(week, phase) {
 
 function renderHeatmap() {
   const container = document.getElementById("heatmap");
-  const today = parseDate(todayISO());
+  const today = parseDate(planTodayISO());
   const cells = [];
   for (let index = 27; index >= 0; index -= 1) {
     const date = new Date(today);
@@ -3585,7 +3831,7 @@ function renderHeatmap() {
 
 function currentStreak() {
   let streak = 0;
-  const cursor = parseDate(todayISO());
+  const cursor = parseDate(planTodayISO());
   while (true) {
     const iso = formatDateISO(cursor);
     const entry = state.entries[iso];
@@ -3650,7 +3896,7 @@ function renderScores() {
         <span>${escapeHtml(score.date)} · ${escapeHtml(score.name)}</span>
         <span>${Number(score.total) || 0}</span>
       </div>
-      <div class="score-meta">政治 ${score.politics} · 英语 ${score.english} · 数学 ${score.math} · 408 ${score.cs408}${score.note ? ` · ${escapeHtml(score.note)}` : ""}</div>
+      <div class="score-meta">政治 ${sanitizeNumber(score.politics)} · 英语 ${sanitizeNumber(score.english)} · 数学 ${sanitizeNumber(score.math)} · 408 ${sanitizeNumber(score.cs408)}${score.note ? ` · ${escapeHtml(score.note)}` : ""}</div>
       <div class="record-actions">
         <button type="button" data-edit-score="${escapeAttr(score.id)}">编辑</button>
         <button type="button" data-delete-score="${escapeAttr(score.id)}">删除</button>
@@ -3762,11 +4008,11 @@ function renderResources() {
 
 function renderResourceProgress() {
   document.getElementById("resourceProgress").innerHTML = resourceProgressItems.map(([label, key]) => {
-    const value = state.resources[key] || 0;
+    const value = sanitizeNumber(state.resources[key], 0, 100);
     return `
       <label class="resource-progress-row">
         <span>${label}</span>
-        <input type="range" min="0" max="100" step="5" value="${value}" data-resource-progress="${key}">
+        <input type="range" min="0" max="100" step="5" value="${value}" data-resource-progress="${escapeAttr(key)}">
         <strong>${value}%</strong>
       </label>
     `;
@@ -3775,8 +4021,9 @@ function renderResourceProgress() {
   document.querySelectorAll("[data-resource-progress]").forEach((input) => {
     input.addEventListener("input", () => {
       state.resources[input.dataset.resourceProgress] = Number(input.value);
+      const label = input.closest(".resource-progress-row")?.querySelector("strong");
+      if (label) label.textContent = `${Number(input.value) || 0}%`;
       saveState();
-      renderResourceProgress();
     });
   });
 }
@@ -3791,7 +4038,7 @@ function renderSettings() {
   setText("settingsExamDateStatus", examDateStatusText());
 
   document.getElementById("standardsList").innerHTML = [
-    ["渐进时长", "2026 年 6 月从工作日 90m、周末 150m 起步；7-8 月逐步加长；9 月起进入第一轮主干强度。"],
+    ["渐进时长", "2026 年 6 月从工作日 90m、周末 150m 起步；7 月约 120/210m，8 月约 150/240m；9 月起进入第一轮主干强度。"],
     ...highStandards
   ].map(([subject, standard]) => `
     <div class="standard-item">
@@ -3853,7 +4100,11 @@ function renderDesignReferences() {
 function renderExecutionBoundaries() {
   const container = document.getElementById("executionBoundaries");
   if (!container) return;
-  container.innerHTML = executionBoundaries.map(([title, text]) => `
+  const rows = [
+    ...executionBoundaries,
+    ...methodEvidence.map(([title, text]) => [title, text])
+  ];
+  container.innerHTML = rows.map(([title, text]) => `
     <article class="boundary-card">
       <span>规则</span>
       <strong>${escapeHtml(title)}</strong>

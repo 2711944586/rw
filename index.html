@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>软微 420 学习台</title>
+  <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="%23111827"/><text x="32" y="39" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="white">420</text></svg>'>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body data-density="focus">
@@ -121,7 +122,7 @@
           <div class="command-metrics">
             <span><strong>420</strong>目标总分</span>
             <span><strong>65%+</strong>数学+408</span>
-            <span><strong>D+30</strong>复盘闭环</span>
+            <span><strong>D+30</strong>复盘</span>
           </div>
         </section>
 
@@ -144,7 +145,7 @@
           <article class="focus-card">
             <span>复盘</span>
             <strong id="focusReviewCount">0 项</strong>
-            <p id="focusRecordHint">保存记录后进入闭环。</p>
+            <p id="focusRecordHint">完成后保存记录。</p>
           </article>
           <article class="focus-card">
             <span>本周状态</span>
@@ -172,7 +173,7 @@
           </article>
           <article class="loop-audit-card">
             <div class="target-head">
-              <span>今日闭环</span>
+              <span>今日检查</span>
               <strong id="targetLoopScore">0/4</strong>
             </div>
             <div class="audit-list" id="targetLoopAudit"></div>
@@ -204,7 +205,7 @@
 
         <section class="coach-strip">
           <div>
-            <span class="coach-kicker">阶段教练</span>
+            <span class="coach-kicker">阶段建议</span>
             <strong id="coachTitle">先启动，再加速</strong>
             <p id="coachText">根据当前阶段、最近 7 天数据和考纲完成度给出建议。</p>
           </div>
@@ -216,14 +217,14 @@
 
         <details class="detail-section loop-details">
           <summary>
-            <span>数据闭环</span>
+            <span>数据流</span>
             <em>流程状态 / 本地备份</em>
           </summary>
           <section class="ops-board">
             <article class="workflow-card">
               <div class="panel-head tight">
                 <div>
-                  <h3>全流程闭环</h3>
+                  <h3>流程状态</h3>
                   <p>任务、记录、复盘、模考保持同一套数据。</p>
                 </div>
               </div>
@@ -556,7 +557,7 @@
           <section class="panel wide">
             <div class="panel-head">
               <div>
-                <h3>零基础路线</h3>
+                <h3>零基础路径</h3>
                 <p>前置能力、主干学习、题型训练分层推进。</p>
               </div>
             </div>
@@ -635,7 +636,7 @@
           <section class="panel wide">
             <div class="panel-head">
               <div>
-                <h3>月度路线</h3>
+                <h3>月度计划</h3>
                 <p>按 2026-06-01 到 2027 年 12 月推算窗口的累计目标推进，官方日期发布后必须更新</p>
               </div>
             </div>
@@ -692,7 +693,7 @@
           <section class="panel wide">
             <div class="panel-head">
               <div>
-                <h3>资料路线</h3>
+                <h3>资料清单</h3>
                 <p>官方大纲决定范围，资料只服务执行；当前推荐均为备考建议，不是官方指定资料，当年最新版需出版后确认</p>
               </div>
             </div>
@@ -839,13 +840,13 @@
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <dialog class="auth-dialog" id="authDialog">
-    <form class="auth-card" id="authForm" method="dialog">
+    <form class="auth-card" id="authForm">
       <div class="panel-head">
         <div>
           <h3>账号与云同步</h3>
           <p id="authHint">登录后可在多设备同步计划、记录、复盘和模考。</p>
         </div>
-        <button class="icon-button" id="authCloseBtn" type="submit" aria-label="关闭账号对话框">×</button>
+        <button class="icon-button" id="authCloseBtn" type="button" aria-label="关闭账号对话框">×</button>
       </div>
       <label>邮箱<input type="email" id="authEmail" autocomplete="email" placeholder="you@example.com"></label>
       <label>密码<input type="password" id="authPassword" autocomplete="current-password" placeholder="至少 6 位"></label>

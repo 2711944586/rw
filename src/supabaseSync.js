@@ -2,9 +2,25 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
+const PLAN_LOGIC_VERSION = "3.3-start-2026-06-ramp";
 
 export const supabaseConfigured = Boolean(supabaseUrl && supabaseKey);
 export const supabase = supabaseConfigured ? createClient(supabaseUrl, supabaseKey) : null;
+
+function normalizeRatio(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return 0;
+  return Math.min(1, number > 1 ? number / 100 : number);
+}
+
+function asDate(value) {
+  const text = String(value || "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
+function taskDateFor(task, fallbackISO) {
+  return asDate(task.date || task.task_date) || asDate(task.id?.slice(0, 10)) || fallbackISO.slice(0, 10);
+}
 
 export async function getCurrentUser() {
   if (!supabase) return null;
@@ -213,7 +229,8 @@ export async function saveCloudState(state) {
     review_days: state.settings.reviewDays,
     density_mode: state.settings.density || "focus",
     retro_time: state.settings.retroTime || "22:00",
-    plan_version: "v3.0",
+    plan_version: state.settings.planLogicVersion || PLAN_LOGIC_VERSION,
+    last_synced_at: now,
     updated_at: now
   };
 
@@ -239,7 +256,7 @@ export async function saveCloudState(state) {
   const tasks = Object.values(state.weekPlans || {}).flat().map((task) => ({
     id: task.id,
     user_id: user.id,
-    task_date: task.date || task.id.slice(0, 10),
+    task_date: taskDateFor(task, now),
     subject: task.subject,
     topic_id: task.topicId || "",
     title: task.text,
@@ -249,13 +266,13 @@ export async function saveCloudState(state) {
     locked: Boolean(task.locked),
     source: task.source || "generated",
     source_task_id: task.sourceTaskId || task.source_task_id || "",
-    carried_from: task.carriedFrom || task.carried_from || "",
-    shifted_to: task.shiftedTo || task.shifted_to || "",
+    carried_from: asDate(task.carriedFrom || task.carried_from),
+    shifted_to: asDate(task.shiftedTo || task.shifted_to),
     completed_at: task.completedAt || null,
     record_applied: Boolean(task.recordApplied),
     contract_type: task.contractType || task.contract_type || "problems",
     required_problem_count: task.requiredProblemCount ?? task.required_problem_count ?? 0,
-    required_accuracy: task.requiredAccuracy ?? task.required_accuracy ?? 0,
+    required_accuracy: normalizeRatio(task.requiredAccuracy ?? task.required_accuracy),
     required_artifacts: task.requiredArtifacts || task.required_artifacts || [],
     minutes_min: task.minutesMin ?? task.minutes_min ?? 0,
     minutes_max: task.minutesMax ?? task.minutes_max ?? 0,
@@ -273,7 +290,7 @@ export async function saveCloudState(state) {
     subject: item.subject,
     title: item.text,
     review_round: item.round || "",
-    due_date: item.dueDate,
+    due_date: asDate(item.dueDate || item.due_date) || now.slice(0, 10),
     status: item.done ? "done" : item.status || "due",
     delay_count: item.delayCount || 0,
     failure_reason: item.failureReason || "",
@@ -282,7 +299,7 @@ export async function saveCloudState(state) {
     interval_index: item.intervalIndex ?? item.interval_index ?? 0,
     fail_streak: item.failStreak ?? item.fail_streak ?? 0,
     last_result: item.lastResult || item.last_result || "",
-    last_submitted_date: item.lastSubmittedDate || item.last_submitted_date || null,
+    last_submitted_date: asDate(item.lastSubmittedDate || item.last_submitted_date),
     topic_id: item.topicId || item.topic_id || "",
     updated_at: item.updatedAt || now
   }));
@@ -296,9 +313,9 @@ export async function saveCloudState(state) {
       problems_done: evidence.problems || 0,
       accuracy: evidence.accuracy || 0,
       evidence: evidence.evidence || "",
-      last_review_date: evidence.lastReviewDate || null,
+      last_review_date: asDate(evidence.lastReviewDate || evidence.last_review_date),
       total_problems: evidence.totalProblems ?? evidence.total_problems ?? evidence.problems ?? 0,
-      recent_14d_accuracy: evidence.recent14dAccuracy ?? evidence.recent_14d_accuracy ?? (evidence.accuracy ? evidence.accuracy / 100 : 0),
+      recent_14d_accuracy: normalizeRatio(evidence.recent14dAccuracy ?? evidence.recent_14d_accuracy ?? evidence.accuracy),
       last_review_at: evidence.lastReviewAt || evidence.last_review_at || null,
       mastery_status: evidence.masteryStatus || evidence.mastery_status || (value >= 2 ? "mastered" : value === 1 ? "needs_review" : "learning"),
       prerequisites: evidence.prerequisites || [],

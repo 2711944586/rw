@@ -60,4 +60,18 @@ describe("task-carryover", () => {
 
     expect(collectCarryoverTasks(weekPlans, {}, "2026-05-29")).toEqual([]);
   });
+
+  it("caps carried task minutes to keep the next day executable", () => {
+    const weekPlans = {
+      "2026-06-02": [
+        { id: "huge-math", date: "2026-06-02", subject: "数学", text: "补完一整章", minutes: 180, status: "todo" }
+      ],
+      "2026-06-03": []
+    };
+
+    const carried = collectCarryoverTasks(weekPlans, {}, "2026-06-03", { limit: 1, maxMinutes: 75 });
+
+    expect(carried).toHaveLength(1);
+    expect(carried[0].minutes).toBe(75);
+  });
 });

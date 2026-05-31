@@ -10,9 +10,9 @@
 import {
   computeVerificationStatus,
   filterDisplayableClaims,
-  renderClaimHTML,
 } from '../domain/source-registry.js';
 import { StateManager } from '../core/state-manager.js';
+import { escapeAttr, escapeHTML, safeExternalUrl } from '../utils/html.js';
 
 /** @type {HTMLElement|null} */
 let containerEl = null;
@@ -61,7 +61,7 @@ function renderClaimCard(claim, status) {
       <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted);">
         <span>来源: ${escapeHTML(claim.source_publisher || '未知')}</span>
         <span>验证: ${verifiedDate}</span>
-        ${claim.source_url ? `<a href="${escapeHTML(claim.source_url)}" target="_blank" rel="noopener" aria-label="查看来源链接">链接</a>` : ''}
+        ${claim.source_url ? `<a href="${escapeAttr(safeExternalUrl(claim.source_url))}" target="_blank" rel="noopener noreferrer" aria-label="查看来源链接">链接</a>` : ''}
       </div>
     </article>
   `;
@@ -107,14 +107,6 @@ function render() {
       ${renderGroup('已过期', groups.outdated, 'outdated', '≥ 180天未验证，可能失效')}
     </section>
   `;
-}
-
-function escapeHTML(str) {
-  return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 // ─── Public API ───────────────────────────────────────────────

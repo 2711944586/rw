@@ -1,8 +1,12 @@
 node_modules/
 dist/
 .env
+.env.deploy
 .env.local
 .env.*.local
+.vercel
+.vercel/
+supabase/.temp/
 output/
 output/playwright/*.png
 output/playwright/*.log
