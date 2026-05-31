@@ -1190,15 +1190,16 @@ async function syncNow(options = {}) {
 }
 
 function renderSyncStatus() {
+  const localLabel = supabaseConfigured ? "云端可用 · 未登录" : "仅本机保存";
   const label = {
-    local: "仅本机保存",
+    local: localLabel,
     unconfigured: "未配置云端",
     pending: "待同步",
     syncing: "同步中",
     synced: "已同步",
     error: "同步失败",
     offline: "离线草稿"
-  }[state.sync?.status] || "仅本机保存";
+  }[state.sync?.status] || localLabel;
   setText("syncStatusText", currentUser ? `${label} · ${currentUser.email || "已登录"}` : label);
   const pill = document.getElementById("syncPill");
   if (pill) pill.dataset.status = state.sync?.status || "local";
@@ -1246,6 +1247,12 @@ function bindNavigation() {
     button.addEventListener("click", () => {
       setRoute(button.dataset.view);
     });
+  });
+  document.querySelector(".nav-list")?.addEventListener("click", (event) => {
+    const button = event.target.closest(".nav-item[data-view]");
+    if (!button) return;
+    event.preventDefault();
+    setRoute(button.dataset.view);
   });
 
   window.addEventListener("hashchange", () => {
@@ -1308,7 +1315,9 @@ function initRoute() {
 
 function setRoute(viewId) {
   switchView(viewId);
-  window.history.replaceState(null, "", `#${viewId}`);
+  if (window.location.hash !== `#${viewId}`) {
+    window.history.replaceState(null, "", `#${viewId}`);
+  }
   scrollToTop();
 }
 
