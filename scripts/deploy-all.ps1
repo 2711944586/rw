@@ -236,6 +236,9 @@ $deploymentUrls = [regex]::Matches($deployResult.Output, "https://[^\s`"']+") | 
 $deploymentUrl = $deploymentUrls |
   Where-Object { $_ -match "\.vercel\.app$" -and $_ -notmatch "vercel\.com/" -and $_ -notmatch "api\.vercel\.com" } |
   Select-Object -Last 1
+$aliasUrl = $deploymentUrls |
+  Where-Object { $_ -match "\.vercel\.app$" -and $_ -notmatch "vercel\.com/" -and $_ -notmatch "api\.vercel\.com" -and $_ -notmatch "-[A-Za-z0-9]+-[A-Za-z0-9-]+\.vercel\.app$" } |
+  Select-Object -Last 1
 if ($deploymentUrl) {
   Write-Ok "Deployment URL: $deploymentUrl"
   [Environment]::SetEnvironmentVariable("DEPLOYMENT_URL", $deploymentUrl, "Process")
@@ -245,7 +248,9 @@ if ($deploymentUrl) {
 
 if ($Production) {
   $productionUrl = Get-EnvValue "PRODUCTION_URL"
-  if ([string]::IsNullOrWhiteSpace($productionUrl) -and -not [string]::IsNullOrWhiteSpace($deploymentUrl)) {
+  if ([string]::IsNullOrWhiteSpace($productionUrl) -and -not [string]::IsNullOrWhiteSpace($aliasUrl)) {
+    $productionUrl = $aliasUrl
+  } elseif ([string]::IsNullOrWhiteSpace($productionUrl) -and -not [string]::IsNullOrWhiteSpace($deploymentUrl)) {
     $productionUrl = $deploymentUrl
   }
   if (-not [string]::IsNullOrWhiteSpace($productionUrl)) {
@@ -257,6 +262,11 @@ if (-not $SkipVerify) {
   Write-Step "Verifying deployment"
   if ([string]::IsNullOrWhiteSpace($deploymentUrl)) {
     $deploymentUrl = Get-EnvValue "PRODUCTION_URL"
+  }
+  if ($Production -and -not [string]::IsNullOrWhiteSpace((Get-EnvValue "PRODUCTION_URL"))) {
+    $deploymentUrl = Get-EnvValue "PRODUCTION_URL"
+  } elseif ($Production -and -not [string]::IsNullOrWhiteSpace($aliasUrl)) {
+    $deploymentUrl = $aliasUrl
   }
   if ([string]::IsNullOrWhiteSpace($deploymentUrl)) {
     Write-WarnLine "Skipping verification because no deployment URL was found."
