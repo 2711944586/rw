@@ -7860,4 +7860,10 @@ body * {
   }
 }
 
+/* Route safety: density-specific dashboard layout must never override view switching. */
+.view:not(.active),
+body[data-density="focus"] #dashboard.view:not(.active) {
+  display: none !important;
+}
+
 /* ═══════════════ End of styles.css ═══════════════ */
