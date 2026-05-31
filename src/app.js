@@ -1190,7 +1190,7 @@ async function syncNow(options = {}) {
 }
 
 function renderSyncStatus() {
-  const localLabel = supabaseConfigured ? "云端可用 · 未登录" : "仅本机保存";
+  const localLabel = supabaseConfigured ? "未登录" : "仅本机保存";
   const label = {
     local: localLabel,
     unconfigured: "未配置云端",
