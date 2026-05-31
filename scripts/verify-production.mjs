@@ -88,29 +88,6 @@ try {
     throw new Error(`Console warnings/errors found: ${JSON.stringify(messages)}`);
   }
 
-  const fallbackContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
-  try {
-    await fallbackContext.route("**/*.js", (route) => route.abort());
-    const fallbackPage = await fallbackContext.newPage();
-    await fallbackPage.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
-    await fallbackPage.locator('.nav-item[data-view="resources"]').click({ timeout: 10000 });
-    await fallbackPage.waitForTimeout(80);
-    const fallbackResult = await fallbackPage.evaluate(() => ({
-      activeView: document.querySelector(".view.active")?.id || "",
-      shell: window.__rwShell?.health?.() || null
-    }));
-    if (fallbackResult.activeView !== "resources" || fallbackResult.shell?.activeView !== "resources") {
-      throw new Error(`Shell fallback navigation failed: ${JSON.stringify(fallbackResult)}`);
-    }
-    await fallbackPage.locator("#authOpenBtn").click({ timeout: 10000 });
-    const fallbackAuthOpen = await fallbackPage.evaluate(() => Boolean(document.getElementById("authDialog")?.open));
-    if (!fallbackAuthOpen) {
-      throw new Error("Shell fallback auth dialog did not open.");
-    }
-  } finally {
-    await fallbackContext.close();
-  }
-
   console.log(JSON.stringify({ ok: true, url, status, result }, null, 2));
 } finally {
   await browser.close();

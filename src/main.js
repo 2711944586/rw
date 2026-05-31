@@ -12,7 +12,7 @@ function installShellFallback(error) {
     const title = nav?.dataset.title || nav?.textContent?.trim() || "总览";
     const heading = document.getElementById("viewTitle");
     if (heading) heading.textContent = title;
-    if (window.location.hash !== `#${viewId}`) window.history.pushState(null, "", `#${viewId}`);
+    if (window.location.hash !== `#${viewId}`) window.history.replaceState(null, "", `#${viewId}`);
   };
 
   document.addEventListener("click", (event) => {

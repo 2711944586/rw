@@ -122,12 +122,6 @@ a:hover {
   text-decoration: underline;
 }
 
-a.nav-item,
-a.nav-item:hover,
-a.nav-item:focus {
-  text-decoration: none;
-}
-
 /* ═══════════════ Focus & Accessibility ═══════════════ */
 
 button:focus-visible,
