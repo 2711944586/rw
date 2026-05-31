@@ -9,7 +9,7 @@ import {
   LayoutDashboard,
   Library,
   ListChecks,
-  Map,
+  Map as MapIcon,
   RefreshCw,
   RotateCcw,
   Settings,
@@ -51,7 +51,7 @@ const STORAGE_KEY = "pku_swm_420_dashboard_v3";
 const LEGACY_STORAGE_KEY = "pku_swm_420_dashboard_v1";
 const SCHEMA_VERSION = 3;
 const PLAN_LOGIC_VERSION = "3.3-start-2026-06-ramp";
-const APP_BUILD = "2026-06-01-route-auth-recovery";
+const APP_BUILD = "2026-06-01-auth-sync-pk";
 const DEFAULT_EXAM_DATE = "2027-12-25";
 const DEFAULT_EXAM_DATE_STATUS = "推算排程日，非官方初试日期";
 const PLAN_START_DATE = "2026-06-01";
@@ -68,7 +68,7 @@ const appIcons = {
   LayoutDashboard,
   Library,
   ListChecks,
-  Map,
+  Map: MapIcon,
   RefreshCw,
   RotateCcw,
   Settings,
@@ -1239,19 +1239,19 @@ function queueCloudSync() {
 async function syncNow(options = {}) {
   if (!currentUser || !supabaseConfigured) {
     renderSyncStatus();
-    return;
+    return { ok: false, reason: "not-authenticated" };
   }
   if (state.sync?.localImportPending && !options.force) {
     state.sync = { ...state.sync, status: "pending", pending: true };
     renderSyncStatus();
     renderAuthPanel();
     showToast("检测到旧版本地数据。请在账号面板选择导入云端或保留本机。");
-    return;
+    return { ok: false, reason: "local-import-pending" };
   }
   if (navigator && navigator.onLine === false) {
     state.sync = { ...state.sync, status: "offline", pending: true };
     saveState({ skipCloud: true });
-    return;
+    return { ok: false, reason: "offline" };
   }
   try {
     state.sync = { ...state.sync, status: "syncing", lastError: "" };
@@ -1268,11 +1268,16 @@ async function syncNow(options = {}) {
     };
     legacyImportPending = false;
     saveState({ skipCloud: true });
+    renderSyncStatus();
+    return { ok: true, syncedAt: state.sync.lastSyncAt };
   } catch (error) {
-    state.sync = { ...state.sync, status: "error", lastError: error.message || String(error), pending: true };
+    const message = error.message || String(error);
+    state.sync = { ...state.sync, status: "error", lastError: message, pending: true };
     saveState({ skipCloud: true });
+    setAuthResult("error", "同步失败", friendlySyncError(message));
+    renderSyncStatus();
+    return { ok: false, reason: "sync-error", error: message };
   }
-  renderSyncStatus();
 }
 
 function renderSyncStatus() {
@@ -1286,10 +1291,27 @@ function renderSyncStatus() {
     error: "同步失败",
     offline: "离线草稿"
   }[state.sync?.status] || localLabel;
-  setText("syncStatusText", currentUser ? `${label} · ${currentUser.email || "已登录"}` : label);
+  const errorSuffix = state.sync?.status === "error" && state.sync?.lastError
+    ? ` · ${shortSyncError(state.sync.lastError)}`
+    : "";
+  setText("syncStatusText", currentUser ? `${label}${errorSuffix} · ${currentUser.email || "已登录"}` : `${label}${errorSuffix}`);
   const pill = document.getElementById("syncPill");
   if (pill) pill.dataset.status = state.sync?.status || "local";
   setText("sideDataSave", state.sync?.lastSyncAt ? `同步 ${state.sync.lastSyncAt.slice(5, 16).replace("T", " ")}` : label);
+}
+
+function shortSyncError(message) {
+  return String(message || "").split(":").slice(0, 2).join(":").slice(0, 42);
+}
+
+function friendlySyncError(message) {
+  const text = String(message || "未知错误");
+  if (text.includes("duplicate key")) return `${text}。本地有重复记录，请导出备份后再点同步；系统已保留本机数据。`;
+  if (text.includes("no unique or exclusion constraint") || text.includes("42P10")) return `${text}。数据库主键还没更新，请重新执行 supabase/schema.sql 后再同步。`;
+  if (text.includes("violates row-level security")) return `${text}。当前账号没有权限写入这条数据，请退出后重新登录。`;
+  if (text.includes("Could not find") || text.includes("column")) return `${text}。数据库 schema 可能不是最新，请重新执行 supabase/schema.sql。`;
+  if (text.includes("invalid input syntax") || text.includes("date/time field")) return `${text}。某条本地记录日期格式不合法，请导出备份后修正。`;
+  return text;
 }
 
 function todayISO() {
@@ -1707,9 +1729,15 @@ async function authAction(mode) {
     if (currentUser) {
       state.user = { id: currentUser.id, email: currentUser.email || email };
       await pullCloudState();
-      await syncNow();
+      const syncResult = await syncNow();
       renderAll();
       renderAuthPanel();
+      if (!syncResult?.ok) {
+        const message = syncResult?.error || state.sync?.lastError || "同步未完成";
+        setAuthResult("error", `${mode === "signup" ? "注册成功，但同步失败" : "登录成功，但同步失败"}`, friendlySyncError(message));
+        showToast("账号已登录，但云同步未完成。请查看账号面板里的错误详情。");
+        return;
+      }
       setAuthResult("success", mode === "signup" ? "注册成功" : "登录成功", `当前账号：${currentUser.email || email}。数据已开启云同步。`);
       showToast(mode === "signup" ? "注册成功，已登录并开启云同步。" : "登录成功，数据已同步。");
       return;

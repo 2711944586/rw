@@ -18,6 +18,40 @@ function asDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
 }
 
+function dateOr(value, fallbackISO) {
+  return asDate(value) || fallbackISO.slice(0, 10);
+}
+
+function asTimestamp(value, fallback = null) {
+  if (!value) return fallback;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : fallback;
+}
+
+function asInteger(value, min = 0, max = Number.POSITIVE_INFINITY) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return min;
+  return Math.round(Math.min(max, Math.max(min, number)));
+}
+
+function asString(value, fallback = "") {
+  const text = value == null ? fallback : String(value);
+  return text || fallback;
+}
+
+function asStringArray(value, limit = 12) {
+  return Array.isArray(value) ? value.map((item) => String(item)).slice(0, limit) : [];
+}
+
+function uniqueBy(items, keyFn) {
+  const map = new Map();
+  items.forEach((item) => {
+    const key = keyFn(item);
+    if (key) map.set(key, item);
+  });
+  return [...map.values()];
+}
+
 function taskDateFor(task, fallbackISO) {
   return asDate(task.date || task.task_date) || asDate(task.id?.slice(0, 10)) || fallbackISO.slice(0, 10);
 }
@@ -233,88 +267,93 @@ export async function saveCloudState(state) {
   const profile = {
     user_id: user.id,
     settings: state.settings,
-    target_exam_date: state.settings.targetExamDate,
-    weekday_minutes: state.settings.weekdayMinutes,
-    weekend_minutes: state.settings.weekendMinutes,
-    task_count: state.settings.taskCount,
-    core_ratio: state.settings.coreRatio,
-    review_days: state.settings.reviewDays,
-    density_mode: state.settings.density || "focus",
+    target_exam_date: asDate(state.settings.targetExamDate),
+    weekday_minutes: asInteger(state.settings.weekdayMinutes, 60, 720),
+    weekend_minutes: asInteger(state.settings.weekendMinutes, 60, 840),
+    task_count: asInteger(state.settings.taskCount, 3, 4),
+    core_ratio: asInteger(state.settings.coreRatio, 55, 85),
+    review_days: Array.isArray(state.settings.reviewDays) ? state.settings.reviewDays.map((day) => asInteger(day, 1, 365)) : [1, 3, 7, 14, 30],
+    density_mode: ["focus", "balanced", "detail"].includes(state.settings.density) ? state.settings.density : "focus",
     retro_time: state.settings.retroTime || "22:00",
     plan_version: state.settings.planLogicVersion || PLAN_LOGIC_VERSION,
     last_synced_at: now,
     updated_at: now
   };
 
-  const records = Object.entries(state.entries || {}).map(([date, entry]) => ({
-    user_id: user.id,
-    study_date: date,
-    math_minutes: entry.math || 0,
-    cs408_minutes: entry.cs408 || 0,
-    english_minutes: entry.english || 0,
-    politics_minutes: entry.politics || 0,
-    project_minutes: entry.project || 0,
-    math_problems: entry.mathProblems || 0,
-    cs408_problems: entry.csProblems || 0,
-    reading_count: entry.reading || 0,
-    new_mistakes: entry.newMistakes || 0,
-    fixed_mistakes: entry.fixedMistakes || 0,
-    quality_score: entry.quality || 3,
-    next_task: entry.nextTask || "",
-    note: entry.note || "",
-    updated_at: now
-  }));
+  const records = Object.entries(state.entries || {}).flatMap(([date, entry]) => {
+    const studyDate = asDate(date);
+    if (!studyDate) return [];
+    const row = entry || {};
+    return [{
+      user_id: user.id,
+      study_date: studyDate,
+      math_minutes: asInteger(row.math),
+      cs408_minutes: asInteger(row.cs408),
+      english_minutes: asInteger(row.english),
+      politics_minutes: asInteger(row.politics),
+      project_minutes: asInteger(row.project),
+      math_problems: asInteger(row.mathProblems),
+      cs408_problems: asInteger(row.csProblems),
+      reading_count: asInteger(row.reading),
+      new_mistakes: asInteger(row.newMistakes),
+      fixed_mistakes: asInteger(row.fixedMistakes),
+      quality_score: asInteger(row.quality || 3, 1, 5),
+      next_task: asString(row.nextTask),
+      note: asString(row.note),
+      updated_at: asTimestamp(row.updatedAt, now)
+    }];
+  });
 
-  const tasks = Object.values(state.weekPlans || {}).flat().map((task) => ({
-    id: task.id,
+  const tasks = uniqueBy(Object.values(state.weekPlans || {}).flat().filter(Boolean).map((task) => ({
+    id: asString(task.id),
     user_id: user.id,
     task_date: taskDateFor(task, now),
-    subject: task.subject,
-    topic_id: task.topicId || "",
-    title: task.text,
-    minutes: task.minutes || 0,
-    priority: task.priority || 0,
+    subject: asString(task.subject, "复盘"),
+    topic_id: asString(task.topicId),
+    title: asString(task.text, "回炉错题，写明下次识别信号"),
+    minutes: asInteger(task.minutes),
+    priority: asInteger(task.priority),
     status: task.status || (state.tasks?.[task.id] === true ? "done" : "todo"),
     locked: Boolean(task.locked),
     source: task.source || "generated",
-    source_task_id: task.sourceTaskId || task.source_task_id || "",
+    source_task_id: asString(task.sourceTaskId || task.source_task_id),
     carried_from: asDate(task.carriedFrom || task.carried_from),
     shifted_to: asDate(task.shiftedTo || task.shifted_to),
-    completed_at: task.completedAt || null,
+    completed_at: asTimestamp(task.completedAt),
     record_applied: Boolean(task.recordApplied),
     contract_type: task.contractType || task.contract_type || "problems",
-    required_problem_count: task.requiredProblemCount ?? task.required_problem_count ?? 0,
+    required_problem_count: asInteger(task.requiredProblemCount ?? task.required_problem_count),
     required_accuracy: normalizeRatio(task.requiredAccuracy ?? task.required_accuracy),
-    required_artifacts: task.requiredArtifacts || task.required_artifacts || [],
-    minutes_min: task.minutesMin ?? task.minutes_min ?? 0,
-    minutes_max: task.minutesMax ?? task.minutes_max ?? 0,
-    actual_problems: task.actualProblems ?? task.actual_problems ?? 0,
-    actual_correct: task.actualCorrect ?? task.actual_correct ?? 0,
-    actual_minutes: task.actualMinutes ?? task.actual_minutes ?? 0,
+    required_artifacts: asStringArray(task.requiredArtifacts || task.required_artifacts),
+    minutes_min: asInteger(task.minutesMin ?? task.minutes_min),
+    minutes_max: asInteger(task.minutesMax ?? task.minutes_max),
+    actual_problems: asInteger(task.actualProblems ?? task.actual_problems),
+    actual_correct: asInteger(task.actualCorrect ?? task.actual_correct),
+    actual_minutes: asInteger(task.actualMinutes ?? task.actual_minutes),
     evidence_submitted: Boolean(task.evidenceSubmitted || task.evidence_submitted),
-    updated_at: task.updatedAt || now
-  }));
+    updated_at: asTimestamp(task.updatedAt || task.updated_at, now)
+  })), (task) => task.id);
 
-  const reviews = (state.reviewItems || []).map((item) => ({
-    id: item.id,
+  const reviews = uniqueBy((state.reviewItems || []).filter(Boolean).map((item) => ({
+    id: asString(item.id),
     user_id: user.id,
-    source_task_id: item.sourceTaskId || "",
-    subject: item.subject,
-    title: item.text,
-    review_round: item.round || "",
+    source_task_id: asString(item.sourceTaskId || item.source_task_id),
+    subject: asString(item.subject, "复盘"),
+    title: asString(item.text || item.title, "复盘"),
+    review_round: asString(item.round || item.review_round),
     due_date: asDate(item.dueDate || item.due_date) || now.slice(0, 10),
     status: item.done ? "done" : item.status || "due",
-    delay_count: item.delayCount || 0,
-    failure_reason: item.failureReason || "",
-    quality_score: item.quality || 0,
-    completed_at: item.completedAt || null,
-    interval_index: item.intervalIndex ?? item.interval_index ?? 0,
-    fail_streak: item.failStreak ?? item.fail_streak ?? 0,
-    last_result: item.lastResult || item.last_result || "",
+    delay_count: asInteger(item.delayCount || item.delay_count),
+    failure_reason: asString(item.failureReason || item.failure_reason),
+    quality_score: asInteger(item.quality || item.quality_score, 0, 5),
+    completed_at: asTimestamp(item.completedAt || item.completed_at),
+    interval_index: asInteger(item.intervalIndex ?? item.interval_index),
+    fail_streak: asInteger(item.failStreak ?? item.fail_streak),
+    last_result: asString(item.lastResult || item.last_result),
     last_submitted_date: asDate(item.lastSubmittedDate || item.last_submitted_date),
-    topic_id: item.topicId || item.topic_id || "",
-    updated_at: item.updatedAt || now
-  }));
+    topic_id: asString(item.topicId || item.topic_id),
+    updated_at: asTimestamp(item.updatedAt || item.updated_at, now)
+  })), (item) => item.id);
 
   const topics = Object.entries(state.topics || {}).map(([topicId, value]) => {
     const evidence = state.topicEvidence?.[topicId] || {};
@@ -322,32 +361,32 @@ export async function saveCloudState(state) {
       user_id: user.id,
       topic_id: topicId,
       status_value: value || 0,
-      problems_done: evidence.problems || 0,
-      accuracy: evidence.accuracy || 0,
-      evidence: evidence.evidence || "",
+      problems_done: asInteger(evidence.problems),
+      accuracy: asInteger(evidence.accuracy, 0, 100),
+      evidence: asString(evidence.evidence),
       last_review_date: asDate(evidence.lastReviewDate || evidence.last_review_date),
-      total_problems: evidence.totalProblems ?? evidence.total_problems ?? evidence.problems ?? 0,
+      total_problems: asInteger(evidence.totalProblems ?? evidence.total_problems ?? evidence.problems),
       recent_14d_accuracy: normalizeRatio(evidence.recent14dAccuracy ?? evidence.recent_14d_accuracy ?? evidence.accuracy),
-      last_review_at: evidence.lastReviewAt || evidence.last_review_at || null,
+      last_review_at: asTimestamp(evidence.lastReviewAt || evidence.last_review_at),
       mastery_status: evidence.masteryStatus || evidence.mastery_status || (value >= 2 ? "mastered" : value === 1 ? "needs_review" : "learning"),
-      prerequisites: evidence.prerequisites || [],
-      updated_at: evidence.updatedAt || now
+      prerequisites: asStringArray(evidence.prerequisites),
+      updated_at: asTimestamp(evidence.updatedAt || evidence.updated_at, now)
     };
-  });
+  }).filter((topic) => topic.topic_id);
 
-  const scores = (state.scores || []).map((score) => ({
-    id: score.id,
+  const scores = uniqueBy((state.scores || []).filter(Boolean).map((score) => ({
+    id: asString(score.id),
     user_id: user.id,
-    mock_date: score.date,
-    name: score.name,
-    politics: score.politics || 0,
-    english: score.english || 0,
-    math: score.math || 0,
-    cs408: score.cs408 || 0,
-    total: score.total || 0,
-    note: score.note || "",
-    updated_at: score.updatedAt || now
-  }));
+    mock_date: dateOr(score.date, now),
+    name: asString(score.name, "未命名模考"),
+    politics: asInteger(score.politics, 0, 100),
+    english: asInteger(score.english, 0, 100),
+    math: asInteger(score.math, 0, 150),
+    cs408: asInteger(score.cs408, 0, 150),
+    total: asInteger(score.total || (Number(score.politics || 0) + Number(score.english || 0) + Number(score.math || 0) + Number(score.cs408 || 0)), 0, 500),
+    note: asString(score.note),
+    updated_at: asTimestamp(score.updatedAt || score.updated_at, now)
+  })), (score) => score.id);
 
   const resources = Object.entries(state.resources || {}).map(([key, value]) => ({
     user_id: user.id,
@@ -357,31 +396,39 @@ export async function saveCloudState(state) {
   }));
 
   const deleted = state.deleted || {};
+  const deletedRecords = asStringArray(deleted.records, 500).filter(asDate);
+  const deletedScores = asStringArray(deleted.scores, 500).filter(Boolean);
+  const deletedTasks = asStringArray(deleted.tasks, 500).filter(Boolean);
+  const deletedReviews = asStringArray(deleted.reviews, 500).filter(Boolean);
   const operations = [
-    supabase.from("profiles").upsert(profile, { onConflict: "user_id" })
+    ["profiles", supabase.from("profiles").upsert(profile, { onConflict: "user_id" })]
   ];
-  if (records.length) operations.push(supabase.from("daily_records").upsert(records, { onConflict: "user_id,study_date" }));
-  if (tasks.length) operations.push(supabase.from("study_tasks").upsert(tasks, { onConflict: "id" }));
-  if (reviews.length) operations.push(supabase.from("review_items").upsert(reviews, { onConflict: "id" }));
-  if (topics.length) operations.push(supabase.from("topic_progress").upsert(topics, { onConflict: "user_id,topic_id" }));
-  if (scores.length) operations.push(supabase.from("mock_scores").upsert(scores, { onConflict: "id" }));
-  if (resources.length) operations.push(supabase.from("resources").upsert(resources, { onConflict: "user_id,resource_key" }));
-  if (deleted.records?.length) {
-    operations.push(supabase.from("daily_records").delete().eq("user_id", user.id).in("study_date", deleted.records));
+  if (records.length) operations.push(["daily_records", supabase.from("daily_records").upsert(records, { onConflict: "user_id,study_date" })]);
+  if (tasks.length) operations.push(["study_tasks", supabase.from("study_tasks").upsert(tasks, { onConflict: "user_id,id" })]);
+  if (reviews.length) operations.push(["review_items", supabase.from("review_items").upsert(reviews, { onConflict: "user_id,id" })]);
+  if (topics.length) operations.push(["topic_progress", supabase.from("topic_progress").upsert(topics, { onConflict: "user_id,topic_id" })]);
+  if (scores.length) operations.push(["mock_scores", supabase.from("mock_scores").upsert(scores, { onConflict: "user_id,id" })]);
+  if (resources.length) operations.push(["resources", supabase.from("resources").upsert(resources, { onConflict: "user_id,resource_key" })]);
+  if (deletedRecords.length) {
+    operations.push(["daily_records.delete", supabase.from("daily_records").delete().eq("user_id", user.id).in("study_date", deletedRecords)]);
   }
-  if (deleted.scores?.length) {
-    operations.push(supabase.from("mock_scores").update({ deleted_at: now, updated_at: now }).eq("user_id", user.id).in("id", deleted.scores));
+  if (deletedScores.length) {
+    operations.push(["mock_scores.delete", supabase.from("mock_scores").update({ deleted_at: now, updated_at: now }).eq("user_id", user.id).in("id", deletedScores)]);
   }
-  if (deleted.tasks?.length) {
-    operations.push(supabase.from("study_tasks").update({ deleted_at: now, updated_at: now }).eq("user_id", user.id).in("id", deleted.tasks));
+  if (deletedTasks.length) {
+    operations.push(["study_tasks.delete", supabase.from("study_tasks").update({ deleted_at: now, updated_at: now }).eq("user_id", user.id).in("id", deletedTasks)]);
   }
-  if (deleted.reviews?.length) {
-    operations.push(supabase.from("review_items").update({ deleted_at: now, updated_at: now }).eq("user_id", user.id).in("id", deleted.reviews));
+  if (deletedReviews.length) {
+    operations.push(["review_items.delete", supabase.from("review_items").update({ deleted_at: now, updated_at: now }).eq("user_id", user.id).in("id", deletedReviews)]);
   }
 
-  const results = await Promise.all(operations);
-  const error = results.map((result) => result.error).find(Boolean);
-  if (error) throw error;
+  for (const [tableName, operation] of operations) {
+    const { error } = await operation;
+    if (error) {
+      const details = [error.message, error.details, error.hint].filter(Boolean).join(" ");
+      throw new Error(`${tableName}: ${details || error.code || "同步写入失败"}`);
+    }
+  }
   return { syncedAt: now };
 }
 
