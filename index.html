@@ -31,42 +31,42 @@
       <nav class="nav-list">
         <div class="nav-section">
           <span class="nav-label">执行</span>
-          <button type="button" class="nav-item active" data-view="dashboard" data-title="总览" data-icon="home" aria-label="总览">
+          <a href="#dashboard" class="nav-item active" data-view="dashboard" data-title="总览" data-icon="home" aria-label="总览">
             <i class="nav-ico nav-ico-home" aria-hidden="true"></i><span class="nav-text">总览</span><em id="navRiskDot">待记录</em>
-          </button>
-          <button type="button" class="nav-item" data-view="today" data-title="今日" data-icon="today" aria-label="今日">
+          </a>
+          <a href="#today" class="nav-item" data-view="today" data-title="今日" data-icon="today" aria-label="今日">
             <i class="nav-ico nav-ico-today" aria-hidden="true"></i><span class="nav-text">今日</span><em id="navTaskCount">3 项</em>
-          </button>
-          <button type="button" class="nav-item" data-view="week" data-title="周计划" data-icon="week" aria-label="周计划">
+          </a>
+          <a href="#week" class="nav-item" data-view="week" data-title="周计划" data-icon="week" aria-label="周计划">
             <i class="nav-ico nav-ico-week" aria-hidden="true"></i><span class="nav-text">周计划</span><em id="navWeekPlan">7 天</em>
-          </button>
-          <button type="button" class="nav-item" data-view="foundation" data-title="路径" data-icon="path" aria-label="路径">
+          </a>
+          <a href="#foundation" class="nav-item" data-view="foundation" data-title="路径" data-icon="path" aria-label="路径">
             <i class="nav-ico nav-ico-path" aria-hidden="true"></i><span class="nav-text">路径</span><em>阶段</em>
-          </button>
-          <button type="button" class="nav-item" data-view="syllabus" data-title="考点" data-icon="grid" aria-label="考点">
+          </a>
+          <a href="#syllabus" class="nav-item" data-view="syllabus" data-title="考点" data-icon="grid" aria-label="考点">
             <i class="nav-ico nav-ico-grid" aria-hidden="true"></i><span class="nav-text">考点</span><em id="navSyllabusProgress">0%</em>
-          </button>
+          </a>
         </div>
         <div class="nav-section">
           <span class="nav-label">监测</span>
-          <button type="button" class="nav-item" data-view="records" data-title="记录" data-icon="records" aria-label="记录">
+          <a href="#records" class="nav-item" data-view="records" data-title="记录" data-icon="records" aria-label="记录">
             <i class="nav-ico nav-ico-records" aria-hidden="true"></i><span class="nav-text">记录</span><em id="navRecordDays">0 天</em>
-          </button>
-          <button type="button" class="nav-item" data-view="review" data-title="复盘" data-icon="review" aria-label="复盘">
+          </a>
+          <a href="#review" class="nav-item" data-view="review" data-title="复盘" data-icon="review" aria-label="复盘">
             <i class="nav-ico nav-ico-review" aria-hidden="true"></i><span class="nav-text">复盘</span><em id="navReviewDue">0 到期</em>
-          </button>
-          <button type="button" class="nav-item" data-view="scores" data-title="模考" data-icon="scores" aria-label="模考">
+          </a>
+          <a href="#scores" class="nav-item" data-view="scores" data-title="模考" data-icon="scores" aria-label="模考">
             <i class="nav-ico nav-ico-scores" aria-hidden="true"></i><span class="nav-text">模考</span><em id="navScoreAvg">--</em>
-          </button>
+          </a>
         </div>
         <div class="nav-section">
           <span class="nav-label">资产</span>
-          <button type="button" class="nav-item" data-view="resources" data-title="资料" data-icon="resources" aria-label="资料">
+          <a href="#resources" class="nav-item" data-view="resources" data-title="资料" data-icon="resources" aria-label="资料">
             <i class="nav-ico nav-ico-resources" aria-hidden="true"></i><span class="nav-text">资料</span><em>版本</em>
-          </button>
-          <button type="button" class="nav-item" data-view="settings" data-title="设置" data-icon="settings" aria-label="设置">
+          </a>
+          <a href="#settings" class="nav-item" data-view="settings" data-title="设置" data-icon="settings" aria-label="设置">
             <i class="nav-ico nav-ico-settings" aria-hidden="true"></i><span class="nav-text">设置</span><em>自定义</em>
-          </button>
+          </a>
         </div>
       </nav>
       <div class="side-card">
@@ -880,6 +880,54 @@
     </form>
   </dialog>
 
+  <script>
+    (() => {
+      const validViews = () => [...document.querySelectorAll(".view")].map((view) => view.id);
+      const setView = (rawView) => {
+        const views = validViews();
+        const viewId = views.includes(rawView) ? rawView : "dashboard";
+        document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === viewId));
+        document.querySelectorAll(".nav-item[data-view]").forEach((item) => item.classList.toggle("active", item.dataset.view === viewId));
+        const nav = document.querySelector(`.nav-item[data-view="${viewId}"]`);
+        const title = nav?.dataset.title || nav?.textContent?.trim() || "总览";
+        const heading = document.getElementById("viewTitle");
+        if (heading) heading.textContent = title;
+        if (nav && window.matchMedia("(max-width: 900px)").matches) {
+          requestAnimationFrame(() => nav.scrollIntoView({ inline: "center", block: "nearest" }));
+        }
+      };
+      const routeFromHash = () => setView(decodeURIComponent(location.hash.replace(/^#/, "")) || "dashboard");
+      document.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const nav = target?.closest(".nav-item[data-view], [data-jump]");
+        if (nav) {
+          const view = nav.dataset.view || nav.dataset.jump;
+          if (validViews().includes(view)) {
+            event.preventDefault();
+            if (location.hash !== `#${view}`) history.replaceState(null, "", `#${view}`);
+            setView(view);
+          }
+          return;
+        }
+        if (target?.closest("#authOpenBtn")) {
+          event.preventDefault();
+          const dialog = document.getElementById("authDialog");
+          if (dialog?.showModal) dialog.showModal();
+          else dialog?.setAttribute("open", "");
+        }
+        if (target?.closest("#authCloseBtn")) {
+          event.preventDefault();
+          const dialog = document.getElementById("authDialog");
+          if (dialog?.close) dialog.close();
+          else dialog?.removeAttribute("open");
+        }
+      }, true);
+      window.addEventListener("hashchange", routeFromHash);
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", routeFromHash, { once: true });
+      else routeFromHash();
+      window.__rwShell = { route: setView, health: () => ({ activeView: document.querySelector(".view.active")?.id || "", hash: location.hash }) };
+    })();
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

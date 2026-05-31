@@ -1416,7 +1416,7 @@ function setRoute(viewId) {
   if (!isValidView(viewId)) return false;
   switchView(viewId);
   if (window.location.hash !== `#${viewId}`) {
-    window.history.replaceState(null, "", `#${viewId}`);
+    window.history.pushState(null, "", `#${viewId}`);
   }
   scrollToTop();
   return true;
