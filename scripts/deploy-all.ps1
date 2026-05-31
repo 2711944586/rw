@@ -217,18 +217,26 @@ Invoke-Npx -ArgumentList $linkArgs -PassThruOutput
 
 if (-not $SkipVercelEnv) {
   Write-Step "Writing Vercel environment variables"
-  $envTargets = @("production", "preview", "development")
-  foreach ($target in $envTargets) {
+  foreach ($target in @("production", "development")) {
     Invoke-Npx -ArgumentList (@("vercel", "env", "add", "VITE_SUPABASE_URL", $target, "--value", (Get-EnvValue "VITE_SUPABASE_URL"), "--force", "--yes") + $vercelBaseArgs) -PassThruOutput
     Invoke-Npx -ArgumentList (@("vercel", "env", "add", "VITE_SUPABASE_PUBLISHABLE_KEY", $target, "--value", (Get-EnvValue "VITE_SUPABASE_PUBLISHABLE_KEY"), "--force", "--yes") + $vercelBaseArgs) -PassThruOutput
+  }
+  $previewBranch = Get-EnvValue "VERCEL_PREVIEW_BRANCH"
+  if (-not [string]::IsNullOrWhiteSpace($previewBranch)) {
+    Invoke-Npx -ArgumentList (@("vercel", "env", "add", "VITE_SUPABASE_URL", "preview", $previewBranch, "--value", (Get-EnvValue "VITE_SUPABASE_URL"), "--force", "--yes") + $vercelBaseArgs) -PassThruOutput
+    Invoke-Npx -ArgumentList (@("vercel", "env", "add", "VITE_SUPABASE_PUBLISHABLE_KEY", "preview", $previewBranch, "--value", (Get-EnvValue "VITE_SUPABASE_PUBLISHABLE_KEY"), "--force", "--yes") + $vercelBaseArgs) -PassThruOutput
+  } else {
+    Write-WarnLine "Skipping Vercel preview env vars. Set VERCEL_PREVIEW_BRANCH to a non-production branch if needed."
   }
 }
 
 Write-Step "Deploying to Vercel ($deployTarget)"
 $deployResult = Invoke-Npx -ArgumentList (@("vercel", "deploy", "--yes", "--project", $vercelProject) + $deployFlag + $vercelBaseArgs) -PassThruOutput
-$deploymentUrl = ($deployResult.Output -split "\r?\n" | Where-Object { $_ -match "https://[^\s]+" } | Select-Object -Last 1)
-if ($deploymentUrl -match "(https://[^\s]+)") {
-  $deploymentUrl = $Matches[1].Trim()
+$deploymentUrls = [regex]::Matches($deployResult.Output, "https://[^\s`"']+") | ForEach-Object { $_.Value.Trim() }
+$deploymentUrl = $deploymentUrls |
+  Where-Object { $_ -match "\.vercel\.app$" -and $_ -notmatch "vercel\.com/" -and $_ -notmatch "api\.vercel\.com" } |
+  Select-Object -Last 1
+if ($deploymentUrl) {
   Write-Ok "Deployment URL: $deploymentUrl"
   [Environment]::SetEnvironmentVariable("DEPLOYMENT_URL", $deploymentUrl, "Process")
 } else {
