@@ -7917,4 +7917,202 @@ body[data-density="focus"] #dashboard.view:not(.active) {
   display: none !important;
 }
 
+/* Final polish pass: typography, sidebar, auth, and mobile chrome. */
+:root {
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+}
+
+body,
+button,
+input,
+textarea,
+select,
+summary {
+  letter-spacing: 0 !important;
+  font-variant-ligatures: contextual;
+}
+
+h1,
+h2,
+h3,
+h4,
+.panel-head strong,
+.metric-card strong,
+.auth-card strong {
+  text-wrap: balance;
+}
+
+body {
+  background:
+    radial-gradient(circle at top right, rgba(15, 118, 110, 0.06), transparent 24rem),
+    linear-gradient(180deg, #ffffff 0, #f4f6f9 16rem),
+    #f4f6f9;
+}
+
+.app-shell {
+  grid-template-columns: 244px minmax(0, 1fr);
+}
+
+.sidebar {
+  background: rgba(249, 250, 251, 0.96);
+  border-right-color: #e6eaf0;
+}
+
+.brand-mark {
+  box-shadow: none;
+}
+
+.nav-item {
+  min-height: 44px;
+}
+
+.nav-item .nav-text {
+  line-height: 1.15;
+}
+
+.nav-item em {
+  color: #667085;
+  font-weight: 720;
+}
+
+.topbar {
+  backdrop-filter: blur(18px);
+}
+
+.topbar h2 {
+  line-height: 1.12;
+}
+
+.eyebrow,
+.panel-head p,
+.focus-primary p,
+.focus-card p,
+.metric-card p,
+.auth-help,
+.auth-danger p,
+.auth-card label,
+.auth-result p {
+  line-height: 1.55;
+}
+
+.top-actions {
+  min-width: 0;
+}
+
+.sync-pill,
+.ghost-button,
+.import-label,
+.density-toggle {
+  min-width: 0;
+}
+
+.sync-pill > span,
+.ghost-button span,
+.import-label span {
+  max-width: none;
+}
+
+.ghost-button,
+.import-label,
+.sync-pill button,
+.density-toggle button {
+  font-weight: 700;
+}
+
+.panel,
+.command-panel,
+.focus-primary,
+.focus-card,
+.target-status-card,
+.score-split-card,
+.loop-audit-card,
+.metric-card,
+.plan-card,
+.week-day-card,
+.resource-card,
+.source-card,
+.design-card,
+.boundary-card,
+.deploy-card,
+.auth-card {
+  border-radius: 10px;
+}
+
+.panel-head h3,
+.command-panel h3,
+.auth-card .panel-head h3 {
+  letter-spacing: 0;
+}
+
+.auth-dialog {
+  width: min(520px, calc(100vw - 24px));
+}
+
+.auth-card {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.auth-result {
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.auth-actions {
+  gap: 8px;
+}
+
+.auth-actions button,
+.auth-danger .ghost-button {
+  min-height: 40px;
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    padding-top: 8px;
+    padding-bottom: 10px;
+  }
+
+  .top-actions {
+    gap: 6px;
+  }
+
+  .top-actions .ghost-button,
+  .top-actions .import-label {
+    min-width: 64px;
+    padding-inline: 10px;
+  }
+
+  .sidebar {
+    background: rgba(255, 255, 255, 0.98);
+  }
+
+  .nav-item {
+    min-height: 52px;
+  }
+
+  .nav-text {
+    font-size: 10px;
+    line-height: 1.05;
+  }
+
+  .auth-dialog {
+    width: min(420px, calc(100vw - 20px));
+  }
+}
+
+@media (max-width: 390px) {
+  .top-actions .ghost-button,
+  .top-actions .import-label {
+    min-width: 56px;
+    padding-inline: 8px;
+  }
+
+  .auth-card {
+    padding: 15px;
+  }
+}
+
 /* ═══════════════ End of styles.css ═══════════════ */

@@ -1391,6 +1391,7 @@ function bindNavigation() {
       setRoute(button.dataset.jump);
     });
   });
+  document.documentElement.dataset.navBound = "1";
 }
 
 function bindDensityControls() {
@@ -1693,6 +1694,7 @@ function bindAuth() {
     document.getElementById("authDialog")?.close();
   });
   document.getElementById("resetLocalBtn")?.addEventListener("click", resetLocalData);
+  document.documentElement.dataset.authBound = "1";
 }
 
 async function authAction(mode) {
@@ -4379,13 +4381,74 @@ function showToast(message) {
 
 function installRecoveryMode(error) {
   hydrateIcons();
-  bindNavigation();
+  setDefaultDates();
   state = freshState();
   renderAuthPanel();
+  try {
+    renderAll();
+  } catch (renderError) {
+    console.warn("[rw] recovery render failed", renderError);
+  }
+  if (document.documentElement.dataset.navBound !== "1") {
+    try {
+      bindNavigation();
+    } catch (navError) {
+      console.warn("[rw] recovery navigation wiring failed", navError);
+    }
+  }
+  if (document.documentElement.dataset.authBound !== "1") {
+    bindRecoveryAuthControls();
+  }
   initRoute();
   setText("syncStatusText", "恢复模式");
   setText("sideDataSave", "恢复模式");
   showToast(`页面已进入恢复模式：${error?.message || error || "初始化失败"}`);
+}
+
+function bindRecoveryAuthControls() {
+  const dialog = document.getElementById("authDialog");
+  document.getElementById("authOpenBtn")?.addEventListener("click", () => {
+    renderAuthPanel();
+    dialog?.showModal();
+  });
+  document.getElementById("authCloseBtn")?.addEventListener("click", () => {
+    dialog?.close();
+  });
+  document.getElementById("signInBtn")?.addEventListener("click", () => authAction("login"));
+  document.getElementById("signUpBtn")?.addEventListener("click", () => authAction("signup"));
+  document.getElementById("signOutBtn")?.addEventListener("click", async () => {
+    try {
+      await signOut();
+      currentUser = null;
+      state.user = null;
+      state.sync = { status: "local", lastSyncAt: "", lastError: "", pending: false };
+      saveState({ skipCloud: true });
+      renderAll();
+      showToast("已退出账号，当前数据保留在本机。");
+    } catch (authError) {
+      showToast(`退出失败：${authError.message || authError}`);
+    }
+  });
+  document.getElementById("syncNowBtn")?.addEventListener("click", () => syncNow());
+  document.getElementById("downloadBackupBtn")?.addEventListener("click", () => exportStateJson("manual-backup"));
+  document.getElementById("pushLocalBtn")?.addEventListener("click", async () => {
+    createLocalSnapshot("before-cloud-import");
+    state.sync = { ...state.sync, localImportPending: false, cloudPaused: false };
+    legacyImportPending = false;
+    await syncNow({ force: true });
+    saveState({ skipCloud: true });
+    renderAuthPanel();
+    showToast("已尝试导入云端。");
+  });
+  document.getElementById("keepLocalBtn")?.addEventListener("click", () => {
+    state.sync = { ...state.sync, localImportPending: false, cloudPaused: true, status: "local", pending: false };
+    legacyImportPending = false;
+    saveState({ skipCloud: true });
+    renderAuthPanel();
+    dialog?.close();
+  });
+  document.getElementById("resetLocalBtn")?.addEventListener("click", resetLocalData);
+  document.documentElement.dataset.authBound = "1";
 }
 
 window.__rwDebug = {
