@@ -8070,18 +8070,32 @@ body {
 }
 
 @media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .main {
+    width: 100%;
+  }
+
   .topbar {
     padding-top: 8px;
     padding-bottom: 10px;
   }
 
   .top-actions {
+    flex-wrap: wrap;
+    overflow: visible;
     gap: 6px;
+  }
+
+  .sync-pill {
+    flex: 1 1 118px;
   }
 
   .top-actions .ghost-button,
   .top-actions .import-label {
-    min-width: 64px;
+    flex: 1 1 62px;
     padding-inline: 10px;
   }
 
@@ -8100,6 +8114,12 @@ body {
 
   .auth-dialog {
     width: min(420px, calc(100vw - 20px));
+  }
+
+  .target-subject em {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
   }
 }
 
