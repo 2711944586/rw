@@ -51,7 +51,7 @@ const STORAGE_KEY = "pku_swm_420_dashboard_v3";
 const LEGACY_STORAGE_KEY = "pku_swm_420_dashboard_v1";
 const SCHEMA_VERSION = 3;
 const PLAN_LOGIC_VERSION = "3.3-start-2026-06-ramp";
-const APP_BUILD = "2026-06-01-auth-sync-pk";
+const APP_BUILD = "2026-06-01-study-curve";
 const DEFAULT_EXAM_DATE = "2027-12-25";
 const DEFAULT_EXAM_DATE_STATUS = "推算排程日，非官方初试日期";
 const PLAN_START_DATE = "2026-06-01";
@@ -630,22 +630,91 @@ const systemRules = [
   ["02", "核心优先", "数学一和 408 优先分配时间，周核心占比低于 65% 就预警。"],
   ["03", "未完成顺延", "昨天没有完成的任务进入今天，同时压缩新增内容，避免补偿式超载。"],
   ["04", "先交付再加量", "每个任务必须有题量、错因、图示或代码交付，只看视频不算真正完成。"],
-  ["05", "错题进复盘", "勾选完成后自动安排 D+1 / D+3 / D+7 / D+14 / D+30。"]
+  ["05", "错题进复盘", "勾选完成后自动安排 D+1 / D+3 / D+7 / D+14 / D+30。"],
+  ["06", "日审周审月审", "每天收口到明天第一任务；每周看核心占比、回炉率和活跃天数；每月只调总量和弱项，不重写大计划。"],
+  ["07", "统计看趋势", "单日波动不判好坏，至少看 7 天有效小时、14 天趋势、错题回炉率和考纲证据。"],
+  ["08", "学习曲线", "投入量按阶段爬坡；连续低完成时降到底线日，连续稳定后再增加难度或题量。"]
 ];
 
 const methodEvidence = [
-  ["主动回忆", "做题、闭卷默写和自测优先于反复看讲义。"],
-  ["分散复盘", "D+1/D+3/D+7/D+14/D+30 是轻量回炉，不把复盘堆成第二套课。"],
-  ["交错练习", "数学和 408 后期在章节题、真题和错题间切换，避免只会单章套路。"],
-  ["可完成负荷", "任务默认 3 项，顺延时削减新增内容；连续低完成时降到底线日。"]
+  ["主动回忆", "依据 practice testing / retrieval practice 思路，优先做题、闭卷默写、过程图和自测，而不是反复看讲义。"],
+  ["分散复盘", "D+1/D+3/D+7/D+14/D+30 是轻量回炉；每次只验证能否重新提取，不把复盘堆成第二套课程。"],
+  ["交错练习", "数学和 408 后期在章节题、真题、错题和限时题之间切换，避免只会单章套路。"],
+  ["可完成负荷", "任务默认 3 项，顺延时削减新增内容；连续低完成时降到底线日，先恢复执行再加量。"],
+  ["证据化掌握", "一个考点至少留下题量、正确率、错因、图示、代码或默写证据，不能只凭“感觉会了”标记掌握。"]
 ];
 
 const memoryCurveRules = [
-  ["D+1", "当天知识最容易松动，重做最小错题集。", "5-15m"],
-  ["D+3", "检查是否仍会识别题型和概念触发点。", "10-20m"],
-  ["D+7", "周复盘合并同类错因，减少重复犯错。", "15-25m"],
-  ["D+14", "从题目回到章节框架，补知识图。", "15-25m"],
-  ["D+30", "月度回炉，只保留高频错题和核心公式。", "20-35m"]
+  { round: "D+1", action: "闭卷重做当天错题或核心例题。", pass: "能说出定义、触发条件和第一步。", fallback: "失败则只补一个概念，明天生成短复盘。", cost: "5-15m" },
+  { round: "D+3", action: "换一道同类题验证题型识别。", pass: "不看答案能列出解题路线。", fallback: "把错因归为概念、计算、条件或表达。", cost: "10-20m" },
+  { round: "D+7", action: "合并本周同类错因，重做高频错题。", pass: "同类错误本周不再重复。", fallback: "下周减少新增，优先补同类题。", cost: "15-25m" },
+  { round: "D+14", action: "从题目回到章节框架，补过程图或公式链。", pass: "能把题目挂回考纲小节。", fallback: "标记为需复盘，不进入已掌握。", cost: "15-25m" },
+  { round: "D+30", action: "月度回炉，只保留高频错题和核心公式。", pass: "限时重做仍能稳定完成。", fallback: "进入月度弱项清单，下一月降级处理。", cost: "20-35m" }
+];
+
+const auditCadenceRules = [
+  { label: "日审", value: "每天 5-8m", text: "记录有效分钟、题量、错题和明天第一任务；未完成任务只顺延最重要的 1-2 项。" },
+  { label: "周审", value: "每周 20-30m", text: "看 7 天有效小时、数学+408 占比、错题回炉率、活跃天数；只决定下周一个主攻弱项。" },
+  { label: "月审", value: "每月 45-60m", text: "核对累计小时、考纲证据、资料进度和阶段验收；不因单周波动推翻路线。" },
+  { label: "阶段审", value: "节点日", text: "2026-08、2026-12、2027-06、2027-10 必须检查是否需要降级、补基础或准备稳妥院校梯队。" }
+];
+
+const studyMetricRules = [
+  ["有效小时", "只统计做题、复盘、默写、精读、代码或产出整理；纯播放视频不单独算有效学习。"],
+  ["核心占比", "数学一 + 408 是主线，2026 年 9 月后周占比低于 65% 就减少非核心内容。"],
+  ["回炉率", "固定错题数 / 新增错题数；低于 70% 说明复盘债务在扩大。"],
+  ["掌握证据", "考纲条目标已掌握前，至少要有题量、正确率、错因或可解释产出。"],
+  ["趋势窗口", "7 天看执行，14 天看学习曲线，30 天才调整阶段计划。"]
+];
+
+const reviewOutcomeRules = [
+  ["通过", "闭卷能做、能讲清错因、能挂回考点；保持原复盘间隔。"],
+  ["失败", "不会第一步、同类错因重复或看答案才懂；生成 D+1 短复盘。"],
+  ["延期", "当天负荷过高时只允许 +1 或 +3 天；延期超过 2 次视作未掌握。"]
+];
+
+const subjectAcceptanceRules = {
+  "数学": {
+    minimum: "45 分钟或 15 道基础题，至少订正当天错题。",
+    standard: "15-25 道题，正确率和错因有记录，关键公式闭卷默写。",
+    high: "能写出题型识别信号，并把错题挂回考纲小节。"
+  },
+  "408": {
+    minimum: "45 分钟或 15-20 道章节题，至少画出一个过程图。",
+    standard: "20 道题或 1 个代码/伪代码实现，能解释复杂度、代价或状态变化。",
+    high: "能把概念、图示、题目和错因统一到同一个知识点。"
+  },
+  "英语": {
+    minimum: "单词不断档，完成 20 分钟词句或 1 组长难句。",
+    standard: "阅读或长难句限时完成后精读，记录生词、定位句和错选项原因。",
+    high: "能复述段落结构，并把错题归为词汇、句法、定位或逻辑。"
+  },
+  "政治": {
+    minimum: "20 分钟框架或选择题，不挤占数学和 408。",
+    standard: "选择题完成后归类错因，后期主观题能默写关键词。",
+    high: "能用官方表述组织答案层次，不背散句。"
+  },
+  "复盘": {
+    minimum: "回炉 5 道错题或 15 分钟到期复盘。",
+    standard: "重做不翻答案，写出二次错因和下一轮处理方式。",
+    high: "能合并同类错因，并决定是否降低新内容。"
+  },
+  "补弱": {
+    minimum: "只处理一个弱项，补 30 分钟基础定义或错题。",
+    standard: "写清弱在哪里、为什么弱、下一次如何提前识别。",
+    high: "把弱项拆成 2-3 个可复查的小动作。"
+  },
+  "项目": {
+    minimum: "推进一个可运行小功能或补一段 README。",
+    standard: "留下输入、处理、输出和技术取舍说明。",
+    high: "能形成复试可讲的证据：截图、链接、问题和改进点。"
+  }
+};
+
+const resourceUsageRules = [
+  "每科只保留一条主线资料，先完成 70% 再决定是否补充第二套。",
+  "新增资料必须说明解决什么问题：概念不清、题量不足、真题表达弱或错题回炉不足。",
+  "资料进度不能替代掌握证据；完成率高但错题回炉低时，优先停新资料。"
 ];
 
 const taskBlueprints = {
@@ -2002,6 +2071,7 @@ function renderDashboard() {
   document.getElementById("currentPhaseBadge").textContent = `阶段 ${phase.id} · ${phase.name}`;
   setText("examDateStatus", dateStatus);
   setText("officialBasisText", officialBasisText());
+  renderCurveMetric(phase);
 
   renderRisk(week, phase);
   renderQuotas(week, phase);
@@ -2067,6 +2137,32 @@ function renderRisk(week, phase) {
   document.getElementById("riskText").textContent = text;
 }
 
+function renderCurveMetric(phase = getCurrentPhase()) {
+  const today = parseDate(planTodayISO());
+  const days = [];
+  for (let index = 13; index >= 0; index -= 1) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - index);
+    const iso = formatDateISO(date);
+    const entry = state.entries[iso];
+    days.push({ date, iso, hours: entry ? getEntryTotals(entry).total / 60 : 0 });
+  }
+  const previousAvg = averageHours(days.slice(0, 7));
+  const recentAvg = averageHours(days.slice(7));
+  const activeDays = days.slice(7).filter((day) => day.hours > 0).length;
+  const ratio = previousAvg ? recentAvg / previousAvg : 0;
+  let metric = `${recentAvg.toFixed(1)}h/天`;
+  let text = activeDays ? `${activeDays}/7 天有记录，继续看 14 天学习曲线。` : "记录 3 天后判断 14 天趋势";
+  if (previousAvg) {
+    metric = `${Math.round(ratio * 100)}%`;
+    text = ratio >= 1.12 ? "近 7 天升高，确认不是单日硬冲。" :
+      ratio <= 0.78 ? "近 7 天回落，先恢复底线日。" :
+      "曲线基本平稳，保持当前负荷。";
+  }
+  setText("curveMetric", metric);
+  setText("curveText", text);
+}
+
 function riskSnapshot(week, phase) {
   const weekHours = sumMinutes(week, "total") / 60;
   const totalMinutes = sumMinutes(week, "total");
@@ -2124,12 +2220,15 @@ function renderWorkflowRail() {
   const todayEntry = state.entries[planDate];
   const dueCount = state.reviewItems.filter((item) => !item.done && item.dueDate <= planDate).length;
   const recentScores = state.scores.filter((score) => score.date >= formatDateISO(addDays(parseDate(planDate), -45))).length;
+  const active14 = new Set(lastDaysEntries(14).filter((entry) => entry.total > 0).map((entry) => entry.date)).size;
   const avgSyllabus = Math.round(["math", "cs408", "english", "politics"].reduce((sum, subject) => sum + syllabusProgress(subject).percent, 0) / 4);
   const steps = [
     ["计划", `${tasks.length} 项`, tasks.length ? "done" : "wait"],
     ["执行", `${doneTasks}/${tasks.length}`, doneTasks ? "active" : "wait"],
     ["记录", todayEntry ? `${(getEntryTotals(todayEntry).total / 60).toFixed(1)}h` : "未填", todayEntry ? "done" : "active"],
     ["复盘", dueCount ? `${dueCount} 到期` : "无到期", dueCount ? "active" : "done"],
+    ["日审", todayEntry?.nextTask ? "已收口" : "待收口", todayEntry?.nextTask ? "done" : todayEntry ? "active" : "wait"],
+    ["统计", `${active14}/14 天`, active14 >= 8 ? "done" : active14 ? "active" : "wait"],
     ["模考", recentScores ? `${recentScores} 次` : "未到期", recentScores ? "done" : "wait"],
     ["校准", `${avgSyllabus}%`, avgSyllabus ? "active" : "wait"]
   ];
@@ -2276,13 +2375,14 @@ function renderSystemRules() {
   const budget = dailyBudgetMinutes();
   const rules = [
     ...systemRules,
-    ["06", "今日预算自动校准", `当前设置下今日预算 ${budget} 分钟，任务生成会围绕 ${state.settings.taskCount} 项和 ${state.settings.coreRatio}% 核心占比收敛。`]
+    ["09", "今日预算自动校准", `当前设置下今日预算 ${budget} 分钟，任务生成会围绕 ${state.settings.taskCount} 项和 ${state.settings.coreRatio}% 核心占比收敛。`],
+    ["10", "学习科学口径", "主动回忆、分散复盘、交错练习和可完成负荷只是提高执行质量的方法，不代表分数或录取承诺。"]
   ];
   container.innerHTML = rules.map(([num, title, text]) => `
     <article class="rule-item">
-      <span>${num}</span>
+      <strong>${num}</strong>
       <div>
-        <strong>${title}</strong>
+        <span>${title}</span>
         <p>${text}</p>
       </div>
     </article>
@@ -2292,11 +2392,15 @@ function renderSystemRules() {
 function renderMemoryCurve() {
   const container = document.getElementById("memoryCurve");
   if (!container) return;
-  container.innerHTML = memoryCurveRules.map(([round, text, cost]) => `
+  container.innerHTML = memoryCurveRules.map(({ round, action, pass, fallback, cost }) => `
     <div class="memory-row">
-      <strong>${round}</strong>
-      <span>${text}</span>
-      <em>${cost}</em>
+      <div class="memory-head">
+        <strong>${escapeHtml(round)}</strong>
+        <em>${escapeHtml(cost)}</em>
+      </div>
+      <p>${escapeHtml(action)}</p>
+      <span>通过：${escapeHtml(pass)}</span>
+      <span>未过：${escapeHtml(fallback)}</span>
     </div>
   `).join("");
 }
@@ -2326,7 +2430,7 @@ function renderQuotas(week, phase) {
 function renderVisualBoard(data) {
   renderRingGrid(data);
   renderSubjectChart(data.week, data.phase);
-  renderTrendChart();
+  renderTrendChart(data.phase);
 }
 
 function renderRingGrid({ phase, weekMinutes, coreMinutes, totalMinutes, monthProgress }) {
@@ -2384,7 +2488,7 @@ function renderSubjectChart(week, phase) {
   }).join("");
 }
 
-function renderTrendChart() {
+function renderTrendChart(phase = getCurrentPhase()) {
   const container = document.getElementById("trendChart");
   if (!container) return;
   const today = parseDate(planTodayISO());
@@ -2398,7 +2502,7 @@ function renderTrendChart() {
     days.push({ date, iso, hours: minutes / 60 });
   }
   const maxHours = Math.max(3, ...days.map((day) => day.hours));
-  container.innerHTML = days.map((day) => {
+  const bars = days.map((day) => {
     const height = Math.max(4, day.hours / maxHours * 100);
     return `
       <div class="trend-day" title="${day.iso} · ${day.hours.toFixed(1)}h">
@@ -2407,6 +2511,45 @@ function renderTrendChart() {
       </div>
     `;
   }).join("");
+  const curve = learningCurveSnapshot(days, phase);
+  container.innerHTML = `
+    <div class="trend-bars">${bars}</div>
+    <div class="learning-signal-list">
+      ${curve.map(([label, value, text, status]) => `
+        <article class="learning-signal ${status}">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+          <p>${escapeHtml(text)}</p>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function averageHours(days) {
+  return days.length ? days.reduce((sum, day) => sum + day.hours, 0) / days.length : 0;
+}
+
+function learningCurveSnapshot(days, phase = getCurrentPhase()) {
+  const previous7 = days.slice(0, 7);
+  const recent7 = days.slice(7);
+  const previousAvg = averageHours(previous7);
+  const recentAvg = averageHours(recent7);
+  const activeDays = recent7.filter((day) => day.hours > 0).length;
+  const weeklyTarget = Number(phase.weeklyTarget) || 0;
+  const targetDaily = weeklyTarget ? weeklyTarget / 7 : 0;
+  const trendRatio = previousAvg ? recentAvg / previousAvg : recentAvg ? 1 : 0;
+  const trendText = trendRatio >= 1.12 ? "近 7 天高于前 7 天，确认不是靠单日硬冲。" :
+    trendRatio <= 0.78 && previousAvg ? "近 7 天明显回落，下周先恢复底线日和核心任务。" :
+    activeDays ? "投入基本平稳，可以继续按当前阶段推进。" :
+    "先连续记录 3 天，再判断曲线。";
+  const loadStatus = recentAvg >= targetDaily * 0.9 ? "ok" : recentAvg >= targetDaily * 0.65 ? "warn" : "risk";
+  const continuityStatus = activeDays >= 6 ? "ok" : activeDays >= 4 ? "warn" : "risk";
+  return [
+    ["7 天均值", `${recentAvg.toFixed(1)}h/天`, targetDaily ? `阶段参考 ${targetDaily.toFixed(1)}h/天。` : "阶段目标未设定。", loadStatus],
+    ["曲线判断", previousAvg ? `${Math.round(trendRatio * 100)}%` : "待建立", trendText, trendRatio >= 0.78 || !previousAvg ? "ok" : "risk"],
+    ["连续性", `${activeDays}/7 天`, activeDays >= 6 ? "节奏稳定，允许小幅加难度。" : "先保学习天数，再谈加量。", continuityStatus]
+  ];
 }
 
 function renderScoreTargets() {
@@ -3211,7 +3354,9 @@ function renderReviewPolicy(dueCount, upcomingCount) {
   const rows = [
     ["到期", `${dueCount} 项`, "今天优先处理到期复盘，再开新内容。"],
     ["排队", `${upcomingCount} 项`, "未来复盘只保留轻量回炉，避免挤压数学和 408 主任务。"],
-    ["间隔", state.settings.reviewDays.map((day) => `D+${day}`).join(" / "), "可在设置里调整，但不建议少于 4 轮。"]
+    ["间隔", state.settings.reviewDays.map((day) => `D+${day}`).join(" / "), "可在设置里调整，但不建议少于 4 轮。"],
+    ...auditCadenceRules.map((item) => [item.label, item.value, item.text]),
+    ...reviewOutcomeRules.map(([label, text]) => [label, "判定口径", text])
   ];
   container.innerHTML = rows.map(([label, value, text]) => `
     <div class="review-policy-row">
@@ -3260,26 +3405,17 @@ function nextTopics(subject, limit = 3) {
 }
 
 function renderAcceptance(tasks) {
-  const standards = tasks.map((task) => {
-    if (task.subject === "数学") {
-      return "数学：至少完成 15-25 道基础题，错题写出错因，不会的概念回到定义。";
-    }
-    if (task.subject === "408") {
-      return "408：至少完成 20 道章节题或 1 个代码/伪代码实现，能画出过程图。";
-    }
-    if (task.subject === "英语") {
-      return "英语：单词不断，阅读精读要写出生词、长难句和每道错题原因。";
-    }
-    if (task.subject === "政治") {
-      return "政治：选择题做完必须二刷错题，主观题背诵要能默写关键词。";
-    }
-    if (task.subject === "补弱") {
-      return "补弱：只补一个最弱科目，完成后记录为什么弱、下次怎么避免。";
-    }
-    return "复盘：今天至少回炉 5 道错题，写明明天第一任务。";
-  });
-  document.getElementById("acceptanceList").innerHTML = [...new Set(standards)].map((item) => `
-    <div class="acceptance-item">${escapeHtml(item)}</div>
+  const subjects = [...new Set(tasks.map((task) => task.subject || "复盘"))];
+  const standards = subjects.map((subject) => [subject, subjectAcceptanceRules[subject] || subjectAcceptanceRules["复盘"]]);
+  document.getElementById("acceptanceList").innerHTML = standards.map(([subject, rule]) => `
+    <article class="acceptance-item">
+      <strong>${escapeHtml(subject)}</strong>
+      <div>
+        <p><span>最低</span>${escapeHtml(rule.minimum)}</p>
+        <p><span>标准</span>${escapeHtml(rule.standard)}</p>
+        <p><span>高质量</span>${escapeHtml(rule.high)}</p>
+      </div>
+    </article>
   `).join("");
 }
 
@@ -3983,18 +4119,34 @@ function groupProgress(subject, groupName) {
 function renderReview() {
   const phase = getCurrentPhase();
   const week = lastDaysEntries(7);
+  const days14 = lastDaysEntries(14);
   const weekHours = sumMinutes(week, "total") / 60;
+  const avg14 = days14.length ? sumMinutes(days14, "total") / 60 / 14 : 0;
   const coreRatio = sumMinutes(week, "total") ? sumMinutes(week, "core") / sumMinutes(week, "total") : 0;
   const newMistakes = sumMinutes(week, "newMistakes");
   const fixedMistakes = sumMinutes(week, "fixedMistakes");
   const mistakeRatio = newMistakes ? fixedMistakes / newMistakes : 1;
   const activeDays = new Set(week.filter((entry) => entry.total > 0).map((entry) => entry.date)).size;
+  const planDate = planTodayISO();
+  const monthHours = sumMinutes(entriesArray().filter((entry) => entry.date.startsWith(planDate.slice(0, 7))), "total") / 60;
+  const currentMonth = monthlyPlan.find((row) => planDate.startsWith(row[0]));
+  const monthTarget = currentMonth ? currentMonth[1] : phase.weeklyTarget * 4;
+  const dueCount = state.reviewItems.filter((item) => !item.done && item.status !== "done" && item.dueDate <= planDate).length;
+  const avgSyllabus = Math.round(["math", "cs408", "english", "politics"].reduce((sum, subject) => sum + syllabusProgress(subject).percent, 0) / 4);
+  const learningStatus = weekHours >= phase.weeklyTarget * 0.9 && coreRatio >= 0.65 && activeDays >= 6 ? "可小幅加难度" :
+    weekHours < phase.weeklyTarget * 0.7 || activeDays <= 3 ? "先恢复底线日" :
+    "保持当前负荷";
 
   const items = [
     ["周总有效小时", `${weekHours.toFixed(1)}h`, `目标 ${phase.weeklyTarget}h`],
     ["数学+408 占比", `${Math.round(coreRatio * 100)}%`, "绿色线 65%"],
     ["错题回炉率", `${Math.round(mistakeRatio * 100)}%`, "绿色线 70%"],
-    ["本周学习天数", `${activeDays} 天`, "目标 6-7 天"]
+    ["本周学习天数", `${activeDays} 天`, "目标 6-7 天"],
+    ["14天日均", `${avg14.toFixed(1)}h`, "判断曲线，不看单日"],
+    ["本月累计", `${monthHours.toFixed(1)}h`, `月目标 ${monthTarget}h`],
+    ["到期复盘", `${dueCount} 项`, dueCount ? "先清到期再开新内容" : "队列正常"],
+    ["考纲证据", `${avgSyllabus}%`, "四科平均掌握标记"],
+    ["负荷建议", learningStatus, "按完成率调整难度"]
   ];
 
   document.getElementById("weeklyReview").innerHTML = items.map(([label, value, hint]) => `
@@ -4225,7 +4377,13 @@ function averageScores(scores) {
 }
 
 function renderResources() {
-  document.getElementById("resourceGrid").innerHTML = resources.map(([title, items]) => `
+  const usageCard = `
+    <article class="resource-card resource-rule-card">
+      <h4>资料使用规则</h4>
+      <ul>${resourceUsageRules.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+    </article>
+  `;
+  document.getElementById("resourceGrid").innerHTML = usageCard + resources.map(([title, items]) => `
     <article class="resource-card">
       <h4>${escapeHtml(title)}</h4>
       <ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
@@ -4351,7 +4509,9 @@ function renderExecutionBoundaries() {
   if (!container) return;
   const rows = [
     ...executionBoundaries,
-    ...methodEvidence.map(([title, text]) => [title, text])
+    ...methodEvidence.map(([title, text]) => [title, text]),
+    ...auditCadenceRules.map((item) => [item.label, item.text]),
+    ...studyMetricRules.map(([title, text]) => [title, text])
   ];
   container.innerHTML = rows.map(([title, text]) => `
     <article class="boundary-card">
