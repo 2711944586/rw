@@ -47,11 +47,26 @@ import {
   markCarriedSourceTasks
 } from "./domain/task-carryover.js";
 
+import {
+  DEFAULT_PLAN_CONTROLS,
+  applyPlanControls,
+  buildRollingReviewWindows,
+  getPhaseStrategy,
+  getSyllabusFramework,
+  normalizePlanControls,
+  recommendPlanAdjustment,
+  reviewLoadSignal,
+  strategySources,
+  subjectKey,
+  subjectLabel,
+  subjectPlanWeights
+} from "./domain/study-strategy.js";
+
 const STORAGE_KEY = "pku_swm_420_dashboard_v3";
 const LEGACY_STORAGE_KEY = "pku_swm_420_dashboard_v1";
 const SCHEMA_VERSION = 3;
 const PLAN_LOGIC_VERSION = "3.3-start-2026-06-ramp";
-const APP_BUILD = "2026-06-01-study-curve";
+const APP_BUILD = "2026-06-02-human-controlled-rolling-review";
 const DEFAULT_EXAM_DATE = "2027-12-25";
 const DEFAULT_EXAM_DATE_STATUS = "推算排程日，非官方初试日期";
 const PLAN_START_DATE = "2026-06-01";
@@ -84,7 +99,8 @@ const defaultSettings = {
   density: "focus",
   lastExportDate: "",
   targetExamDate: DEFAULT_EXAM_DATE,
-  reviewDays: [1, 3, 7, 14, 30]
+  reviewDays: [1, 3, 7, 14, 30],
+  planControls: { ...DEFAULT_PLAN_CONTROLS }
 };
 
 let storageAvailable = true;
@@ -887,6 +903,7 @@ function migrateState(parsed) {
     settings.reviewDays = Array.isArray(settings.reviewDays)
       ? [...new Set(settings.reviewDays.map((day) => sanitizeInteger(day, 1, 365)).filter(Boolean))].sort((a, b) => a - b)
       : [...defaultSettings.reviewDays];
+    settings.planControls = normalizePlanControls(settings.planControls);
     const entries = sanitizeEntries(parsed.entries || {});
     const scores = sanitizeScores(parsed.scores || []);
     const resourcesState = sanitizeNumericObject(parsed.resources || {}, 0, 100);
@@ -1124,7 +1141,7 @@ function freshState() {
     weekPlans: {},
     project: {},
     resources: {},
-    settings: { ...defaultSettings, efficiencyModeApplied: true },
+    settings: { ...defaultSettings, planControls: normalizePlanControls(defaultSettings.planControls), efficiencyModeApplied: true },
     customTasks: [],
     reviewItems: [],
     deleted: { records: [], scores: [], tasks: [], reviews: [] },
@@ -1698,6 +1715,15 @@ function bindSettings() {
     state.settings.coreRatio = Math.min(85, Math.max(55, readNumber("settingCoreRatio") || defaultSettings.coreRatio));
     state.settings.targetExamDate = document.getElementById("settingTargetExamDate")?.value || DEFAULT_EXAM_DATE;
     state.settings.reviewDays = parseReviewDays(document.getElementById("settingReviewDays").value);
+    state.settings.planControls = normalizePlanControls({
+      planIntensity: document.getElementById("settingPlanIntensity")?.value,
+      focusSubject: document.getElementById("settingFocusSubject")?.value,
+      experienceTrack: document.getElementById("settingExperienceTrack")?.value,
+      maxNewTopics: readNumber("settingMaxNewTopics"),
+      reviewLoad: readNumber("settingReviewLoad"),
+      rollingWindowDays: readNumber("settingRollingWindowDays"),
+      enabledSubjects: Array.from(document.querySelectorAll("#settingEnabledSubjects input:checked")).map((input) => input.value),
+    });
     saveState();
     renderAll();
     showToast("设置已保存。");
@@ -2000,6 +2026,11 @@ function setValue(id, value) {
   document.getElementById(id).value = value || "";
 }
 
+function setSelectValue(id, value) {
+  const element = document.getElementById(id);
+  if (element) element.value = value || "";
+}
+
 function renderAll() {
   loadEntryForm();
   renderDashboard();
@@ -2097,6 +2128,7 @@ function renderDashboard() {
   renderTargetLane({ phase, week, totalMinutes, monthTarget, monthMinutes });
   renderWorkflowRail();
   renderStorageStatus();
+  renderStrategyBoard({ phase, week, weekMinutes, coreMinutes });
 }
 
 function renderRisk(week, phase) {
@@ -2135,6 +2167,58 @@ function renderRisk(week, phase) {
   card.className = `metric-card risk ${color}`;
   document.getElementById("riskLabel").textContent = label;
   document.getElementById("riskText").textContent = text;
+}
+
+function renderStrategyBoard({ phase, week, weekMinutes, coreMinutes }) {
+  const controls = normalizePlanControls(state.settings.planControls);
+  const strategy = getPhaseStrategy(phase.id, controls.experienceTrack);
+  const today = planTodayISO();
+  const windows = buildRollingReviewWindows(state.reviewItems, today, { controls });
+  const signal = reviewLoadSignal(state.reviewItems, today, controls);
+  const newMistakes = sumMinutes(week, "newMistakes");
+  const fixedMistakes = sumMinutes(week, "fixedMistakes");
+  const metrics = {
+    activeDays: new Set(week.filter((entry) => entry.total > 0).map((entry) => entry.date)).size,
+    coreRatio: weekMinutes ? coreMinutes / weekMinutes : 0,
+    mistakeRecovery: newMistakes ? fixedMistakes / newMistakes : 1
+  };
+  const adjustment = recommendPlanAdjustment(metrics, controls, phase.id);
+  const enabledText = controls.enabledSubjects.map(subjectLabel).join(" / ");
+  const focus = controls.focusSubject === "auto" ? "自动" : subjectLabel(controls.focusSubject);
+
+  setText("activeStrategyTitle", `${phase.id} · ${strategy.label}`);
+  setText("activeStrategyText", `${strategy.method}${strategy.trackText ? ` ${strategy.trackText}` : ""}`);
+  setText("rollingReviewTitle", signal.label);
+  setText("rollingReviewText", signal.action);
+  setText("planAdjustmentTitle", controls.planIntensity === "bottomline" ? "底线恢复" : controls.planIntensity === "strong" ? "加强推进" : "正常推进");
+  setText("planAdjustmentText", adjustment);
+
+  const tagContainer = document.getElementById("activeStrategyTags");
+  if (tagContainer) {
+    tagContainer.innerHTML = [
+      `强度 ${planIntensityLabel(controls.planIntensity)}`,
+      `聚焦 ${focus}`,
+      `新内容 <= ${controls.maxNewTopics}`,
+      `复盘 ${controls.reviewLoad}m/项`,
+      enabledText
+    ].map((item) => `<span>${escapeHtml(item)}</span>`).join("");
+  }
+
+  const mini = document.getElementById("rollingReviewMini");
+  if (mini) {
+    const max = Math.max(1, ...windows.map((item) => item.count));
+    mini.innerHTML = windows.slice(0, 5).map((item) => `
+      <div class="review-window-mini ${item.key}">
+        <span>${escapeHtml(item.label)}</span>
+        <strong>${item.count}</strong>
+        <div><em style="width:${Math.max(3, item.count / max * 100)}%"></em></div>
+      </div>
+    `).join("");
+  }
+}
+
+function planIntensityLabel(value) {
+  return ({ bottomline: "底线", normal: "正常", strong: "加强" })[value] || "正常";
 }
 
 function renderCurveMetric(phase = getCurrentPhase()) {
@@ -2894,7 +2978,7 @@ function buildDailyTasks(force = false, date = planTodayISO()) {
   const locked = existing.filter((task) => task.locked);
   const lockedActive = [...locked, ...carried].filter((task) => task.status !== "shifted");
   const generated = createDailyTasks(date);
-  const targetCount = Math.min(4, Math.max(3, state.settings.taskCount || 3));
+  const targetCount = targetTaskCountForDate(date);
   const merged = [...lockedActive];
   const budget = dailyBudgetMinutes(date);
   generated.forEach((task) => {
@@ -2922,68 +3006,107 @@ function carryoverLimitForBudget(budget, taskCount) {
   return 2;
 }
 
+function targetTaskCountForDate(date = planTodayISO()) {
+  const controls = normalizePlanControls(state.settings.planControls);
+  const base = Math.min(4, Math.max(3, state.settings.taskCount || 3));
+  if (controls.planIntensity === "bottomline" || shouldUseMinimumDay(date)) return 2;
+  if (controls.planIntensity === "strong") return 4;
+  return base;
+}
+
 function createDailyTasks(date = planTodayISO()) {
   const phase = getCurrentPhase(date);
+  const controls = normalizePlanControls(state.settings.planControls);
+  const weights = subjectPlanWeights(phase.id, controls);
   const weak = getWeakSubject();
   const topicMath = topicForDate("math", date);
   const topicCs = topicForDate("cs408", date);
   const topicEnglish = topicForDate("english", date);
   const topicPolitics = phase.quotas.politics ? topicForDate("politics", date) : null;
-  const tasks = dueReviewTasks(date).slice(0, 1);
   const budget = dailyBudgetMinutes(date);
-  const targetCount = Math.min(4, Math.max(3, state.settings.taskCount || 3));
+  const targetCount = targetTaskCountForDate(date);
+  const reviewCapacity = Math.max(1, Math.floor(Math.max(controls.reviewLoad, budget * 0.25) / controls.reviewLoad));
+  const tasks = dueReviewTasks(date).slice(0, reviewCapacity).map((task) => ({
+    ...task,
+    minutes: controls.reviewLoad,
+    priority: 1
+  }));
 
   const coreFloor = phase.id === "A" ? 35 : 45;
-  const englishMinutes = Math.max(20, Math.min(60, roundToFive(budget * (phase.id === "A" ? 0.14 : 0.16))));
-  const politicsMinutes = Math.min(60, Math.max(30, roundToFive(budget * 0.12)));
-  const politicsDay = phase.quotas.politics && parseDate(date).getDay() % 2 === 0;
-  const reviewReserve = targetCount > 3 ? Math.max(15, roundToFive(budget * 0.08)) : 0;
-  const nonCoreReserve = (topicPolitics && politicsDay ? politicsMinutes : englishMinutes) + reviewReserve;
+  const minutesFor = (key, floor, cap = 240) => Math.max(floor, Math.min(cap, roundToFive(budget * (weights[key] || 0))));
+  const englishMinutes = minutesFor("english", 20, 70);
+  const politicsMinutes = minutesFor("politics", 25, 75);
+  const projectMinutes = minutesFor("project", 20, 60);
+  const reviewReserve = controls.enabledSubjects.includes("review") && targetCount > 3 ? Math.max(15, roundToFive(budget * (weights.review || 0.08))) : 0;
+  const politicsDay = Boolean(topicPolitics && weights.politics > 0 && parseDate(date).getDay() % 2 === 0);
+  const nonCoreReserve = (politicsDay ? politicsMinutes : englishMinutes) + reviewReserve;
   const minimumCore = Math.round(budget * (state.settings.coreRatio || 65) / 100);
   const coreMinutes = Math.max(coreFloor * 2, minimumCore, budget - nonCoreReserve);
-  const mathMinutes = Math.max(coreFloor, roundToFive(coreMinutes * 0.48));
-  const csMinutes = Math.max(coreFloor, roundToFive(coreMinutes * 0.52));
+  const coreWeight = (weights.math || 0) + (weights.cs408 || 0) || 1;
+  const mathMinutes = Math.max(coreFloor, roundToFive(coreMinutes * ((weights.math || 0.5) / coreWeight)));
+  const csMinutes = Math.max(coreFloor, roundToFive(coreMinutes * ((weights.cs408 || 0.5) / coreWeight)));
 
-  tasks.push(topicTask(date, phase, "数学", topicMath, mathMinutes, "高数/线代/概率按阶段推进"));
-  tasks.push(topicTask(date, phase, "408", topicCs, csMinutes, "按数据结构、计组、OS、计网推进"));
-  if (topicPolitics && politicsDay) {
+  if (controls.enabledSubjects.includes("math")) {
+    tasks.push(topicTask(date, phase, "数学", topicMath, mathMinutes, "高数/线代/概率按阶段推进"));
+  }
+  if (controls.enabledSubjects.includes("cs408")) {
+    tasks.push(topicTask(date, phase, "408", topicCs, csMinutes, "按数据结构、计组、OS、计网推进"));
+  }
+  if (topicPolitics && politicsDay && controls.enabledSubjects.includes("politics")) {
     tasks.push(topicTask(date, phase, "政治", topicPolitics, politicsMinutes, "基础框架、选择题、背诵"));
-  } else {
+  } else if (controls.enabledSubjects.includes("english")) {
     tasks.push(topicTask(date, phase, "英语", topicEnglish, englishMinutes, "单词、长难句、真题阅读"));
   }
 
-  if (topicPolitics && !politicsDay && tasks.length < targetCount) {
+  if (topicPolitics && !politicsDay && controls.enabledSubjects.includes("politics") && tasks.length < targetCount) {
     tasks.push(topicTask(date, phase, "政治", topicPolitics, politicsMinutes, "基础框架、选择题、背诵"));
-  } else if (tasks.length < targetCount) {
+  } else if (controls.enabledSubjects.includes("review") && tasks.length < targetCount) {
     tasks.push({
       id: `${date}-${phase.id}-review`,
       subject: "复盘",
       text: "回炉本周错题，写出错因和下次识别信号",
-      minutes: Math.max(15, roundToFive(budget * 0.08))
+      minutes: Math.max(15, reviewReserve || roundToFive(budget * (weights.review || 0.08))),
+      priority: 8
     });
   }
 
-  if (weak && tasks.length < targetCount + 1) {
+  if (weights.project > 0 && controls.enabledSubjects.includes("project") && tasks.length < targetCount) {
+    tasks.push({
+      id: `${date}-${phase.id}-project`,
+      subject: "项目",
+      text: "推进复试项目最小可展示功能或补 README 证据",
+      minutes: projectMinutes,
+      priority: 9
+    });
+  }
+
+  if (weak && controls.enabledSubjects.includes(subjectKey(weak.label)) && tasks.length < targetCount + 1) {
     tasks.push({
       id: `${date}-weak-${weak.key}`,
       subject: "补弱",
       text: `${weak.label} 本周低于配额，补 30 分钟核心任务`,
-      minutes: 30
+      minutes: 30,
+      priority: 7
     });
   }
 
   state.customTasks.slice(0, 2).forEach((custom) => {
-    if (tasks.length < targetCount && !tasks.some((task) => task.text === custom.text)) {
+    if (tasks.length < targetCount && controls.enabledSubjects.includes(subjectKey(custom.subject)) && !tasks.some((task) => task.text === custom.text)) {
       tasks.push({
         id: `${date}-custom-${custom.id}`,
         subject: custom.subject,
         text: custom.text,
-        minutes: custom.minutes
+        minutes: custom.minutes,
+        priority: 6
       });
     }
   });
 
-  return trimTasksToBudget(tasks.filter(Boolean), budget, targetCount).map((task, index) => ({
+  return applyPlanControls(trimTasksToBudget(tasks.filter(Boolean), budget, Math.max(targetCount, tasks.length)), {
+    controls,
+    targetCount,
+    budget
+  }).map((task, index) => ({
     ...task,
     date,
     priority: task.priority || index + 1,
@@ -3024,6 +3147,7 @@ function normalizeTaskList(tasks, date) {
 
 function dailyBudgetMinutes(date = planTodayISO()) {
   const phase = getCurrentPhase(date);
+  const controls = normalizePlanControls(state.settings.planControls);
   const day = parseDate(date).getDay();
   const isWeekend = day === 0 || day === 6;
   const ramp = rampBudgetForDate(date);
@@ -3034,7 +3158,9 @@ function dailyBudgetMinutes(date = planTodayISO()) {
   const userCap = current <= earlyRampEnd ? Math.min(settingCap || rampCap, rampCap) : Math.max(settingCap, rampCap);
   const floor = bottomLineMinutes(phase);
   const normalBudget = phase.id === "A" ? Math.min(userCap, Math.max(Math.min(floor, userCap), rampCap)) : Math.max(floor, userCap);
-  return shouldUseMinimumDay(date) ? Math.min(normalBudget, bottomLineMinutes(phase)) : normalBudget;
+  if (controls.planIntensity === "bottomline" || shouldUseMinimumDay(date)) return Math.min(normalBudget, floor);
+  if (controls.planIntensity === "strong") return Math.min(Math.round(normalBudget * 1.18), Math.max(normalBudget, userCap + 60));
+  return normalBudget;
 }
 
 function rampBudgetForDate(date = planTodayISO()) {
@@ -3760,6 +3886,18 @@ function renderSyllabusDashboard(selected) {
         `).join("") || `<article><span>1</span><p>当前科目已覆盖，回到错题和套卷。</p><em>回炉</em></article>`}
       </div>
     </section>
+    <section class="syllabus-framework">
+      <strong>大框架</strong>
+      <div>
+        ${getSyllabusFramework(selected).map(([title, scope, method]) => `
+          <article>
+            <span>${escapeHtml(title)}</span>
+            <p>${escapeHtml(scope)}</p>
+            <em>${escapeHtml(method)}</em>
+          </article>
+        `).join("")}
+      </div>
+    </section>
     <section class="syllabus-group-bars">
       ${detail.groups.map((group) => `
         <div class="group-bar">
@@ -4158,6 +4296,7 @@ function renderReview() {
   `).join("");
 
   renderMilestone();
+  renderRollingWindowChart();
 
   const totalHours = sumMinutes(entriesArray(), "total") / 60;
   document.getElementById("monthTable").innerHTML = monthlyPlan.map((row) => {
@@ -4174,6 +4313,32 @@ function renderReview() {
       </div>
     `;
   }).join("");
+}
+
+function renderRollingWindowChart() {
+  const container = document.getElementById("rollingWindowChart");
+  if (!container) return;
+  const controls = normalizePlanControls(state.settings.planControls);
+  const windows = buildRollingReviewWindows(state.reviewItems, planTodayISO(), { controls });
+  const maxMinutes = Math.max(1, ...windows.map((item) => item.minutes));
+  const signal = reviewLoadSignal(state.reviewItems, planTodayISO(), controls);
+  container.innerHTML = `
+    <article class="rolling-window-summary ${signal.level}">
+      <span>滚动复盘负荷</span>
+      <strong>${escapeHtml(signal.label)}</strong>
+      <p>${escapeHtml(signal.action)}</p>
+    </article>
+    <div class="rolling-window-bars">
+      ${windows.map((item) => `
+        <div class="rolling-window-bar">
+          <div class="rolling-window-track"><span style="height:${Math.max(4, item.minutes / maxMinutes * 100)}%"></span></div>
+          <strong>${item.count}</strong>
+          <em>${escapeHtml(item.label)}</em>
+          <small>${item.minutes}m</small>
+        </div>
+      `).join("")}
+    </div>
+  `;
 }
 
 function renderCoach(week, phase) {
@@ -4440,6 +4605,17 @@ function renderSettings() {
   document.getElementById("settingCoreRatio").value = state.settings.coreRatio;
   document.getElementById("settingTargetExamDate").value = state.settings.targetExamDate || DEFAULT_EXAM_DATE;
   document.getElementById("settingReviewDays").value = state.settings.reviewDays.join(",");
+  const controls = normalizePlanControls(state.settings.planControls);
+  state.settings.planControls = controls;
+  setValue("settingMaxNewTopics", controls.maxNewTopics);
+  setValue("settingReviewLoad", controls.reviewLoad);
+  setValue("settingRollingWindowDays", controls.rollingWindowDays);
+  setSelectValue("settingPlanIntensity", controls.planIntensity);
+  setSelectValue("settingFocusSubject", controls.focusSubject);
+  setSelectValue("settingExperienceTrack", controls.experienceTrack);
+  document.querySelectorAll("#settingEnabledSubjects input").forEach((input) => {
+    input.checked = controls.enabledSubjects.includes(input.value);
+  });
   setText("settingsExamDateStatus", examDateStatusText());
   setText("appBuildText", APP_BUILD);
   setText("storageHealthText", storageAvailable ? "本机缓存正常" : "本机缓存不可用，建议检查浏览器隐私/存储权限");
@@ -4474,6 +4650,7 @@ function renderSettings() {
   renderSourceRegistry();
   renderDesignReferences();
   renderExecutionBoundaries();
+  renderStrategySources();
 }
 
 function renderSourceRegistry() {
@@ -4518,6 +4695,18 @@ function renderExecutionBoundaries() {
       <span>规则</span>
       <strong>${escapeHtml(title)}</strong>
       <p>${escapeHtml(text)}</p>
+    </article>
+  `).join("");
+}
+
+function renderStrategySources() {
+  const container = document.getElementById("strategySourceGrid");
+  if (!container) return;
+  container.innerHTML = strategySources.map((item) => `
+    <article class="strategy-source-card">
+      <span>${escapeHtml(item.source)}</span>
+      <strong>${escapeHtml(item.title)}</strong>
+      <p>${escapeHtml(item.use)}</p>
     </article>
   `).join("");
 }

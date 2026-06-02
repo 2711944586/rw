@@ -42,6 +42,20 @@ export const sourceRegistry = [
     checkedAt: "2026-05-31"
   },
   {
+    level: "备考经验参考",
+    title: "408 复习经验共识",
+    claim: "408 非官方经验帖和主流教辅体系通常建议按数据结构、计算机组成原理、操作系统、计算机网络建立框架，并用章节题、真题、过程图、伪代码和错题归档校验掌握。本系统只把这类经验转化为任务结构，不把任何机构资料视为官方指定资料。",
+    url: "https://www.cskaoyan.com/",
+    checkedAt: "2026-06-02"
+  },
+  {
+    level: "备考经验参考",
+    title: "公共课名师方法共识",
+    claim: "数学强调基础概念、强化题型、真题限时和错题识别信号；英语强调单词不断档、真题阅读精读、定位句和干扰项复盘；政治通常后置启动选择题，考前再集中背诵和时政。本系统将其抽象为可调策略，不替代当年官方大纲。",
+    url: "https://yz.chsi.com.cn/kyzx/jybzc/",
+    checkedAt: "2026-06-02"
+  },
+  {
     level: "官方",
     title: "Supabase Auth / RLS",
     claim: "前端只使用 publishable key；用户数据表启用 RLS，并以 user_id = auth.uid() 作为访问边界。",
