@@ -65,11 +65,13 @@ import {
 const STORAGE_KEY = "pku_swm_420_dashboard_v3";
 const LEGACY_STORAGE_KEY = "pku_swm_420_dashboard_v1";
 const SCHEMA_VERSION = 3;
-const PLAN_LOGIC_VERSION = "3.3-start-2026-06-ramp";
-const APP_BUILD = "2026-06-02-human-controlled-rolling-review";
+const PLAN_LOGIC_VERSION = "3.4-start-2026-06-08-evidence";
+const APP_BUILD = "2026-06-08-420-evidence-workbench";
 const DEFAULT_EXAM_DATE = "2027-12-25";
 const DEFAULT_EXAM_DATE_STATUS = "推算排程日，非官方初试日期";
-const PLAN_START_DATE = "2026-06-01";
+const PLAN_START_DATE = "2026-06-08";
+const TARGET_TOTAL_HOURS = 2660;
+const SOURCE_CHECK_DATE = "2026-06-08";
 if ("scrollRestoration" in window.history) {
   window.history.scrollRestoration = "manual";
 }
@@ -160,15 +162,15 @@ function consumeResetRequest() {
 }
 
 const rampBudgets = [
-  { start: "2026-06-01", end: "2026-06-30", weekday: 90, weekend: 150, note: "上课期低强度启动" },
+  { start: PLAN_START_DATE, end: "2026-06-30", weekday: 90, weekend: 150, note: "6 月 8 日重启，先恢复连续记录和底线任务" },
   { start: "2026-07-01", end: "2026-07-31", weekday: 120, weekend: 210, note: "暑假前段稳步加量" },
   { start: "2026-08-01", end: "2026-08-31", weekday: 150, weekend: 240, note: "暑假后段稳定加量" },
-  { start: "2026-09-01", end: "2026-12-31", weekday: 300, weekend: 420, note: "9 月起第一轮主干加压" },
-  { start: "2027-01-01", end: "2027-02-28", weekday: 360, weekend: 480, note: "寒假第一轮收口" },
-  { start: "2027-03-01", end: "2027-06-30", weekday: 270, weekend: 390, note: "强化期稳定推进" },
-  { start: "2027-07-01", end: "2027-08-31", weekday: 420, weekend: 540, note: "第二暑假套卷期" },
-  { start: "2027-09-01", end: "2027-10-31", weekday: 300, weekend: 420, note: "报名与套卷期" },
-  { start: "2027-11-01", end: DEFAULT_EXAM_DATE, weekday: 300, weekend: 420, note: "考前收束期" }
+  { start: "2026-09-01", end: "2026-12-31", weekday: 270, weekend: 390, note: "9 月起第一轮主干加压" },
+  { start: "2027-01-01", end: "2027-02-28", weekday: 330, weekend: 450, note: "寒假第一轮收口" },
+  { start: "2027-03-01", end: "2027-06-30", weekday: 240, weekend: 360, note: "强化期稳定推进" },
+  { start: "2027-07-01", end: "2027-08-31", weekday: 360, weekend: 480, note: "第二暑假套卷期" },
+  { start: "2027-09-01", end: "2027-10-31", weekday: 270, weekend: 390, note: "报名与套卷期" },
+  { start: "2027-11-01", end: DEFAULT_EXAM_DATE, weekday: 240, weekend: 360, note: "考前收束期" }
 ];
 
 const resetApplied = consumeResetRequest();
@@ -187,10 +189,10 @@ const phases = [
   {
     id: "A",
     name: "启动期",
-    start: "2026-06-01",
+    start: PLAN_START_DATE,
     end: "2026-06-30",
     weeklyTarget: 12,
-    cumulativeTarget: 50,
+    cumulativeTarget: 40,
     quotas: { math: 5, cs408: 5, english: 2, politics: 0, project: 0 },
     focus: "上课期低强度启动，建立记录系统，高数预备、C 语言和英语单词不断档。",
     tasks: [
@@ -205,9 +207,9 @@ const phases = [
     name: "第一暑假奠基期",
     start: "2026-07-01",
     end: "2026-08-31",
-    weeklyTarget: 19,
-    cumulativeTarget: 340,
-    quotas: { math: 8, cs408: 8, english: 3, politics: 0, project: 0 },
+    weeklyTarget: 22,
+    cumulativeTarget: 230,
+    quotas: { math: 9, cs408: 9, english: 4, politics: 0, project: 0 },
     focus: "暑假逐步拉长学习时间，高数基础、数据结构第一轮和英语阅读精读同步推进。",
     tasks: [
       ["数学", "高数基础题与定义整理", 75],
@@ -221,9 +223,9 @@ const phases = [
     name: "第一轮主干期",
     start: "2026-09-01",
     end: "2026-12-31",
-    weeklyTarget: 38,
-    cumulativeTarget: 1000,
-    quotas: { math: 15, cs408: 16, english: 6, politics: 0, project: 1 },
+    weeklyTarget: 35,
+    cumulativeTarget: 830,
+    quotas: { math: 14, cs408: 15, english: 5, politics: 0, project: 1 },
     focus: "9 月起进入加压期，数学一第一轮主干、408 数据结构二轮、计组和 OS 启动。",
     tasks: [
       ["数学", "高数/线代/概率一轮推进 + 章节题", 110],
@@ -237,9 +239,9 @@ const phases = [
     name: "寒假收口期",
     start: "2027-01-01",
     end: "2027-02-28",
-    weeklyTarget: 48,
-    cumulativeTarget: 1350,
-    quotas: { math: 18, cs408: 20, english: 6, politics: 0, project: 4 },
+    weeklyTarget: 42,
+    cumulativeTarget: 1180,
+    quotas: { math: 16, cs408: 18, english: 5, politics: 0, project: 3 },
     focus: "数学一和 408 四门第一轮闭合，形成知识框架。",
     tasks: [
       ["数学", "概率闭合或三大模块框架复盘", 150],
@@ -253,9 +255,9 @@ const phases = [
     name: "强化期",
     start: "2027-03-01",
     end: "2027-06-30",
-    weeklyTarget: 32,
-    cumulativeTarget: 1850,
-    quotas: { math: 13, cs408: 13, english: 5, politics: 0, project: 1 },
+    weeklyTarget: 31,
+    cumulativeTarget: 1720,
+    quotas: { math: 12, cs408: 13, english: 5, politics: 0, project: 1 },
     focus: "强化题型、真题分章节、项目能运行。",
     tasks: [
       ["数学", "二轮强化题型 + 限时训练", 120],
@@ -269,9 +271,9 @@ const phases = [
     name: "第二暑假套卷期",
     start: "2027-07-01",
     end: "2027-08-31",
-    weeklyTarget: 50,
-    cumulativeTarget: 2250,
-    quotas: { math: 17, cs408: 19, english: 6, politics: 6, project: 2 },
+    weeklyTarget: 44,
+    cumulativeTarget: 2100,
+    quotas: { math: 15, cs408: 17, english: 5, politics: 5, project: 2 },
     focus: "真题套卷、全科成型，政治启动。",
     tasks: [
       ["数学", "真题套卷或专项补弱", 160],
@@ -285,9 +287,9 @@ const phases = [
     name: "报名与套卷期",
     start: "2027-09-01",
     end: "2027-10-31",
-    weeklyTarget: 32,
-    cumulativeTarget: 2500,
-    quotas: { math: 12, cs408: 12, english: 4, politics: 4, project: 0 },
+    weeklyTarget: 37,
+    cumulativeTarget: 2420,
+    quotas: { math: 13, cs408: 13, english: 4, politics: 7, project: 0 },
     focus: "核验招生信息，完成报名确认，近 5 套全科均分稳定在 405+ 区间。",
     tasks: [
       ["数学", "套卷限时 + 48 小时错题回炉", 120],
@@ -301,9 +303,9 @@ const phases = [
     name: "考前收束期",
     start: "2027-11-01",
     end: "2027-12-25",
-    weeklyTarget: 34,
-    cumulativeTarget: 2600,
-    quotas: { math: 11, cs408: 11, english: 5, politics: 7, project: 0 },
+    weeklyTarget: 31,
+    cumulativeTarget: TARGET_TOTAL_HOURS,
+    quotas: { math: 10, cs408: 10, english: 4, politics: 7, project: 0 },
     focus: "模拟、错题、背诵和手感维持，近 10 套均分稳定在 415+ 区间。",
     tasks: [
       ["数学", "模拟卷错题回炉 + 公式定理默写", 110],
@@ -315,25 +317,25 @@ const phases = [
 ];
 
 const monthlyPlan = [
-  ["2026-06", 50, 50, "函数、极限预备", "C 语言入门", "单词、长难句", "不测"],
-  ["2026-07", 90, 140, "极限、导数启动", "C 语言、线性表", "阅读入门", "不测"],
-  ["2026-08", 110, 250, "高数基础、线代预热", "数据结构第一轮", "阅读精读", "不测"],
-  ["2026-09", 160, 500, "高数推进", "数据结构二轮、计组", "阅读真题", "章节小测"],
-  ["2026-10", 170, 670, "线代推进", "计组", "阅读真题", "章节小测"],
-  ["2026-11", 165, 835, "概率启动", "计组、OS", "翻译小练", "章节小测"],
-  ["2026-12", 165, 1000, "第一轮收口", "OS 推进", "阅读复盘", "章节测"],
-  ["2027-01", 180, 1180, "概率闭合", "OS、计网", "阅读", "基础综合"],
-  ["2027-02", 170, 1350, "二轮启动", "四门闭合", "阅读", "数学90-105，408 85-100"],
-  ["2027-03", 120, 1470, "强化", "四门强化", "阅读二刷", "小综合"],
-  ["2027-04", 130, 1600, "强化", "专题强化", "翻译新题型", "小综合"],
-  ["2027-05", 125, 1725, "真题分章节", "真题分章节", "作文预热", "小综合"],
-  ["2027-06", 125, 1850, "强化验收", "强化验收", "英语70+", "全科约360"],
-  ["2027-07", 200, 2050, "真题套卷", "真题套卷", "政治启动", "全科375+"],
-  ["2027-08", 200, 2250, "套卷补弱", "套卷补弱", "政治选择题", "全科390+"],
-  ["2027-09", 125, 2375, "套卷", "套卷", "作文定稿、政治", "全科400+"],
-  ["2027-10", 125, 2500, "套卷稳定", "套卷稳定", "政治强化", "近 5 套 405+"],
-  ["2027-11", 100, 2600, "模拟错题", "模拟错题", "背诵", "近10套415+"],
-  ["2027-12", 60, 2660, "保持手感", "保持手感", "背诵收束", "目标420"]
+  ["2026-06", 40, 40, "函数、极限预备", "C 语言入门", "单词、长难句", "连续记录"],
+  ["2026-07", 90, 130, "极限、导数启动", "C 语言、线性表", "阅读入门", "不测"],
+  ["2026-08", 100, 230, "高数基础、线代预热", "数据结构第一轮", "阅读精读", "不测"],
+  ["2026-09", 150, 380, "高数推进", "数据结构二轮、计组", "阅读真题", "章节小测"],
+  ["2026-10", 150, 530, "线代推进", "计组", "阅读真题", "章节小测"],
+  ["2026-11", 150, 680, "概率启动", "计组、OS", "翻译小练", "章节小测"],
+  ["2026-12", 150, 830, "第一轮收口", "OS 推进", "阅读复盘", "章节测"],
+  ["2027-01", 180, 1010, "概率闭合", "OS、计网", "阅读", "基础综合"],
+  ["2027-02", 170, 1180, "二轮启动", "四门闭合", "阅读", "数学90-105，408 85-100"],
+  ["2027-03", 130, 1310, "强化", "四门强化", "阅读二刷", "小综合"],
+  ["2027-04", 135, 1445, "强化", "专题强化", "翻译新题型", "小综合"],
+  ["2027-05", 135, 1580, "真题分章节", "真题分章节", "作文预热", "小综合"],
+  ["2027-06", 140, 1720, "强化验收", "强化验收", "英语70+", "全科约360"],
+  ["2027-07", 190, 1910, "真题套卷", "真题套卷", "政治启动", "全科375+"],
+  ["2027-08", 190, 2100, "套卷补弱", "套卷补弱", "政治选择题", "全科390+"],
+  ["2027-09", 160, 2260, "套卷", "套卷", "作文定稿、政治", "全科400+"],
+  ["2027-10", 160, 2420, "套卷稳定", "套卷稳定", "政治强化", "近 5 套 405+"],
+  ["2027-11", 150, 2570, "模拟错题", "模拟错题", "背诵", "近10套415+"],
+  ["2027-12", 90, TARGET_TOTAL_HOURS, "保持手感", "保持手感", "背诵收束", "目标420"]
 ];
 
 const scoreTargets = [
@@ -343,11 +345,42 @@ const scoreTargets = [
   ["408", 135, "跨考最需要稳定的第二核心"]
 ];
 
+const liveFactChecks = [
+  {
+    label: "招生科目",
+    status: "已核验",
+    value: "101 / 201 / 301 / 408",
+    detail: "北大软微 2026 电子信息 01-04 方向统考科目一致；2028 入学当年仍需复核。",
+    source: "北京大学软件与微电子学院"
+  },
+  {
+    label: "历史复试线",
+    status: "历史参考",
+    value: "2026：378",
+    detail: "电子信息 01-04 方向政治 55、外语 55、业务课 90/90、总分 378；不作为未来预测。",
+    source: "北大软微复试通知"
+  },
+  {
+    label: "考试日期",
+    status: "待发布",
+    value: "2027-12-25 推算",
+    detail: "正式日期以教育部和研招网当年公告为准，系统会把该项保持为待复核。",
+    source: "教育部 / 研招网"
+  },
+  {
+    label: "学习方法",
+    status: "有研究依据",
+    value: "主动回忆 + 分散复盘",
+    detail: "计划只使用练习测试、提取练习、间隔复习等有证据支持的学习动作。",
+    source: "Dunlosky 2013 / Karpicke 2008"
+  }
+];
+
 const firstMonthActions = [
   {
     week: "第 1 周",
-    tasks: ["建立记录和备份", "确定数学主线资料", "确定 408 主线资料", "确定英语单词工具", "函数图像与常用初等函数", "C 语言变量、分支、循环", "英语每天单词"],
-    pass: "10-12h；连续记录 7 天；能写循环程序；数学预备题有错因记录。"
+    tasks: ["6 月 8 日重新建档", "确定数学主线资料", "确定 408 主线资料", "确定英语单词工具", "函数图像与常用初等函数", "C 语言变量、分支、循环", "英语每天单词"],
+    pass: "9-11h；连续记录 7 天；能写循环程序；数学预备题有错因记录。"
   },
   {
     week: "第 2 周",
@@ -362,7 +395,7 @@ const firstMonthActions = [
   {
     week: "第 4 周",
     tasks: ["导数定义预习", "链表概念预习", "英语阅读 2 篇", "6 月月度复盘"],
-    pass: "30 天 50h 左右；数学和 408 占比 60%+；写出 7-8 月暑假加量表。"
+    pass: "6 月 8 日起累计 40h 左右；数学和 408 占比 60%+；写出 7-8 月暑假加量表。"
   }
 ];
 
@@ -585,9 +618,9 @@ const foundationPlan = [
 ];
 
 const learningPath = [
-  { id: "start", name: "启动", range: "2026.06", goal: "低强度建立记录、补数学预备和 C 语言", deliverable: "连续记录 7 天，完成 50h 起步" },
-  { id: "base", name: "奠基", range: "2026.07-08", goal: "暑假逐步加长，高数基础、线代启动、数据结构第一轮", deliverable: "线性表/树/图能做基础题" },
-  { id: "map", name: "加压", range: "2026.09-12", goal: "9 月起提高强度，数学一和 408 主干过第一轮", deliverable: "数学一 70% 框架，408 至少两门" },
+  { id: "start", name: "启动", range: "2026.06.08-06.30", goal: "低强度建立记录、补数学预备和 C 语言", deliverable: "连续记录 7 天，完成 40h 起步" },
+  { id: "base", name: "奠基", range: "2026.07-08", goal: "暑假逐步加长，高数基础、线代启动、数据结构第一轮", deliverable: "累计 230h，线性表/树/图能做基础题" },
+  { id: "map", name: "加压", range: "2026.09-12", goal: "9 月起提高强度，数学一和 408 主干过第一轮", deliverable: "累计 830h，数学一 70% 框架，408 至少两门" },
   { id: "close", name: "收口", range: "2027.01-02", goal: "四门 408 和数学一第一轮收口", deliverable: "数学 90+，408 85+" },
   { id: "strength", name: "强化", range: "2027.03-06", goal: "题型化、真题分章节、项目可运行", deliverable: "数学 110，408 105" },
   { id: "battle", name: "套卷", range: "2027.07-08", goal: "真题套卷和政治启动", deliverable: "全科 390+" },
@@ -642,7 +675,7 @@ const highStandards = [
 ];
 
 const systemRules = [
-  ["01", "渐进加量", "2026 年 6 月低强度启动；7-8 月逐步加长；9 月起提高到第一轮主干强度。"],
+  ["01", "渐进加量", "2026 年 6 月 8 日低强度重启；7-8 月逐步加长；9 月起提高到第一轮主干强度。"],
   ["02", "核心优先", "数学一和 408 优先分配时间，周核心占比低于 65% 就预警。"],
   ["03", "未完成顺延", "昨天没有完成的任务进入今天，同时压缩新增内容，避免补偿式超载。"],
   ["04", "先交付再加量", "每个任务必须有题量、错因、图示或代码交付，只看视频不算真正完成。"],
@@ -1932,7 +1965,13 @@ function bindNetworkStatus() {
 function upgradeGeneratedPlans() {
   if (state.settings.planLogicVersion === PLAN_LOGIC_VERSION) return;
   Object.entries(state.weekPlans || {}).forEach(([date, tasks]) => {
-    state.weekPlans[date] = (tasks || []).filter((task) => task.status === "shifted" || task.locked || isTaskDone(task, state.tasks));
+    state.weekPlans[date] = (tasks || []).filter((task) => {
+      if (date < PLAN_START_DATE) return task.locked || isTaskDone(task, state.tasks);
+      return task.status === "shifted" || task.locked || isTaskDone(task, state.tasks);
+    });
+  });
+  Object.keys(state.weekPlans || {}).forEach((date) => {
+    if (date < PLAN_START_DATE && !(state.weekPlans[date] || []).length) delete state.weekPlans[date];
   });
   if (!state.settings.rampSettingsApplied) {
     state.settings.weekdayMinutes = defaultSettings.weekdayMinutes;
@@ -2097,7 +2136,7 @@ function renderDashboard() {
   document.getElementById("coreRatioMetric").textContent = `${weekMinutes ? Math.round(coreMinutes / weekMinutes * 100) : 0}%`;
   document.getElementById("monthProgressMetric").textContent = `${Math.round(monthProgress)}%`;
   document.getElementById("monthProgressText").textContent = `本月目标 ${monthTarget}h`;
-  document.getElementById("totalProgressText").textContent = `目标 2600h，当前 ${(totalMinutes / 60 / 2600 * 100).toFixed(1)}%`;
+  document.getElementById("totalProgressText").textContent = `目标 ${TARGET_TOTAL_HOURS}h，当前 ${(totalMinutes / 60 / TARGET_TOTAL_HOURS * 100).toFixed(1)}%`;
   document.getElementById("weekTargetText").textContent = `本阶段周目标 ${phase.weeklyTarget}h`;
   document.getElementById("currentPhaseBadge").textContent = `阶段 ${phase.id} · ${phase.name}`;
   setText("examDateStatus", dateStatus);
@@ -2129,6 +2168,7 @@ function renderDashboard() {
   renderWorkflowRail();
   renderStorageStatus();
   renderStrategyBoard({ phase, week, weekMinutes, coreMinutes });
+  renderLiveFactChecks();
 }
 
 function renderRisk(week, phase) {
@@ -2217,6 +2257,29 @@ function renderStrategyBoard({ phase, week, weekMinutes, coreMinutes }) {
   }
 }
 
+function renderLiveFactChecks() {
+  const container = document.getElementById("liveFactGrid");
+  if (!container) return;
+  container.innerHTML = liveFactChecks.map((item) => `
+    <article class="fact-check-card ${factStatusClass(item.status)}">
+      <div>
+        <span>${escapeHtml(item.label)}</span>
+        <em>${escapeHtml(item.status)}</em>
+      </div>
+      <strong>${escapeHtml(item.value)}</strong>
+      <p>${escapeHtml(item.detail)}</p>
+      <small>${escapeHtml(item.source)} · ${SOURCE_CHECK_DATE}</small>
+    </article>
+  `).join("");
+}
+
+function factStatusClass(status) {
+  if (status.includes("待")) return "pending";
+  if (status.includes("历史")) return "history";
+  if (status.includes("研究")) return "method";
+  return "verified";
+}
+
 function planIntensityLabel(value) {
   return ({ bottomline: "底线", normal: "正常", strong: "加强" })[value] || "正常";
 }
@@ -2292,7 +2355,7 @@ function examDateStatusText() {
 }
 
 function officialBasisText() {
-  return "科目以北大软微 2026 已发布信息为备考基准；2027 年 12 月为推算窗口，官方日期待发布。";
+  return `资料核验 ${SOURCE_CHECK_DATE}：科目以北大软微 2026 已发布信息为备考基准；2027 年 12 月仍为推算窗口，官方日期待发布。`;
 }
 
 function renderWorkflowRail() {
@@ -2520,9 +2583,9 @@ function renderVisualBoard(data) {
 function renderRingGrid({ phase, weekMinutes, coreMinutes, totalMinutes, monthProgress }) {
   const weekPercent = phase.weeklyTarget ? weekMinutes / 60 / phase.weeklyTarget * 100 : 0;
   const corePercent = weekMinutes ? coreMinutes / weekMinutes * 100 : 0;
-  const totalPercent = totalMinutes / 60 / 2600 * 100;
+  const totalPercent = totalMinutes / 60 / TARGET_TOTAL_HOURS * 100;
   const rings = [
-    ["总量", totalPercent, `${(totalMinutes / 60).toFixed(0)}h`, "2600h"],
+    ["总量", totalPercent, `${(totalMinutes / 60).toFixed(0)}h`, `${TARGET_TOTAL_HOURS}h`],
     ["本月", monthProgress, `${Math.round(monthProgress)}%`, "月目标"],
     ["本周", weekPercent, `${(weekMinutes / 60).toFixed(1)}h`, `${phase.weeklyTarget}h`],
     ["核心", corePercent, `${Math.round(corePercent)}%`, "65%+"]
@@ -4621,7 +4684,7 @@ function renderSettings() {
   setText("storageHealthText", storageAvailable ? "本机缓存正常" : "本机缓存不可用，建议检查浏览器隐私/存储权限");
 
   document.getElementById("standardsList").innerHTML = [
-    ["渐进时长", "2026 年 6 月从工作日 90m、周末 150m 起步；7 月约 120/210m，8 月约 150/240m；9 月起进入第一轮主干强度。"],
+    ["渐进时长", "2026 年 6 月 8 日从工作日 90m、周末 150m 重启；7 月约 120/210m，8 月约 150/240m；9 月起进入第一轮主干强度。"],
     ...highStandards
   ].map(([subject, standard]) => `
     <div class="standard-item">

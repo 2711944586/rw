@@ -8597,3 +8597,181 @@ body {
 }
 
 /* ═══════════════ End of styles.css ═══════════════ */
+
+/* 2026-06-08 evidence workbench upgrade */
+.fact-check-strip {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #dfe6ee;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.live-fact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fact-check-card {
+  display: grid;
+  gap: 8px;
+  min-height: 168px;
+  padding: 14px;
+  border: 1px solid #e4e9f0;
+  border-radius: 8px;
+  background: #f9fbfc;
+}
+
+.fact-check-card > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fact-check-card span,
+.fact-check-card small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.fact-check-card em {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #e8f4ef;
+  color: #12614f;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.fact-check-card.history em {
+  background: #fff3d6;
+  color: #8a5a00;
+}
+
+.fact-check-card.pending em {
+  background: #eaf0f8;
+  color: #475569;
+}
+
+.fact-check-card.method em {
+  background: #e9f3ff;
+  color: #1f5f9f;
+}
+
+.fact-check-card strong {
+  color: #14213d;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.fact-check-card p {
+  color: #435266;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.command-panel,
+.focus-board,
+.fact-check-strip,
+.target-lane,
+.strategy-board {
+  margin-bottom: 14px;
+}
+
+.today-plan-panel {
+  border-color: #ccd8e5;
+}
+
+.daily-progress {
+  position: sticky;
+  top: 76px;
+  z-index: 2;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #d9e3ee;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
+}
+
+.plan-card {
+  align-items: start;
+}
+
+.plan-meta-line,
+.flow-steps {
+  flex-wrap: wrap;
+}
+
+.plan-output {
+  border-color: #dce8e4;
+  background: #f4fbf8;
+  color: #225144;
+}
+
+.task-flow-card {
+  min-height: 126px;
+}
+
+.entry-form label {
+  min-width: 0;
+}
+
+.entry-form input {
+  width: 100%;
+}
+
+@media (max-width: 1180px) {
+  .live-fact-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .fact-check-strip {
+    padding: 12px;
+  }
+
+  .live-fact-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fact-check-card {
+    min-height: auto;
+  }
+
+  .daily-progress {
+    top: 8px;
+  }
+
+  .today-workbench {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 520px) {
+  .fact-check-card {
+    padding: 12px;
+  }
+
+  .fact-check-card > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .fact-check-card strong {
+    font-size: 16px;
+  }
+
+  .daily-progress-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
