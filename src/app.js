@@ -65,8 +65,8 @@ import {
 const STORAGE_KEY = "pku_swm_420_dashboard_v3";
 const LEGACY_STORAGE_KEY = "pku_swm_420_dashboard_v1";
 const SCHEMA_VERSION = 3;
-const PLAN_LOGIC_VERSION = "3.4-start-2026-06-08-evidence";
-const APP_BUILD = "2026-06-08-420-evidence-workbench";
+const PLAN_LOGIC_VERSION = "3.5-science-drip-syllabus-2026-06-08";
+const APP_BUILD = "2026-06-08-420-science-drip-syllabus";
 const DEFAULT_EXAM_DATE = "2027-12-25";
 const DEFAULT_EXAM_DATE_STATUS = "推算排程日，非官方初试日期";
 const PLAN_START_DATE = "2026-06-08";
@@ -427,68 +427,70 @@ const syllabusGroupTypeMeta = {
 
 const syllabusGroupTypes = {
   "math/高数预备": "prerequisite",
-  "cs408/C 与算法预备": "prerequisite"
+  "cs408/C 与算法预备": "prerequisite",
+  "english/每日微积累": "supplement"
 };
 
 const syllabus = {
   math: {
     title: "数学一",
     groups: [
-      ["高数预备", ["函数性质与图像", "常用初等函数", "三角恒等变换", "不等式与绝对值", "数列基础", "常用代数变形"]],
-      ["极限与连续", ["数列极限", "函数极限", "无穷小与无穷大", "等价无穷小", "洛必达法则", "泰勒公式初步", "函数连续性", "间断点分类"]],
-      ["一元微分学", ["导数定义", "求导法则", "高阶导数", "隐函数求导", "参数方程求导", "微分", "单调性", "极值与最值", "凹凸性与拐点", "渐近线"]],
-      ["中值定理", ["罗尔定理", "拉格朗日中值定理", "柯西中值定理", "泰勒中值定理", "证明题常见构造"]],
-      ["一元积分学", ["原函数与不定积分", "换元积分", "分部积分", "有理函数积分", "定积分定义", "定积分性质", "变限积分", "反常积分", "定积分应用"]],
-      ["多元微分学", ["多元函数极限与连续", "偏导数", "全微分", "复合函数求导", "隐函数求导", "方向导数与梯度", "多元极值", "条件极值"]],
-      ["重积分", ["二重积分概念", "直角坐标计算", "极坐标计算", "交换积分次序", "三重积分概念", "柱坐标与球坐标", "重积分应用"]],
-      ["曲线曲面积分", ["第一类曲线积分", "第二类曲线积分", "格林公式", "第一类曲面积分", "第二类曲面积分", "高斯公式", "斯托克斯公式"]],
-      ["级数", ["常数项级数", "正项级数判别", "交错级数", "绝对收敛与条件收敛", "幂级数", "函数展开为幂级数", "傅里叶级数基础"]],
-      ["微分方程", ["一阶微分方程", "可降阶高阶方程", "二阶常系数线性方程", "差分方程基础", "微分方程应用"]],
-      ["线性代数", ["行列式计算", "矩阵运算", "逆矩阵", "矩阵秩", "向量组线性相关", "极大无关组", "线性方程组", "特征值与特征向量", "相似对角化", "实对称矩阵", "二次型", "正定矩阵"]],
-      ["概率统计", ["随机事件", "古典概型", "条件概率", "全概率与贝叶斯", "随机变量及分布", "常见离散分布", "常见连续分布", "二维随机变量", "边缘分布", "条件分布", "独立性", "期望", "方差", "协方差与相关系数", "大数定律", "中心极限定理", "样本与统计量", "参数估计"]]
+      ["高数预备", ["函数性质与图像", "定义域与值域", "反函数与复合函数", "常用初等函数", "三角恒等变换", "不等式与绝对值", "数列基础", "常用代数变形", "极坐标与参数表达预备"]],
+      ["极限与连续", ["数列极限", "函数极限", "左右极限", "极限四则运算", "无穷小与无穷大", "等价无穷小", "夹逼准则", "单调有界准则", "洛必达法则", "泰勒公式初步", "函数连续性", "间断点分类", "闭区间连续函数性质"]],
+      ["一元微分学", ["导数定义", "可导与连续关系", "求导法则", "复合函数求导", "反函数求导", "高阶导数", "隐函数求导", "参数方程求导", "微分", "单调性", "极值与最值", "凹凸性与拐点", "渐近线", "曲率基础", "导数应用-方程根"]],
+      ["中值定理", ["费马引理", "罗尔定理", "拉格朗日中值定理", "柯西中值定理", "泰勒中值定理", "不等式证明", "零点与根的个数证明", "证明题常见构造"]],
+      ["一元积分学", ["原函数与不定积分", "第一类换元积分", "第二类换元积分", "分部积分", "有理函数积分", "定积分定义", "定积分性质", "定积分换元", "定积分分部", "积分上限函数", "变限积分", "反常积分", "面积体积弧长", "定积分应用"]],
+      ["多元微分学", ["多元函数极限与连续", "偏导数", "高阶偏导数", "全微分", "多元复合函数链式法则", "隐函数求导", "方向导数与梯度", "二元泰勒公式基础", "多元极值", "条件极值", "拉格朗日乘子法"]],
+      ["重积分", ["二重积分概念", "积分区域画图", "直角坐标计算", "极坐标计算", "对称性与奇偶性", "交换积分次序", "三重积分概念", "柱坐标与球坐标", "积分区域分解", "重积分应用"]],
+      ["曲线曲面积分", ["第一类曲线积分", "第二类曲线积分", "曲线方向与参数化", "格林公式", "平面曲线积分与路径无关", "第一类曲面积分", "第二类曲面积分", "曲面方向与法向量", "高斯公式", "斯托克斯公式", "通量与环流"]],
+      ["级数", ["常数项级数", "正项级数比较判别", "比值与根值判别", "交错级数", "绝对收敛与条件收敛", "幂级数", "收敛半径与收敛域", "逐项求导与积分", "函数展开为幂级数", "傅里叶级数基础"]],
+      ["微分方程", ["可分离变量方程", "一阶线性方程", "齐次方程", "伯努利方程", "可降阶高阶方程", "二阶常系数线性方程", "非齐次特解设定", "差分方程基础", "微分方程应用"]],
+      ["线性代数", ["行列式性质", "行列式计算", "矩阵运算", "初等变换", "逆矩阵", "分块矩阵", "矩阵秩", "向量组线性相关", "极大无关组", "向量空间与基", "线性方程组", "齐次方程组解结构", "非齐次方程组解结构", "特征值与特征向量", "相似对角化", "实对称矩阵", "二次型", "正定矩阵"]],
+      ["概率统计", ["随机事件", "古典概型", "几何概型", "条件概率", "全概率与贝叶斯", "随机变量及分布", "分布函数", "常见离散分布", "常见连续分布", "二维随机变量", "联合分布", "边缘分布", "条件分布", "独立性", "随机变量函数分布", "期望", "方差", "协方差与相关系数", "大数定律", "中心极限定理", "样本与统计量", "抽样分布", "矩估计", "最大似然估计"]]
     ]
   },
   cs408: {
     title: "408",
     groups: [
-      ["C 与算法预备", ["变量与表达式", "条件与循环", "数组", "函数", "指针", "结构体", "递归", "复杂度分析", "伪代码书写"]],
-      ["数据结构-线性结构", ["顺序表", "单链表", "双链表", "栈", "队列", "循环队列", "串的基本概念", "KMP 思想"]],
-      ["数据结构-树", ["树的基本概念", "二叉树性质", "二叉树遍历", "线索二叉树", "树与森林", "哈夫曼树", "二叉排序树", "平衡二叉树", "B 树与 B+ 树"]],
-      ["数据结构-图", ["图的存储", "DFS", "BFS", "最小生成树", "最短路径", "拓扑排序", "关键路径"]],
-      ["数据结构-查找排序", ["顺序查找", "折半查找", "散列表", "插入排序", "交换排序", "选择排序", "归并排序", "基数排序", "外部排序基础"]],
-      ["计组-数据表示", ["进制转换", "定点数表示", "补码运算", "浮点数表示", "IEEE754", "校验码"]],
-      ["计组-运算与指令", ["ALU", "加减运算", "乘除运算", "指令格式", "寻址方式", "CISC 与 RISC"]],
-      ["计组-CPU", ["CPU 基本结构", "指令执行过程", "数据通路", "控制器", "硬布线控制", "微程序控制", "流水线性能", "流水线冒险"]],
-      ["计组-存储与 I/O", ["存储层次", "主存组织", "Cache 映射", "Cache 替换", "虚拟存储器", "总线", "程序查询 I/O", "中断 I/O", "DMA"]],
-      ["OS-进程线程", ["进程概念", "进程状态转换", "进程控制", "线程", "处理机调度", "调度算法"]],
-      ["OS-同步死锁", ["临界区", "信号量", "管程", "经典同步问题", "死锁条件", "死锁预防", "死锁避免", "银行家算法", "死锁检测解除"]],
-      ["OS-内存文件 I/O", ["连续分配", "分页管理", "分段管理", "段页式", "虚拟内存", "页面置换", "文件逻辑结构", "目录结构", "磁盘调度", "设备管理"]],
-      ["计网-基础与链路", ["分层体系结构", "性能指标", "物理层基础", "编码与调制", "传输介质", "差错控制", "流量控制", "可靠传输", "以太网", "交换机"]],
-      ["计网-网络层", ["IP 地址", "子网划分", "CIDR", "ARP", "DHCP", "ICMP", "路由选择", "RIP", "OSPF", "BGP", "IPv6"]],
-      ["计网-传输与应用", ["UDP", "TCP 报文段", "三次握手", "四次挥手", "可靠传输", "滑动窗口", "流量控制", "拥塞控制", "DNS", "HTTP", "电子邮件", "FTP"]]
+      ["C 与算法预备", ["变量与表达式", "条件与循环", "数组", "字符串", "函数", "指针", "指针与数组", "结构体", "递归", "复杂度分析", "伪代码书写", "边界条件与测试样例"]],
+      ["数据结构-线性结构", ["顺序表", "单链表", "双链表", "静态链表", "栈", "队列", "循环队列", "串的基本概念", "模式匹配朴素算法", "KMP 思想", "数组与特殊矩阵"]],
+      ["数据结构-树", ["树的基本概念", "二叉树性质", "二叉树存储", "二叉树遍历", "遍历序列还原", "线索二叉树", "树与森林", "哈夫曼树", "二叉排序树", "平衡二叉树", "B 树与 B+ 树", "红黑树概念"]],
+      ["数据结构-图", ["图的存储", "邻接矩阵", "邻接表", "DFS", "BFS", "连通性", "最小生成树", "最短路径", "拓扑排序", "关键路径", "图算法复杂度"]],
+      ["数据结构-查找排序", ["顺序查找", "折半查找", "分块查找", "散列表", "哈希冲突处理", "插入排序", "交换排序", "选择排序", "归并排序", "基数排序", "排序稳定性", "外部排序基础"]],
+      ["计组-数据表示", ["进制转换", "定点数表示", "原码反码补码", "补码运算", "溢出判断", "移位运算", "浮点数表示", "IEEE754", "校验码", "海明码"]],
+      ["计组-运算与指令", ["ALU", "加减运算", "乘除运算", "指令格式", "寻址方式", "指令类型", "CISC 与 RISC", "汇编与机器指令关系"]],
+      ["计组-CPU", ["CPU 基本结构", "指令执行过程", "数据通路", "控制器", "硬布线控制", "微程序控制", "单周期与多周期", "流水线性能", "流水线冒险", "中断与异常"]],
+      ["计组-存储与 I/O", ["存储层次", "主存组织", "存储芯片扩展", "Cache 映射", "Cache 替换", "Cache 写策略", "虚拟存储器", "TLB", "总线", "程序查询 I/O", "中断 I/O", "DMA"]],
+      ["OS-进程线程", ["进程概念", "进程状态转换", "进程控制", "线程", "处理机调度", "调度算法", "周转时间与响应时间", "上下文切换"]],
+      ["OS-同步死锁", ["临界区", "互斥与同步", "信号量", "管程", "生产者消费者", "读者写者", "哲学家进餐", "死锁条件", "死锁预防", "死锁避免", "银行家算法", "死锁检测解除"]],
+      ["OS-内存文件 I/O", ["连续分配", "分页管理", "分段管理", "段页式", "虚拟内存", "页面置换", "工作集与抖动", "文件逻辑结构", "文件物理结构", "目录结构", "磁盘调度", "设备管理", "SPOOLing"]],
+      ["计网-基础与链路", ["分层体系结构", "性能指标", "物理层基础", "编码与调制", "传输介质", "差错控制", "流量控制", "可靠传输", "介质访问控制", "以太网", "交换机", "VLAN"]],
+      ["计网-网络层", ["IP 地址", "子网划分", "CIDR", "ARP", "DHCP", "ICMP", "路由选择", "最长前缀匹配", "RIP", "OSPF", "BGP", "IPv6", "NAT"]],
+      ["计网-传输与应用", ["UDP", "TCP 报文段", "三次握手", "四次挥手", "可靠传输", "滑动窗口", "流量控制", "拥塞控制", "DNS", "HTTP", "HTTPS 基础", "电子邮件", "FTP"]]
     ]
   },
   english: {
     title: "英语一",
     groups: [
-      ["词汇", ["高频核心词", "熟词僻义", "词根词缀", "真题生词本", "固定搭配", "同义替换"]],
-      ["语法长难句", ["句子成分", "从句识别", "非谓语结构", "插入语", "倒装与强调", "长句切分", "翻译顺序"]],
-      ["阅读理解", ["定位句识别", "主旨题", "细节题", "推断题", "态度题", "例证题", "词义题", "选项干扰类型"]],
-      ["新题型", ["段落排序", "小标题匹配", "句子填空", "上下文衔接", "逻辑连接词"]],
-      ["翻译", ["定语从句翻译", "状语从句翻译", "被动语态", "代词指代", "汉语语序重组"]],
-      ["完形填空", ["逻辑关系", "词义辨析", "固定搭配", "上下文复现"]],
-      ["作文", ["小作文格式", "通知/建议信/道歉信", "图画作文", "观点展开", "模板默写", "限时写作", "语料纠错"]]
+      ["每日微积累", ["新词 20 个", "复习词 60 个", "错词回收", "一组长难句", "一句英译汉", "阅读手感保持", "作文语料复现"]],
+      ["词汇", ["高频核心词", "熟词僻义", "词根词缀", "真题生词本", "固定搭配", "同义替换", "情感态度词", "抽象名词", "动词短语"]],
+      ["语法长难句", ["句子成分", "主谓宾补识别", "从句识别", "名词性从句", "定语从句", "状语从句", "非谓语结构", "插入语", "倒装与强调", "比较结构", "并列与省略", "长句切分", "翻译顺序"]],
+      ["阅读理解", ["定位句识别", "题干关键词", "主旨题", "细节题", "推断题", "态度题", "例证题", "词义题", "篇章结构题", "选项干扰类型", "同义替换记录", "错题二刷"]],
+      ["新题型", ["段落排序", "小标题匹配", "句子填空", "上下文衔接", "代词指代", "逻辑连接词", "段落功能判断"]],
+      ["翻译", ["定语从句翻译", "状语从句翻译", "名词性从句翻译", "被动语态", "代词指代", "并列结构处理", "汉语语序重组", "术语与抽象词处理"]],
+      ["完形填空", ["逻辑关系", "词义辨析", "固定搭配", "上下文复现", "代词指代", "句间衔接"]],
+      ["作文", ["小作文格式", "通知/建议信/道歉信", "图表与图画描述", "图画作文", "观点展开", "原因结果让步", "模板默写", "限时写作", "语料纠错", "低级错误清单"]]
     ]
   },
   politics: {
     title: "政治",
     groups: [
-      ["马原", ["哲学基本问题", "唯物论", "辩证法", "认识论", "唯物史观", "政治经济学", "科学社会主义"]],
-      ["毛中特", ["毛泽东思想", "新民主主义革命", "社会主义改造", "中特理论体系", "新时代思想", "高质量发展", "现代化建设"]],
-      ["史纲", ["旧民主主义革命", "新民主主义革命", "社会主义革命", "改革开放史", "重要会议", "历史人物与事件"]],
-      ["思修法基", ["人生观", "理想信念", "中国精神", "社会主义核心价值观", "道德规范", "法治思想", "宪法法律基础"]],
-      ["当代与时政", ["国际格局", "大国关系", "中国外交", "年度会议", "重要讲话", "热点专题"]],
-      ["主观题", ["原理表达", "材料定位", "关键词默写", "当年版预测题背诵", "时政整合", "答题层次"]]
+      ["马原", ["哲学基本问题", "唯物论", "辩证法", "矛盾分析法", "认识论", "真理与价值", "唯物史观", "政治经济学", "剩余价值理论", "科学社会主义"]],
+      ["毛中特", ["毛泽东思想", "新民主主义革命", "社会主义改造", "社会主义建设初步探索", "中特理论体系", "新时代思想", "高质量发展", "现代化建设", "全面深化改革", "中国式现代化"]],
+      ["史纲", ["旧民主主义革命", "新民主主义革命", "社会主义革命", "社会主义建设", "改革开放史", "新时代历史成就", "重要会议", "历史人物与事件", "历史结论辨析"]],
+      ["思修法基", ["人生观", "理想信念", "中国精神", "社会主义核心价值观", "道德规范", "法治思想", "宪法法律基础", "权利义务", "时代新人"]],
+      ["当代与时政", ["国际格局", "大国关系", "中国外交", "全球治理", "年度会议", "重要讲话", "热点专题", "官方表述更新"]],
+      ["主观题", ["原理表达", "材料定位", "关键词默写", "当年版预测题背诵", "时政整合", "答题层次", "规范书写"]]
     ]
   }
 };
@@ -669,7 +671,7 @@ const subjectMethods = {
 const highStandards = [
   ["数学", "定义能复述，公式能默写，基础题正确率 80%+，错题必须写识别信号。"],
   ["408", "概念能画图，算法能写伪代码，大题能写步骤，所有错题归到四门知识点。"],
-  ["英语", "单词不断，阅读必须精读，错题要定位到词汇、句法、定位或逻辑。"],
+  ["英语", "每天 20 分钟不断档；单词在真题语境里复现，阅读错题定位到词汇、句法、定位、逻辑或干扰项。"],
   ["政治", "选择题错题二刷，主观题后期能默写关键词，不挤占数学和 408。"],
   ["复盘", "按 D+1/D+3/D+7/D+14/D+30 回炉，每次记录具体错因。"]
 ];
@@ -682,7 +684,8 @@ const systemRules = [
   ["05", "错题进复盘", "勾选完成后自动安排 D+1 / D+3 / D+7 / D+14 / D+30。"],
   ["06", "日审周审月审", "每天收口到明天第一任务；每周看核心占比、回炉率和活跃天数；每月只调总量和弱项，不重写大计划。"],
   ["07", "统计看趋势", "单日波动不判好坏，至少看 7 天有效小时、14 天趋势、错题回炉率和考纲证据。"],
-  ["08", "学习曲线", "投入量按阶段爬坡；连续低完成时降到底线日，连续稳定后再增加难度或题量。"]
+  ["08", "学习曲线", "投入量按阶段爬坡；连续低完成时降到底线日，连续稳定后再增加难度或题量。"],
+  ["09", "英语不断档", "英语用小剂量高频复现，不用单日硬补；任何计划日都至少保留词汇、句法或定位句证据。"]
 ];
 
 const methodEvidence = [
@@ -711,6 +714,7 @@ const auditCadenceRules = [
 const studyMetricRules = [
   ["有效小时", "只统计做题、复盘、默写、精读、代码或产出整理；纯播放视频不单独算有效学习。"],
   ["核心占比", "数学一 + 408 是主线，2026 年 9 月后周占比低于 65% 就减少非核心内容。"],
+  ["英语微积累", "每天至少 20 分钟，优先单词复现、长难句切分和阅读定位；再忙也不断档。"],
   ["回炉率", "固定错题数 / 新增错题数；低于 70% 说明复盘债务在扩大。"],
   ["掌握证据", "考纲条目标已掌握前，至少要有题量、正确率、错因或可解释产出。"],
   ["趋势窗口", "7 天看执行，14 天看学习曲线，30 天才调整阶段计划。"]
@@ -719,7 +723,8 @@ const studyMetricRules = [
 const reviewOutcomeRules = [
   ["通过", "闭卷能做、能讲清错因、能挂回考点；保持原复盘间隔。"],
   ["失败", "不会第一步、同类错因重复或看答案才懂；生成 D+1 短复盘。"],
-  ["延期", "当天负荷过高时只允许 +1 或 +3 天；延期超过 2 次视作未掌握。"]
+  ["延期", "当天负荷过高时只允许 +1 或 +3 天；延期超过 2 次视作未掌握。"],
+  ["复盘减量", "到期复盘超过 3 项时，新内容上限自动收紧，先保护主动回忆质量。"]
 ];
 
 const subjectAcceptanceRules = {
@@ -735,8 +740,8 @@ const subjectAcceptanceRules = {
   },
   "英语": {
     minimum: "单词不断档，完成 20 分钟词句或 1 组长难句。",
-    standard: "阅读或长难句限时完成后精读，记录生词、定位句和错选项原因。",
-    high: "能复述段落结构，并把错题归为词汇、句法、定位或逻辑。"
+    standard: "新词、复习词、错词和定位句都有记录；阅读或长难句限时后再精读。",
+    high: "能复述段落结构，并把错题归为词汇、句法、定位、逻辑或干扰项类型。"
   },
   "政治": {
     minimum: "20 分钟框架或选择题，不挤占数学和 408。",
@@ -778,9 +783,9 @@ const taskBlueprints = {
     metric: "题量/图示"
   },
   "英语": {
-    output: "交付：单词复习 + 1 组长难句或阅读定位句 + 错选项原因。",
-    steps: ["先背词", "限时阅读或长难句", "精读定位句和错选项"],
-    metric: "篇数/词句"
+    output: "交付：新词 20 个 + 复习词 60 个 + 1 组长难句或阅读定位句 + 错选项原因。",
+    steps: ["先复现单词", "限时阅读或长难句", "精读定位句和错选项"],
+    metric: "词句/篇数"
   },
   "政治": {
     output: "交付：选择题错题归类，后期主观题关键词能默写。",
@@ -1657,6 +1662,9 @@ function bindSyllabusTabs() {
       renderSyllabus(button.dataset.syllabus);
     });
   });
+  document.getElementById("syllabusSearch")?.addEventListener("input", () => {
+    renderSyllabus(document.querySelector(".seg.active")?.dataset.syllabus || "math");
+  });
 }
 
 function bindImportExport() {
@@ -2522,8 +2530,8 @@ function renderSystemRules() {
   const budget = dailyBudgetMinutes();
   const rules = [
     ...systemRules,
-    ["09", "今日预算自动校准", `当前设置下今日预算 ${budget} 分钟，任务生成会围绕 ${state.settings.taskCount} 项和 ${state.settings.coreRatio}% 核心占比收敛。`],
-    ["10", "学习科学口径", "主动回忆、分散复盘、交错练习和可完成负荷只是提高执行质量的方法，不代表分数或录取承诺。"]
+    ["10", "今日预算自动校准", `当前设置下今日预算 ${budget} 分钟，任务生成会围绕 ${state.settings.taskCount} 项和 ${state.settings.coreRatio}% 核心占比收敛。`],
+    ["11", "学习科学口径", "主动回忆、分散复盘、交错练习和可完成负荷只是提高执行质量的方法，不代表分数或录取承诺。"]
   ];
   container.innerHTML = rules.map(([num, title, text]) => `
     <article class="rule-item">
@@ -2751,6 +2759,8 @@ function renderTasks(force = false, date = planTodayISO()) {
   document.getElementById("todayTasksPreview").innerHTML = compactHtml;
   document.getElementById("dailyPlan").innerHTML = renderPlanCards(tasks);
   renderDailyTaskProgress(tasks);
+  renderScienceProtocol(tasks, date);
+  renderEnglishDrip(tasks, date);
   const taskFlow = document.getElementById("taskFlow");
   if (taskFlow) taskFlow.innerHTML = renderTaskFlow(tasks);
   const carryCount = tasks.filter((task) => task.source === "carryover").length;
@@ -2849,6 +2859,8 @@ function renderWeekPlanner() {
     const total = visibleTasks.reduce((sum, task) => sum + (task.minutes || 0), 0);
     const percent = visibleTasks.length ? Math.round(done / visibleTasks.length * 100) : 0;
     const subjects = [...new Set(visibleTasks.map((task) => task.subject))];
+    const hasEnglish = visibleTasks.some((task) => task.subject === "英语");
+    const dueReviewCount = dueReviewItems(date).length;
     const isToday = date === planTodayISO();
     const shortDate = date.slice(5).replace("-", "/");
     return `
@@ -2867,6 +2879,10 @@ function renderWeekPlanner() {
         </div>
         <div class="week-subject-row" aria-label="当日科目">
           ${subjects.length ? subjects.map((subject) => `<span>${escapeHtml(subject)}</span>`).join("") : "<span>休整</span>"}
+        </div>
+        <div class="week-signal-row">
+          <span class="${hasEnglish ? "ok" : "warn"}">英语${hasEnglish ? "不断" : "待补"}</span>
+          <span class="${dueReviewCount ? "warn" : "ok"}">复盘 ${dueReviewCount}</span>
         </div>
         <div class="week-day-progress">
           <div style="width:${percent}%"></div>
@@ -3088,8 +3104,10 @@ function createDailyTasks(date = planTodayISO()) {
   const topicPolitics = phase.quotas.politics ? topicForDate("politics", date) : null;
   const budget = dailyBudgetMinutes(date);
   const targetCount = targetTaskCountForDate(date);
-  const reviewCapacity = Math.max(1, Math.floor(Math.max(controls.reviewLoad, budget * 0.25) / controls.reviewLoad));
-  const tasks = dueReviewTasks(date).slice(0, reviewCapacity).map((task) => ({
+  const dueItems = dueReviewItems(date);
+  const reviewPressure = dueItems.length;
+  const reviewCapacity = Math.max(1, Math.min(1, reviewPressure || 1, Math.floor(Math.max(controls.reviewLoad, budget * 0.25) / controls.reviewLoad)));
+  const tasks = dueReviewTasks(date, reviewCapacity).map((task) => ({
     ...task,
     minutes: controls.reviewLoad,
     priority: 1
@@ -3102,7 +3120,8 @@ function createDailyTasks(date = planTodayISO()) {
   const projectMinutes = minutesFor("project", 20, 60);
   const reviewReserve = controls.enabledSubjects.includes("review") && targetCount > 3 ? Math.max(15, roundToFive(budget * (weights.review || 0.08))) : 0;
   const politicsDay = Boolean(topicPolitics && weights.politics > 0 && parseDate(date).getDay() % 2 === 0);
-  const nonCoreReserve = (politicsDay ? politicsMinutes : englishMinutes) + reviewReserve;
+  const englishReserve = controls.enabledSubjects.includes("english") ? Math.max(20, Math.min(englishMinutes, 45)) : 0;
+  const nonCoreReserve = (politicsDay ? politicsMinutes : englishReserve) + reviewReserve;
   const minimumCore = Math.round(budget * (state.settings.coreRatio || 65) / 100);
   const coreMinutes = Math.max(coreFloor * 2, minimumCore, budget - nonCoreReserve);
   const coreWeight = (weights.math || 0) + (weights.cs408 || 0) || 1;
@@ -3118,7 +3137,7 @@ function createDailyTasks(date = planTodayISO()) {
   if (topicPolitics && politicsDay && controls.enabledSubjects.includes("politics")) {
     tasks.push(topicTask(date, phase, "政治", topicPolitics, politicsMinutes, "基础框架、选择题、背诵"));
   } else if (controls.enabledSubjects.includes("english")) {
-    tasks.push(topicTask(date, phase, "英语", topicEnglish, englishMinutes, "单词、长难句、真题阅读"));
+    tasks.push(englishTaskForDate(date, phase, topicEnglish, englishMinutes));
   }
 
   if (topicPolitics && !politicsDay && controls.enabledSubjects.includes("politics") && tasks.length < targetCount) {
@@ -3132,6 +3151,16 @@ function createDailyTasks(date = planTodayISO()) {
       priority: 8
     });
   }
+
+  ensureEnglishDripTask(tasks, {
+    date,
+    phase,
+    topic: topicEnglish,
+    minutes: Math.max(20, Math.min(englishMinutes, 35)),
+    controls,
+    targetCount,
+    reviewPressure
+  });
 
   if (weights.project > 0 && controls.enabledSubjects.includes("project") && tasks.length < targetCount) {
     tasks.push({
@@ -3165,9 +3194,15 @@ function createDailyTasks(date = planTodayISO()) {
     }
   });
 
-  return applyPlanControls(trimTasksToBudget(tasks.filter(Boolean), budget, Math.max(targetCount, tasks.length)), {
-    controls,
-    targetCount,
+  const effectiveControls = reviewPressure >= 3
+    ? { ...controls, maxNewTopics: Math.min(controls.maxNewTopics, 2) }
+    : controls;
+  const effectiveTargetCount = controls.enabledSubjects.includes("english") && reviewPressure > 0
+    ? Math.min(4, Math.max(targetCount + 1, targetCount))
+    : targetCount;
+  return applyPlanControls(trimTasksToBudget(tasks.filter(Boolean), budget, Math.max(effectiveTargetCount, tasks.length)), {
+    controls: effectiveControls,
+    targetCount: effectiveTargetCount,
     budget
   }).map((task, index) => ({
     ...task,
@@ -3177,6 +3212,27 @@ function createDailyTasks(date = planTodayISO()) {
     locked: Boolean(task.locked),
     source: task.source || "generated"
   }));
+}
+
+function englishTaskForDate(date, phase, topic, minutes) {
+  const task = topicTask(date, phase, "英语", topic, minutes, "单词、长难句、真题阅读");
+  return {
+    ...task,
+    priority: 3.5,
+    text: `${task.text}；新词 20 + 复习词 60 + 错词 10，至少留 1 句定位/切分证据`
+  };
+}
+
+function ensureEnglishDripTask(tasks, options) {
+  const { date, phase, topic, minutes, controls, targetCount, reviewPressure } = options;
+  if (!controls.enabledSubjects.includes("english")) return;
+  if (tasks.some((task) => task.subject === "英语")) return;
+  if (targetCount <= 2 && reviewPressure >= 2) return;
+  const task = englishTaskForDate(date, phase, topic, minutes);
+  task.id = `${date}-${phase.id}-english-drip`;
+  task.priority = reviewPressure ? 5 : 4;
+  task.source = "english-drip";
+  tasks.push(task);
 }
 
 function normalizeTaskList(tasks, date) {
@@ -3254,11 +3310,12 @@ function bottomLineMinutes(phase = getCurrentPhase()) {
 function trimTasksToBudget(tasks, budget, targetCount) {
   const hardBudget = Math.max(0, budget || 0);
   const hasCarryover = tasks.some((task) => task.source === "carryover");
+  const hasEnglish = tasks.some((task) => task.subject === "英语");
   const desiredCount = Math.min(targetCount, tasks.length);
-  const minCount = Math.min(desiredCount, hasCarryover ? 2 : 3);
+  const minCount = Math.min(desiredCount, hasCarryover ? 2 : hasEnglish ? 4 : 3);
   let selected = tasks.slice(0, Math.min(6, Math.max(minCount, targetCount)));
   while (selected.length > minCount && selected.reduce((sum, task) => sum + task.minutes, 0) > hardBudget) {
-    selected.pop();
+    selected.splice(findLowestValueTaskIndex(selected), 1);
   }
   const total = selected.reduce((sum, task) => sum + task.minutes, 0);
   if (total > hardBudget && total > 0) {
@@ -3356,6 +3413,85 @@ function renderDailyTaskProgress(tasks) {
   `;
 }
 
+function renderScienceProtocol(tasks, date = planTodayISO()) {
+  const container = document.getElementById("scienceProtocol");
+  if (!container) return;
+  const total = tasks.reduce((sum, task) => sum + (task.minutes || 0), 0);
+  const reviewDue = dueReviewItems(date).length;
+  const coreMinutes = tasks
+    .filter((task) => task.subject === "数学" || task.subject === "408")
+    .reduce((sum, task) => sum + (task.minutes || 0), 0);
+  const coreRatio = total ? Math.round(coreMinutes / total * 100) : 0;
+  const hasEnglish = tasks.some((task) => task.subject === "英语");
+  const rows = [
+    ["主动回忆", tasks.some((task) => ["数学", "408", "复盘"].includes(task.subject)) ? "已安排" : "需补", "题量、闭卷重做、过程图优先。"],
+    ["间隔复盘", reviewDue ? `${reviewDue} 项到期` : "队列健康", reviewDue ? "今日任务只抽取最高优先级，其余在复盘页处理。" : "完成任务后自动生成 D+1 到 D+30。"],
+    ["英语不断档", hasEnglish ? "已保留" : "需手动补", "最低 20 分钟：新词、复习词、错词和 1 句定位。"],
+    ["核心占比", `${coreRatio}%`, `目标 ${state.settings.coreRatio || 65}% 左右，低负荷日先守数学和 408。`]
+  ];
+  container.innerHTML = `
+    <div class="science-head">
+      <span>学习科学协议</span>
+      <strong>${tasks.length} 项 · ${total}m</strong>
+    </div>
+    <div class="science-checks">
+      ${rows.map(([label, value, text]) => `
+        <article>
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+          <p>${escapeHtml(text)}</p>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderEnglishDrip(tasks, date = planTodayISO()) {
+  const container = document.getElementById("englishDrip");
+  if (!container) return;
+  const englishTask = tasks.find((task) => task.subject === "英语");
+  const topic = topicForDate("english", date);
+  const entry = state.entries[date] || {};
+  const minutes = sanitizeNumber(entry.english);
+  const reading = sanitizeNumber(entry.reading);
+  const streak = englishStreak(date);
+  const planText = englishTask
+    ? englishTask.text
+    : topic
+      ? `微积累${topic.group}：${topic.topic}`
+      : "微积累单词 + 长难句 + 阅读定位";
+  container.innerHTML = `
+    <div class="english-drip-head">
+      <span>英语细水长流</span>
+      <strong>${streak} 天</strong>
+    </div>
+    <p>${escapeHtml(planText)}</p>
+    <div class="english-drip-steps">
+      <em>新词20</em>
+      <em>复习60</em>
+      <em>错词10</em>
+      <em>定位1句</em>
+    </div>
+    <div class="english-drip-foot">
+      <span>今日记录 ${minutes}m</span>
+      <span>阅读 ${reading} 篇</span>
+    </div>
+  `;
+}
+
+function englishStreak(date = planTodayISO()) {
+  let streak = 0;
+  const cursor = parseDate(date);
+  while (true) {
+    const iso = formatDateISO(cursor);
+    const entry = state.entries[iso];
+    if (!entry || sanitizeNumber(entry.english) < 15) break;
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
 function renderTaskFlow(tasks) {
   return tasks.map((task, index) => {
     const blueprint = taskBlueprint(task);
@@ -3439,14 +3575,30 @@ function scheduleReviewForTask(taskId, task) {
   state.reviewItems.push(...items);
 }
 
-function dueReviewTasks(date = planTodayISO()) {
+function dueReviewItems(date = planTodayISO()) {
   return state.reviewItems
     .filter((item) => !item.done && item.status !== "done" && item.dueDate <= date)
-    .slice(0, 1)
+    .sort((a, b) => {
+      const dateCompare = String(a.dueDate || "").localeCompare(String(b.dueDate || ""));
+      if (dateCompare) return dateCompare;
+      return reviewRoundWeight(a.round) - reviewRoundWeight(b.round);
+    });
+}
+
+function reviewRoundWeight(round = "") {
+  const text = String(round);
+  if (text.includes("短")) return 0;
+  const day = Number((text.match(/D\+(\d+)/) || [])[1]);
+  return Number.isFinite(day) ? day : 99;
+}
+
+function dueReviewTasks(date = planTodayISO(), limit = 1) {
+  return dueReviewItems(date)
+    .slice(0, Math.max(1, limit))
     .map((item) => ({
       id: `review-${item.id}`,
       subject: "复盘",
-      text: `${item.round}：${item.subject} · ${item.text}`,
+      text: `${item.round}：${item.subject} · ${item.text}；闭卷重做并写出二次错因`,
       minutes: 25,
       reviewItemId: item.id
     }));
@@ -3558,11 +3710,17 @@ function renderReviewPolicy(dueCount, upcomingCount) {
 
 function renderReviewItem(item) {
   const due = item.dueDate <= planTodayISO() ? "due" : "";
+  const guide = reviewRoundGuide(item.round);
   return `
     <article class="review-queue-item ${due}">
       <div>
         <strong>${escapeHtml(item.round)} · ${escapeHtml(item.subject)}</strong>
         <p>${escapeHtml(item.text)}</p>
+        <div class="review-guide">
+          <span>${escapeHtml(guide.action)}</span>
+          <span>通过：${escapeHtml(guide.pass)}</span>
+          <span>未过：${escapeHtml(guide.fail)}</span>
+        </div>
         <span>${escapeHtml(item.dueDate)}${item.failureReason ? ` · ${escapeHtml(item.failureReason)}` : ""}</span>
       </div>
       <div class="review-actions">
@@ -3573,6 +3731,43 @@ function renderReviewItem(item) {
       </div>
     </article>
   `;
+}
+
+function reviewRoundGuide(round = "") {
+  const text = String(round);
+  if (text.includes("30")) {
+    return {
+      action: "限时重做高频错题，并压缩成月度弱项清单。",
+      pass: "不用答案仍能稳定完成。",
+      fail: "降级为下月弱项，减少新内容。"
+    };
+  }
+  if (text.includes("14")) {
+    return {
+      action: "从题目回到章节框架，补公式链或过程图。",
+      pass: "能把错题挂回具体考纲小节。",
+      fail: "标为需复盘，不进入已掌握。"
+    };
+  }
+  if (text.includes("7")) {
+    return {
+      action: "合并同类错因，重做高频错题。",
+      pass: "同类错误本周不再重复。",
+      fail: "下周减少新增，先补同类题。"
+    };
+  }
+  if (text.includes("3")) {
+    return {
+      action: "换一道同类题，验证题型识别。",
+      pass: "不看答案能列出第一步和路线。",
+      fail: "把错因归为概念、计算、条件或表达。"
+    };
+  }
+  return {
+    action: "闭卷重做当天错题或核心例题。",
+    pass: "能说出定义、触发条件和第一步。",
+    fail: "只补一个概念，明天短复盘。"
+  };
 }
 
 function nextTopics(subject, limit = 3) {
@@ -3858,10 +4053,15 @@ function renderSyllabus(selected = document.querySelector(".seg.active")?.datase
   renderSyllabusDashboard(selected);
   const density = state.settings.density || "balanced";
   const nextGroup = nextTopics(selected, 1)[0]?.group;
-  document.getElementById("syllabusBoard").innerHTML = data.groups.map(([group, topics], index) => {
+  const query = document.getElementById("syllabusSearch")?.value.trim().toLowerCase() || "";
+  const visibleGroups = data.groups
+    .map(([group, topics]) => [group, query ? topics.filter((topic) => topicMatchesQuery(selected, group, topic, query)) : topics])
+    .filter(([, topics]) => topics.length);
+  const groupsToRender = visibleGroups.length ? visibleGroups : [];
+  document.getElementById("syllabusBoard").innerHTML = groupsToRender.length ? groupsToRender.map(([group, topics], index) => {
     const progress = groupProgress(selected, group);
     const groupType = syllabusGroupMeta(selected, group);
-    const shouldOpen = density === "detail" || progress.review > 0 || group === nextGroup || (!nextGroup && index === 0);
+    const shouldOpen = Boolean(query) || density === "detail" || progress.review > 0 || group === nextGroup || (!nextGroup && index === 0);
     return `
       <details class="syllabus-group" ${shouldOpen ? "open" : ""}>
         <summary class="syllabus-group-summary">
@@ -3878,7 +4078,7 @@ function renderSyllabus(selected = document.querySelector(".seg.active")?.datase
         </div>
       </details>
     `;
-  }).join("");
+  }).join("") : `<div class="empty-state">没有匹配的考点。换一个关键词，或先看本阶段下一步小任务。</div>`;
 
   document.querySelectorAll(".topic").forEach((button) => {
     button.addEventListener("click", () => {
@@ -3897,6 +4097,19 @@ function renderSyllabus(selected = document.querySelector(".seg.active")?.datase
       renderDashboard();
     });
   });
+}
+
+function topicMatchesQuery(subject, group, topic, query) {
+  const guide = topicGuide(subject, group, topic);
+  const haystack = [
+    syllabus[subject]?.title,
+    group,
+    topic,
+    guide.explain,
+    guide.output,
+    guide.drill
+  ].join(" ").toLowerCase();
+  return haystack.includes(query);
 }
 
 function hasTopicEvidence(id) {
@@ -4410,6 +4623,9 @@ function renderCoach(week, phase) {
   const streak = currentStreak();
   const mathProgress = syllabusProgress("math").percent;
   const csProgress = syllabusProgress("cs408").percent;
+  const englishProgress = syllabusProgress("english").percent;
+  const englishDays = lastDaysEntries(7).filter((entry) => sanitizeNumber(entry.english) >= 15).length;
+  const dueCount = dueReviewItems(planTodayISO()).length;
   const next = nextMilestone();
 
   let title = `${phase.name}：先稳住每日底线`;
@@ -4432,6 +4648,14 @@ function renderCoach(week, phase) {
     title = "408 考纲进度偏慢";
     text = "今日任务优先安排 408 未完成条目。";
     pace = "408 补强";
+  } else if (englishDays < 5) {
+    title = "英语连续性不足";
+    text = `英语一当前图谱 ${englishProgress}%。先保证每天 20 分钟单词和定位句，不用一次补很多。`;
+    pace = "英语不断档";
+  } else if (dueCount >= 3) {
+    title = "复盘债务偏高";
+    text = "今日新内容自动收紧，先清最高优先级复盘，其余在复盘页按 D 轮处理。";
+    pace = "先复盘";
   }
 
   document.getElementById("coachTitle").textContent = title;

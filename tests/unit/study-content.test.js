@@ -13,6 +13,13 @@ describe("study workflow content", () => {
     expect(app).toContain("高质量");
     expect(app).toContain("资料使用规则");
     expect(app).toContain("learningCurveSnapshot");
+    expect(app).toContain("英语不断档");
+    expect(app).toContain("英语细水长流");
+    expect(app).toContain("topicMatchesQuery");
+    expect(app).toContain("reviewRoundGuide");
     expect(html).toContain("14 天学习曲线");
+    expect(html).toContain("学习科学协议");
+    expect(html).toContain("搜索考点");
+    expect(html).toContain("备考拆解");
   });
 });

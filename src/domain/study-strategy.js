@@ -30,7 +30,7 @@ export const strategySources = [
   {
     title: '英语经验共识',
     source: '唐迟等阅读方法与经验帖综合',
-    use: '单词不断档，阅读以定位句、同义替换、干扰项原因和精读复盘为核心。',
+    use: '单词每天不断档，阅读以定位句、同义替换、干扰项原因和精读复盘为核心；低负荷日也保留 20 分钟微积累。',
   },
   {
     title: '政治经验共识',
@@ -187,7 +187,8 @@ export function subjectPlanWeights(phaseId, controls = DEFAULT_PLAN_CONTROLS) {
 
   if (normalized.experienceTrack === 'mathHeavy') weights.math += 0.08;
   if (normalized.experienceTrack === 'cs408Heavy') weights.cs408 += 0.08;
-  if (normalized.experienceTrack === 'englishSteady') weights.english += 0.05;
+  if (normalized.experienceTrack === 'englishSteady') weights.english += 0.07;
+  if (normalized.experienceTrack !== 'latePolitics') weights.english = Math.max(weights.english, phaseId === 'A' ? 0.16 : 0.12);
   if (normalized.experienceTrack === 'latePolitics' && !['G', 'H'].includes(phaseId)) weights.politics = 0;
   if (normalized.focusSubject !== 'auto' && weights[normalized.focusSubject] !== undefined) {
     weights[normalized.focusSubject] += normalized.focusSubject === 'review' ? 0.08 : 0.10;

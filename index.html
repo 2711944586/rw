@@ -409,6 +409,10 @@
               <button class="primary-button" id="generatePlanBtn" type="button">重新生成</button>
             </div>
             <div class="daily-progress" id="dailyTaskProgress"></div>
+            <div class="today-science-grid" aria-label="今日科学学习协议">
+              <section class="science-protocol" id="scienceProtocol" aria-label="学习科学协议">学习科学协议加载中</section>
+              <section class="english-drip-card" id="englishDrip" aria-label="英语细水长流">英语细水长流加载中</section>
+            </div>
             <div class="daily-plan" id="dailyPlan"></div>
           </section>
 
@@ -608,11 +612,14 @@
               <h3>考纲与能力图谱</h3>
               <p>官方范围映射、预备能力和备考补充分层展示；条目为备考拆解，不等同官方逐字大纲。</p>
             </div>
-            <div class="segmented">
-              <button class="seg active" type="button" data-syllabus="math">数学一</button>
-              <button class="seg" type="button" data-syllabus="cs408">408</button>
-              <button class="seg" type="button" data-syllabus="english">英语一</button>
-              <button class="seg" type="button" data-syllabus="politics">政治</button>
+            <div class="syllabus-tools">
+              <input class="syllabus-search" type="search" id="syllabusSearch" placeholder="搜索考点 / 任务证据" aria-label="搜索考点">
+              <div class="segmented">
+                <button class="seg active" type="button" data-syllabus="math">数学一</button>
+                <button class="seg" type="button" data-syllabus="cs408">408</button>
+                <button class="seg" type="button" data-syllabus="english">英语一</button>
+                <button class="seg" type="button" data-syllabus="politics">政治</button>
+              </div>
             </div>
           </div>
           <div class="syllabus-dashboard" id="syllabusDashboard"></div>
