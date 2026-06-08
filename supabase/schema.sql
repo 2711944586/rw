@@ -9,7 +9,7 @@ create table if not exists public.profiles (
   task_count integer not null default 3,
   core_ratio integer not null default 65,
   review_days integer[] not null default array[1,3,7,14,30],
-  plan_version text not null default '3.4-start-2026-06-08-evidence',
+  plan_version text not null default '3.6-jun8-clean-start-2026-06-08',
   density_mode text not null default 'focus',
   retro_time text not null default '22:00',
   last_synced_at timestamptz,

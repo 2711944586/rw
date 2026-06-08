@@ -2,7 +2,9 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
-const PLAN_LOGIC_VERSION = "3.4-start-2026-06-08-evidence";
+const PLAN_LOGIC_VERSION = "3.6-jun8-clean-start-2026-06-08";
+const PLAN_START_DATE = "2026-06-08";
+const CLEAN_START_VERSION = "2026-06-08-from-zero-v1";
 
 export const supabaseConfigured = Boolean(supabaseUrl && supabaseKey);
 export const supabase = supabaseConfigured ? createClient(supabaseUrl, supabaseKey) : null;
@@ -41,6 +43,28 @@ function asString(value, fallback = "") {
 
 function asStringArray(value, limit = 12) {
   return Array.isArray(value) ? value.map((item) => String(item)).slice(0, limit) : [];
+}
+
+function isOnOrAfterPlanStart(value) {
+  const date = asDate(value);
+  return Boolean(date && date >= PLAN_START_DATE);
+}
+
+function datedIdStarted(id = "") {
+  const date = asDate(String(id || "").slice(0, 10));
+  return !date || date >= PLAN_START_DATE;
+}
+
+function timestampStarted(value, fallbackISO = "") {
+  const date = asTimestamp(value || fallbackISO);
+  return Boolean(date && date.slice(0, 10) >= PLAN_START_DATE);
+}
+
+function topicRowStarted(row, cleanStartAppliedAt) {
+  if (!row) return false;
+  if (isOnOrAfterPlanStart(row.last_review_date)) return true;
+  if (timestampStarted(row.last_review_at)) return true;
+  return Boolean(cleanStartAppliedAt && asTimestamp(row.updated_at) >= cleanStartAppliedAt);
 }
 
 function uniqueBy(items, keyFn) {
@@ -118,11 +142,11 @@ export async function loadCloudState(baseState) {
     snapshots
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
-    supabase.from("daily_records").select("*").eq("user_id", user.id),
-    supabase.from("study_tasks").select("*").eq("user_id", user.id).is("deleted_at", null),
-    supabase.from("review_items").select("*").eq("user_id", user.id).is("deleted_at", null),
+    supabase.from("daily_records").select("*").eq("user_id", user.id).gte("study_date", PLAN_START_DATE),
+    supabase.from("study_tasks").select("*").eq("user_id", user.id).gte("task_date", PLAN_START_DATE).is("deleted_at", null),
+    supabase.from("review_items").select("*").eq("user_id", user.id).gte("due_date", PLAN_START_DATE).is("deleted_at", null),
     supabase.from("topic_progress").select("*").eq("user_id", user.id),
-    supabase.from("mock_scores").select("*").eq("user_id", user.id).is("deleted_at", null),
+    supabase.from("mock_scores").select("*").eq("user_id", user.id).gte("mock_date", PLAN_START_DATE).is("deleted_at", null),
     supabase.from("resources").select("*").eq("user_id", user.id),
     supabase.from("snapshots").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(5)
   ]);
@@ -133,10 +157,18 @@ export async function loadCloudState(baseState) {
   if (errors.length) throw errors[0];
 
   const state = structuredClone(baseState);
+  const profileSettings = profile.data?.settings || {};
+  const profileCleanStartVersion = profileSettings.cleanStartVersion || "";
+  const cloudCleanStarted = profileCleanStartVersion === CLEAN_START_VERSION;
+  const cleanStartAppliedAt = asTimestamp(profileSettings.cleanStartAppliedAt) || `${PLAN_START_DATE}T00:00:00.000Z`;
+  state.cloudMeta = {
+    cleanStartVersion: profileCleanStartVersion,
+    cleanStartAppliedAt
+  };
   if (profile.data) {
     state.settings = {
       ...state.settings,
-      ...(profile.data.settings || {}),
+      ...profileSettings,
       targetExamDate: profile.data.target_exam_date || state.settings.targetExamDate,
       weekdayMinutes: profile.data.weekday_minutes ?? state.settings.weekdayMinutes,
       weekendMinutes: profile.data.weekend_minutes ?? state.settings.weekendMinutes,
@@ -144,7 +176,8 @@ export async function loadCloudState(baseState) {
       coreRatio: profile.data.core_ratio ?? state.settings.coreRatio,
       reviewDays: profile.data.review_days || state.settings.reviewDays,
       density: profile.data.density_mode || state.settings.density,
-      retroTime: profile.data.retro_time || state.settings.retroTime
+      retroTime: profile.data.retro_time || state.settings.retroTime,
+      planLogicVersion: profile.data.plan_version || state.settings.planLogicVersion
     };
   }
 
@@ -167,7 +200,7 @@ export async function loadCloudState(baseState) {
 
   state.weekPlans = {};
   state.tasks = {};
-  (tasks.data || []).forEach((row) => {
+  (tasks.data || []).filter((row) => datedIdStarted(row.source_task_id)).forEach((row) => {
     const task = {
       id: row.id,
       date: row.task_date,
@@ -201,7 +234,9 @@ export async function loadCloudState(baseState) {
     state.tasks[task.id] = task.status === "done";
   });
 
-  state.reviewItems = (reviews.data || []).map((row) => ({
+  state.reviewItems = (reviews.data || [])
+    .filter((row) => datedIdStarted(row.source_task_id))
+    .map((row) => ({
     id: row.id,
     sourceTaskId: row.source_task_id || "",
     subject: row.subject,
@@ -224,7 +259,7 @@ export async function loadCloudState(baseState) {
 
   state.topics = {};
   state.topicEvidence = {};
-  (topics.data || []).forEach((row) => {
+  (cloudCleanStarted ? (topics.data || []).filter((row) => topicRowStarted(row, cleanStartAppliedAt)) : []).forEach((row) => {
     state.topics[row.topic_id] = row.status_value || 0;
     state.topicEvidence[row.topic_id] = {
       problems: row.problems_done || 0,
@@ -282,7 +317,7 @@ export async function saveCloudState(state) {
 
   const records = Object.entries(state.entries || {}).flatMap(([date, entry]) => {
     const studyDate = asDate(date);
-    if (!studyDate) return [];
+    if (!studyDate || !isOnOrAfterPlanStart(studyDate)) return [];
     const row = entry || {};
     return [{
       user_id: user.id,
@@ -332,7 +367,8 @@ export async function saveCloudState(state) {
     actual_minutes: asInteger(task.actualMinutes ?? task.actual_minutes),
     evidence_submitted: Boolean(task.evidenceSubmitted || task.evidence_submitted),
     updated_at: asTimestamp(task.updatedAt || task.updated_at, now)
-  })), (task) => task.id);
+  }))
+    .filter((task) => isOnOrAfterPlanStart(task.task_date) && datedIdStarted(task.source_task_id)), (task) => task.id);
 
   const reviews = uniqueBy((state.reviewItems || []).filter(Boolean).map((item) => ({
     id: asString(item.id),
@@ -353,7 +389,8 @@ export async function saveCloudState(state) {
     last_submitted_date: asDate(item.lastSubmittedDate || item.last_submitted_date),
     topic_id: asString(item.topicId || item.topic_id),
     updated_at: asTimestamp(item.updatedAt || item.updated_at, now)
-  })), (item) => item.id);
+  }))
+    .filter((item) => isOnOrAfterPlanStart(item.due_date) && datedIdStarted(item.source_task_id)), (item) => item.id);
 
   const topics = Object.entries(state.topics || {}).map(([topicId, value]) => {
     const evidence = state.topicEvidence?.[topicId] || {};
@@ -372,7 +409,7 @@ export async function saveCloudState(state) {
       prerequisites: asStringArray(evidence.prerequisites),
       updated_at: asTimestamp(evidence.updatedAt || evidence.updated_at, now)
     };
-  }).filter((topic) => topic.topic_id);
+  }).filter((topic) => topic.topic_id && topicRowStarted(topic, asTimestamp(state.settings.cleanStartAppliedAt) || now));
 
   const scores = uniqueBy((state.scores || []).filter(Boolean).map((score) => ({
     id: asString(score.id),
@@ -386,7 +423,7 @@ export async function saveCloudState(state) {
     total: asInteger(score.total || (Number(score.politics || 0) + Number(score.english || 0) + Number(score.math || 0) + Number(score.cs408 || 0)), 0, 500),
     note: asString(score.note),
     updated_at: asTimestamp(score.updatedAt || score.updated_at, now)
-  })), (score) => score.id);
+  })).filter((score) => isOnOrAfterPlanStart(score.mock_date)), (score) => score.id);
 
   const resources = Object.entries(state.resources || {}).map(([key, value]) => ({
     user_id: user.id,
@@ -403,6 +440,14 @@ export async function saveCloudState(state) {
   const operations = [
     ["profiles", supabase.from("profiles").upsert(profile, { onConflict: "user_id" })]
   ];
+  operations.push(["daily_records.cleanStart", supabase.from("daily_records").delete().eq("user_id", user.id).lt("study_date", PLAN_START_DATE)]);
+  operations.push(["study_tasks.cleanStart", supabase.from("study_tasks").update({ deleted_at: now, updated_at: now }).eq("user_id", user.id).lt("task_date", PLAN_START_DATE).is("deleted_at", null)]);
+  operations.push(["review_items.cleanStart", supabase.from("review_items").update({ deleted_at: now, updated_at: now }).eq("user_id", user.id).lt("due_date", PLAN_START_DATE).is("deleted_at", null)]);
+  operations.push(["mock_scores.cleanStart", supabase.from("mock_scores").update({ deleted_at: now, updated_at: now }).eq("user_id", user.id).lt("mock_date", PLAN_START_DATE).is("deleted_at", null)]);
+  if (state.settings.cleanStartVersion === CLEAN_START_VERSION) {
+    const cleanStartAppliedAt = asTimestamp(state.settings.cleanStartAppliedAt) || now;
+    operations.push(["topic_progress.cleanStart", supabase.from("topic_progress").delete().eq("user_id", user.id).lt("updated_at", cleanStartAppliedAt)]);
+  }
   if (records.length) operations.push(["daily_records", supabase.from("daily_records").upsert(records, { onConflict: "user_id,study_date" })]);
   if (tasks.length) operations.push(["study_tasks", supabase.from("study_tasks").upsert(tasks, { onConflict: "user_id,id" })]);
   if (reviews.length) operations.push(["review_items", supabase.from("review_items").upsert(reviews, { onConflict: "user_id,id" })]);

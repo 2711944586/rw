@@ -65,11 +65,12 @@ import {
 const STORAGE_KEY = "pku_swm_420_dashboard_v3";
 const LEGACY_STORAGE_KEY = "pku_swm_420_dashboard_v1";
 const SCHEMA_VERSION = 3;
-const PLAN_LOGIC_VERSION = "3.5-science-drip-syllabus-2026-06-08";
-const APP_BUILD = "2026-06-08-420-science-drip-syllabus";
+const PLAN_LOGIC_VERSION = "3.6-jun8-clean-start-2026-06-08";
+const APP_BUILD = "2026-06-08-420-clean-start";
 const DEFAULT_EXAM_DATE = "2027-12-25";
 const DEFAULT_EXAM_DATE_STATUS = "推算排程日，非官方初试日期";
 const PLAN_START_DATE = "2026-06-08";
+const CLEAN_START_VERSION = "2026-06-08-from-zero-v1";
 const TARGET_TOTAL_HOURS = 2660;
 const SOURCE_CHECK_DATE = "2026-06-08";
 if ("scrollRestoration" in window.history) {
@@ -162,7 +163,7 @@ function consumeResetRequest() {
 }
 
 const rampBudgets = [
-  { start: PLAN_START_DATE, end: "2026-06-30", weekday: 90, weekend: 150, note: "6 月 8 日重启，先恢复连续记录和底线任务" },
+  { start: PLAN_START_DATE, end: "2026-06-30", weekday: 90, weekend: 150, note: "6 月 8 日从头开始，先恢复连续记录和底线任务" },
   { start: "2026-07-01", end: "2026-07-31", weekday: 120, weekend: 210, note: "暑假前段稳步加量" },
   { start: "2026-08-01", end: "2026-08-31", weekday: 150, weekend: 240, note: "暑假后段稳定加量" },
   { start: "2026-09-01", end: "2026-12-31", weekday: 270, weekend: 390, note: "9 月起第一轮主干加压" },
@@ -379,7 +380,7 @@ const liveFactChecks = [
 const firstMonthActions = [
   {
     week: "第 1 周",
-    tasks: ["6 月 8 日重新建档", "确定数学主线资料", "确定 408 主线资料", "确定英语单词工具", "函数图像与常用初等函数", "C 语言变量、分支、循环", "英语每天单词"],
+    tasks: ["6 月 8 日从头建档", "确定数学主线资料", "确定 408 主线资料", "确定英语单词工具", "函数图像与常用初等函数", "C 语言变量、分支、循环", "英语每天单词"],
     pass: "9-11h；连续记录 7 天；能写循环程序；数学预备题有错因记录。"
   },
   {
@@ -677,7 +678,7 @@ const highStandards = [
 ];
 
 const systemRules = [
-  ["01", "渐进加量", "2026 年 6 月 8 日低强度重启；7-8 月逐步加长；9 月起提高到第一轮主干强度。"],
+  ["01", "渐进加量", "2026 年 6 月 8 日从头开始；7-8 月逐步加长；9 月起提高到第一轮主干强度。"],
   ["02", "核心优先", "数学一和 408 优先分配时间，周核心占比低于 65% 就预警。"],
   ["03", "未完成顺延", "昨天没有完成的任务进入今天，同时压缩新增内容，避免补偿式超载。"],
   ["04", "先交付再加量", "每个任务必须有题量、错因、图示或代码交付，只看视频不算真正完成。"],
@@ -942,26 +943,47 @@ function migrateState(parsed) {
       ? [...new Set(settings.reviewDays.map((day) => sanitizeInteger(day, 1, 365)).filter(Boolean))].sort((a, b) => a - b)
       : [...defaultSettings.reviewDays];
     settings.planControls = normalizePlanControls(settings.planControls);
-    const entries = sanitizeEntries(parsed.entries || {});
-    const scores = sanitizeScores(parsed.scores || []);
+    const rawEntries = sanitizeEntries(parsed.entries || {});
+    const rawScores = sanitizeScores(parsed.scores || []);
+    const rawWeekPlans = sanitizeWeekPlans(parsed.weekPlans || {});
+    const rawReviewItems = sanitizeReviewItems(parsed.reviewItems || []);
+    const rawTopics = sanitizeNumericObject(parsed.topics || {}, 0, 2, true);
+    const rawTopicEvidence = sanitizeTopicEvidence(parsed.topicEvidence || {});
+    const startArchive = buildCleanStartArchive({
+      entries: rawEntries,
+      scores: rawScores,
+      weekPlans: rawWeekPlans,
+      reviewItems: rawReviewItems,
+      topics: rawTopics,
+      topicEvidence: rawTopicEvidence,
+      previousArchive: parsed.cleanStartArchive
+    });
+    const cleanStartApplied = settings.cleanStartVersion === CLEAN_START_VERSION;
+    const entries = filterEntriesFromStart(rawEntries);
+    const scores = filterScoresFromStart(rawScores);
+    const topics = cleanStartApplied ? rawTopics : {};
+    const topicEvidence = cleanStartApplied ? filterTopicEvidenceFromStart(rawTopicEvidence) : {};
+    const rawTasks = sanitizeTaskState(parsed.tasks || {}, rawWeekPlans);
     const resourcesState = sanitizeNumericObject(parsed.resources || {}, 0, 100);
-    const topics = sanitizeNumericObject(parsed.topics || {}, 0, 2, true);
-    const deleted = sanitizeDeleted(parsed.deleted || {});
+    const deleted = filterDeletedFromStart(sanitizeDeleted(parsed.deleted || {}));
+    settings.cleanStartVersion = CLEAN_START_VERSION;
+    settings.cleanStartAppliedAt = settings.cleanStartAppliedAt || startArchive.archivedAt;
     return {
       schemaVersion: SCHEMA_VERSION,
       entries,
       scores,
       topics,
-      topicEvidence: sanitizeTopicEvidence(parsed.topicEvidence || {}),
-      tasks: parsed.tasks || {},
-      weekPlans: sanitizeWeekPlans(parsed.weekPlans || {}),
+      topicEvidence,
+      tasks: filterTaskStateFromStart(rawTasks, rawWeekPlans),
+      weekPlans: filterWeekPlansFromStart(rawWeekPlans),
       project: parsed.project || {},
       resources: resourcesState,
       settings,
       customTasks: sanitizeCustomTasks(parsed.customTasks || []),
-      reviewItems: sanitizeReviewItems(parsed.reviewItems || []),
+      reviewItems: filterReviewItemsFromStart(rawReviewItems),
       deleted,
       snapshots: sanitizeSnapshots(parsed.snapshots || []),
+      cleanStartArchive: startArchive,
       sync: {
         status: "local",
         lastSyncAt: "",
@@ -1125,6 +1147,114 @@ function sanitizeReviewItems(items) {
   });
 }
 
+function isOnOrAfterPlanStart(date = "") {
+  return String(date || "") >= PLAN_START_DATE;
+}
+
+function filterEntriesFromStart(entries = {}) {
+  return Object.fromEntries(Object.entries(entries || {}).filter(([date]) => isOnOrAfterPlanStart(date)));
+}
+
+function filterScoresFromStart(scores = []) {
+  return (scores || []).filter((score) => isOnOrAfterPlanStart(score.date));
+}
+
+function filterWeekPlansFromStart(weekPlans = {}) {
+  return Object.fromEntries(Object.entries(weekPlans || {}).filter(([date]) => isOnOrAfterPlanStart(date)));
+}
+
+function sanitizeTaskState(tasks = {}, weekPlans = {}) {
+  const next = {};
+  Object.entries(tasks || {}).forEach(([id, done]) => {
+    next[String(id)] = Boolean(done);
+  });
+  Object.values(weekPlans || {}).flat().filter(Boolean).forEach((task) => {
+    if (!task.id || typeof next[task.id] !== "undefined") return;
+    next[task.id] = task.status === "done";
+  });
+  return next;
+}
+
+function taskIdDate(id = "") {
+  const date = String(id || "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : "";
+}
+
+function taskDateFromWeekPlans(id, weekPlans = {}) {
+  const directDate = taskIdDate(id);
+  if (directDate) return directDate;
+  for (const [date, tasks] of Object.entries(weekPlans || {})) {
+    if ((tasks || []).some((task) => task.id === id)) return date;
+  }
+  return "";
+}
+
+function filterTaskStateFromStart(tasks = {}, weekPlans = {}) {
+  return Object.fromEntries(Object.entries(tasks || {}).filter(([id]) => {
+    const date = taskDateFromWeekPlans(id, weekPlans);
+    return !date || isOnOrAfterPlanStart(date);
+  }));
+}
+
+function filterReviewItemsFromStart(items = []) {
+  return (items || []).filter((item) => {
+    const dueDate = item.dueDate || "";
+    const sourceDate = String(item.sourceTaskId || "").slice(0, 10);
+    return isOnOrAfterPlanStart(dueDate) && (!/^\d{4}-\d{2}-\d{2}$/.test(sourceDate) || isOnOrAfterPlanStart(sourceDate));
+  });
+}
+
+function filterTopicEvidenceFromStart(evidenceMap = {}) {
+  return Object.fromEntries(Object.entries(evidenceMap || {}).filter(([, evidence]) => {
+    const date = evidence.lastReviewDate || String(evidence.lastReviewAt || "").slice(0, 10);
+    return !date || isOnOrAfterPlanStart(date);
+  }));
+}
+
+function filterDeletedFromStart(deleted = {}) {
+  return {
+    records: (deleted.records || []).filter((date) => isOnOrAfterPlanStart(date)),
+    scores: [...(deleted.scores || [])],
+    tasks: (deleted.tasks || []).filter((id) => {
+      const date = taskIdDate(id);
+      return !date || isOnOrAfterPlanStart(date);
+    }),
+    reviews: (deleted.reviews || []).filter((id) => {
+      const date = taskIdDate(id);
+      return !date || isOnOrAfterPlanStart(date);
+    })
+  };
+}
+
+function buildCleanStartArchive({ entries, scores, weekPlans, reviewItems, topics, topicEvidence, previousArchive }) {
+  const archivedEntries = Object.keys(entries || {}).filter((date) => !isOnOrAfterPlanStart(date));
+  const archivedScores = (scores || []).filter((score) => !isOnOrAfterPlanStart(score.date)).length;
+  const archivedWeekPlans = Object.keys(weekPlans || {}).filter((date) => !isOnOrAfterPlanStart(date));
+  const archivedReviews = (reviewItems || []).filter((item) => !isOnOrAfterPlanStart(item.dueDate)).length;
+  const topicCount = Object.keys(topics || {}).length;
+  const evidenceCount = Object.keys(topicEvidence || {}).length;
+  const archivedAt = previousArchive?.version === CLEAN_START_VERSION && previousArchive.archivedAt
+    ? previousArchive.archivedAt
+    : new Date().toISOString();
+  return {
+    ...(previousArchive || {}),
+    version: CLEAN_START_VERSION,
+    startDate: PLAN_START_DATE,
+    archivedAt,
+    note: "2026-06-08 从头开始；早于起点的数据仅归档，不再参与计划、统计和复盘。",
+    counts: {
+      entriesBeforeStart: archivedEntries.length,
+      scoresBeforeStart: archivedScores,
+      weekPlanDaysBeforeStart: archivedWeekPlans.length,
+      reviewsBeforeStart: archivedReviews,
+      previousTopicMarks: previousArchive?.counts?.previousTopicMarks ?? topicCount,
+      previousTopicEvidence: previousArchive?.counts?.previousTopicEvidence ?? evidenceCount
+    },
+    entryDates: archivedEntries.slice(0, 120),
+    weekPlanDates: archivedWeekPlans.slice(0, 120)
+  };
+}
+
 function sanitizeCustomTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).filter(Boolean).map((task) => ({
     id: String(task.id || uid("custom")),
@@ -1179,7 +1309,13 @@ function freshState() {
     weekPlans: {},
     project: {},
     resources: {},
-    settings: { ...defaultSettings, planControls: normalizePlanControls(defaultSettings.planControls), efficiencyModeApplied: true },
+    settings: {
+      ...defaultSettings,
+      planControls: normalizePlanControls(defaultSettings.planControls),
+      efficiencyModeApplied: true,
+      cleanStartVersion: CLEAN_START_VERSION,
+      cleanStartAppliedAt: new Date().toISOString()
+    },
     customTasks: [],
     reviewItems: [],
     deleted: { records: [], scores: [], tasks: [], reviews: [] },
@@ -1232,6 +1368,7 @@ async function pullCloudState() {
     return;
   }
   try {
+    state = enforceCleanStartState(state);
     state.sync = { ...state.sync, status: "syncing", lastError: "" };
     renderSyncStatus();
     const cloudState = await loadCloudState(state);
@@ -1246,7 +1383,10 @@ async function pullCloudState() {
 }
 
 function mergeStateByUpdatedAt(localState, cloudState) {
-  return applyTombstones({
+  const cloudCleanStarted = cloudState.cloudMeta
+    ? cloudState.cloudMeta.cleanStartVersion === CLEAN_START_VERSION
+    : cloudState.settings?.cleanStartVersion === CLEAN_START_VERSION;
+  const merged = applyTombstones({
     ...localState,
     ...cloudState,
     settings: { ...localState.settings, ...cloudState.settings },
@@ -1255,8 +1395,8 @@ function mergeStateByUpdatedAt(localState, cloudState) {
     weekPlans: mergeWeekPlans(localState.weekPlans, cloudState.weekPlans),
     reviewItems: mergeArrayById(localState.reviewItems, cloudState.reviewItems),
     scores: mergeArrayById(localState.scores, cloudState.scores),
-    topics: { ...localState.topics, ...cloudState.topics },
-    topicEvidence: { ...localState.topicEvidence, ...cloudState.topicEvidence },
+    topics: cloudCleanStarted ? { ...localState.topics, ...cloudState.topics } : { ...localState.topics },
+    topicEvidence: cloudCleanStarted ? { ...localState.topicEvidence, ...cloudState.topicEvidence } : { ...localState.topicEvidence },
     resources: { ...localState.resources, ...cloudState.resources },
     deleted: {
       records: [],
@@ -1269,6 +1409,22 @@ function mergeStateByUpdatedAt(localState, cloudState) {
     sync: cloudState.sync,
     user: cloudState.user
   });
+  return enforceCleanStartState(merged);
+}
+
+function enforceCleanStartState(nextState) {
+  const clean = migrateState({
+    ...nextState,
+    settings: {
+      ...(nextState.settings || {}),
+      cleanStartVersion: (nextState.settings || {}).cleanStartVersion
+    }
+  });
+  return {
+    ...clean,
+    sync: nextState.sync,
+    user: nextState.user
+  };
 }
 
 function mergeArrayById(localItems = [], cloudItems = []) {
@@ -1378,6 +1534,7 @@ async function syncNow(options = {}) {
     return { ok: false, reason: "offline" };
   }
   try {
+    state = enforceCleanStartState(state);
     state.sync = { ...state.sync, status: "syncing", lastError: "" };
     renderSyncStatus();
     const result = await saveCloudState(state);
@@ -2363,7 +2520,7 @@ function examDateStatusText() {
 }
 
 function officialBasisText() {
-  return `资料核验 ${SOURCE_CHECK_DATE}：科目以北大软微 2026 已发布信息为备考基准；2027 年 12 月仍为推算窗口，官方日期待发布。`;
+  return `资料核验 ${SOURCE_CHECK_DATE}：学习数据从 2026-06-08 从头开始；科目以北大软微 2026 已发布信息为备考基准；2027 年 12 月仍为推算窗口，官方日期待发布。`;
 }
 
 function renderWorkflowRail() {
@@ -4908,7 +5065,8 @@ function renderSettings() {
   setText("storageHealthText", storageAvailable ? "本机缓存正常" : "本机缓存不可用，建议检查浏览器隐私/存储权限");
 
   document.getElementById("standardsList").innerHTML = [
-    ["渐进时长", "2026 年 6 月 8 日从工作日 90m、周末 150m 重启；7 月约 120/210m，8 月约 150/240m；9 月起进入第一轮主干强度。"],
+    ["数据起点", "2026-06-08 从头开始；早于起点的记录、模考、周计划、复盘队列和考纲掌握证据只归档，不参与统计和排程。"],
+    ["渐进时长", "2026 年 6 月 8 日从工作日 90m、周末 150m 开始；7 月约 120/210m，8 月约 150/240m；9 月起进入第一轮主干强度。"],
     ...highStandards
   ].map(([subject, standard]) => `
     <div class="standard-item">
