@@ -16,6 +16,33 @@ const PHASE_CORE_THRESHOLDS = {
   sprint: 0.65,
 };
 
+function finiteNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function clampedNumber(value, min, max, fallback = min) {
+  return Math.min(max, Math.max(min, finiteNumber(value, fallback)));
+}
+
+function ratioValue(value, fallback = 0) {
+  return clampedNumber(value, 0, 1, fallback);
+}
+
+function nonNegativeNumber(value, fallback = 0) {
+  return clampedNumber(value, 0, Number.POSITIVE_INFINITY, fallback);
+}
+
+function nonNegativeCount(value, fallback = 0) {
+  return Math.round(nonNegativeNumber(value, fallback));
+}
+
+function phaseCoreThreshold(phase) {
+  return Object.prototype.hasOwnProperty.call(PHASE_CORE_THRESHOLDS, phase)
+    ? PHASE_CORE_THRESHOLDS[phase]
+    : 0.65;
+}
+
 /**
  * Compute a three-color signal based on value and thresholds.
  * @param {number} value
@@ -24,8 +51,11 @@ const PHASE_CORE_THRESHOLDS = {
  * @returns {'green'|'yellow'|'red'}
  */
 function threeColorSignal(value, greenThreshold, yellowThreshold) {
-  if (value >= greenThreshold) return 'green';
-  if (value >= yellowThreshold) return 'yellow';
+  const safeValue = finiteNumber(value, 0);
+  const safeGreenThreshold = finiteNumber(greenThreshold, 1);
+  const safeYellowThreshold = finiteNumber(yellowThreshold, 0);
+  if (safeValue >= safeGreenThreshold) return 'green';
+  if (safeValue >= safeYellowThreshold) return 'yellow';
   return 'red';
 }
 
@@ -41,22 +71,27 @@ function threeColorSignal(value, greenThreshold, yellowThreshold) {
  * @param {string} input.phase - 'foundation'|'reinforcement'|'pastExam'|'sprint'
  * @returns {Object} DailyRetroResult with taskSignal, reviewSignal, coreRatioSignal, recordSignal
  */
-export function computeDailyRetro(input) {
+export function computeDailyRetro(input = {}) {
   const { taskCompletionRate, recordCount, taskCount, reviewDueProcessedRate, coreRatio, phase } = input;
+  const safeTaskCompletionRate = ratioValue(taskCompletionRate);
+  const safeReviewDueProcessedRate = ratioValue(reviewDueProcessedRate);
+  const safeCoreRatio = ratioValue(coreRatio);
+  const safeRecordCount = nonNegativeCount(recordCount);
+  const safeTaskCount = nonNegativeCount(taskCount);
 
   // Task completion signal
-  const taskSignal = threeColorSignal(taskCompletionRate, 0.85, 0.60);
+  const taskSignal = threeColorSignal(safeTaskCompletionRate, 0.85, 0.60);
 
   // Review due processed signal
-  const reviewSignal = threeColorSignal(reviewDueProcessedRate, 0.95, 0.80);
+  const reviewSignal = threeColorSignal(safeReviewDueProcessedRate, 0.95, 0.80);
 
   // Record signal: green if recordCount >= taskCount * 0.9, yellow if >= 0.6, red otherwise
-  const recordRatio = taskCount > 0 ? recordCount / taskCount : 1;
+  const recordRatio = safeTaskCount > 0 ? safeRecordCount / safeTaskCount : 1;
   const recordSignal = threeColorSignal(recordRatio, 0.9, 0.6);
 
   // Core ratio signal: based on phase threshold
-  const phaseThreshold = PHASE_CORE_THRESHOLDS[phase] || 0.65;
-  const coreRatioSignal = threeColorSignal(coreRatio, phaseThreshold, phaseThreshold - 0.10);
+  const phaseThreshold = phaseCoreThreshold(phase);
+  const coreRatioSignal = threeColorSignal(safeCoreRatio, phaseThreshold, phaseThreshold - 0.10);
 
   return { taskSignal, reviewSignal, coreRatioSignal, recordSignal };
 }
@@ -74,17 +109,22 @@ export function computeDailyRetro(input) {
  * @param {string} weekData.phase - Current phase
  * @returns {Object} WeeklyRetroResult with overallSignal and signals breakdown
  */
-export function computeWeeklyRetro(dailyResults, weekData) {
+export function computeWeeklyRetro(dailyResults, weekData = {}) {
   const { totalEffectiveMinutes, plannedMinutes, breakDays, mistakeRecoveryRate, coreRatioMedian, phase } = weekData;
+  const safeTotalEffectiveMinutes = nonNegativeNumber(totalEffectiveMinutes);
+  const safePlannedMinutes = nonNegativeNumber(plannedMinutes);
+  const safeBreakDays = nonNegativeCount(breakDays);
+  const safeMistakeRecoveryRate = ratioValue(mistakeRecoveryRate);
+  const safeCoreRatioMedian = ratioValue(coreRatioMedian);
 
-  const phaseThreshold = PHASE_CORE_THRESHOLDS[phase] || 0.65;
+  const phaseThreshold = phaseCoreThreshold(phase);
 
   // Red triggers (any one makes overall red)
-  const effectiveRatio = plannedMinutes > 0 ? totalEffectiveMinutes / plannedMinutes : 1;
+  const effectiveRatio = safePlannedMinutes > 0 ? safeTotalEffectiveMinutes / safePlannedMinutes : 1;
   const isEffectiveRed = effectiveRatio < 0.70;
-  const isBreakDaysRed = breakDays >= 2;
-  const isMistakeRecoveryRed = mistakeRecoveryRate < 0.50;
-  const isCoreRatioRed = coreRatioMedian < phaseThreshold;
+  const isBreakDaysRed = safeBreakDays >= 2;
+  const isMistakeRecoveryRed = safeMistakeRecoveryRate < 0.50;
+  const isCoreRatioRed = safeCoreRatioMedian < phaseThreshold;
 
   const hasRed = isEffectiveRed || isBreakDaysRed || isMistakeRecoveryRed || isCoreRatioRed;
 
@@ -100,9 +140,9 @@ export function computeWeeklyRetro(dailyResults, weekData) {
     },
     metrics: {
       effectiveRatio,
-      breakDays,
-      mistakeRecoveryRate,
-      coreRatioMedian,
+      breakDays: safeBreakDays,
+      mistakeRecoveryRate: safeMistakeRecoveryRate,
+      coreRatioMedian: safeCoreRatioMedian,
     },
   };
 }
@@ -116,11 +156,13 @@ export function computeWeeklyRetro(dailyResults, weekData) {
  * @param {number} planCurve.cumulativePlannedMinutes - Planned cumulative minutes
  * @returns {Object} MonthlyAuditResult
  */
-export function computeMonthlyAudit(monthData, planCurve) {
+export function computeMonthlyAudit(monthData = {}, planCurve = {}) {
   const { actualMinutes } = monthData;
   const { cumulativePlannedMinutes } = planCurve;
+  const safeActualMinutes = nonNegativeNumber(actualMinutes);
+  const safeCumulativePlannedMinutes = nonNegativeNumber(cumulativePlannedMinutes);
 
-  const ratio = cumulativePlannedMinutes > 0 ? actualMinutes / cumulativePlannedMinutes : 1;
+  const ratio = safeCumulativePlannedMinutes > 0 ? safeActualMinutes / safeCumulativePlannedMinutes : 1;
 
   const shrinkToCore = shouldShrinkToCore(ratio);
   const tierFallback = shouldTriggerTierFallback(ratio);
@@ -148,7 +190,7 @@ export function computeMonthlyAudit(monthData, planCurve) {
  * @returns {boolean} true if ratio < 0.85
  */
 export function shouldShrinkToCore(ratio) {
-  return ratio < 0.85;
+  return nonNegativeNumber(ratio, 1) < 0.85;
 }
 
 /**
@@ -157,5 +199,5 @@ export function shouldShrinkToCore(ratio) {
  * @returns {boolean} true if ratio < 0.70
  */
 export function shouldTriggerTierFallback(ratio) {
-  return ratio < 0.70;
+  return nonNegativeNumber(ratio, 1) < 0.70;
 }

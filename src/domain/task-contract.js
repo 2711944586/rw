@@ -4,6 +4,45 @@
  * No side effects — all functions are pure.
  */
 
+function finiteNumber(value, fallback = 0) {
+  const numeric = ['string', 'number', 'bigint'].includes(typeof value) ? Number(value) : Number.NaN;
+  const fallbackNumeric = ['string', 'number', 'bigint'].includes(typeof fallback) ? Number(fallback) : Number.NaN;
+  if (Number.isFinite(numeric)) return numeric;
+  return Number.isFinite(fallbackNumeric) ? fallbackNumeric : 0;
+}
+
+function nonNegativeCount(value, fallback = 0) {
+  return Math.round(Math.max(0, finiteNumber(value, fallback)));
+}
+
+function isProvided(value) {
+  return value !== undefined && value !== null && value !== '';
+}
+
+function isNonNegativeNumber(value) {
+  const numeric = ['string', 'number', 'bigint'].includes(typeof value) ? Number(value) : Number.NaN;
+  return Number.isFinite(numeric) && numeric >= 0;
+}
+
+function parseDate(value) {
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value : null;
+  if (!['string', 'number'].includes(typeof value)) return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function safeText(value) {
+  const type = typeof value;
+  if (!['string', 'number', 'bigint'].includes(type)) return '';
+  return String(value);
+}
+
+function artifactList(value) {
+  return Array.isArray(value)
+    ? value.map(safeText).filter(Boolean)
+    : [];
+}
+
 /**
  * Validates whether a task completion attempt satisfies its contract.
  *
@@ -16,33 +55,45 @@
  * @param {number} [payload.correct_count] - Number of correct answers
  * @returns {{ valid: boolean, errors: string[] }}
  */
-export function validateCompletion(task, payload) {
+export function validateCompletion(task = {}, payload = {}) {
   const errors = [];
+  const requiredArtifacts = artifactList(task.required_artifacts);
+  const submittedArtifacts = artifactList(payload.artifacts);
+  const requiredProblemCount = nonNegativeCount(task.required_problem_count);
+  const problemCount = nonNegativeCount(payload.problem_count);
+  const correctCount = nonNegativeCount(payload.correct_count);
+
+  if (isProvided(payload.problem_count) && !isNonNegativeNumber(payload.problem_count)) {
+    errors.push('problem_count must be a non-negative number');
+  }
+  if (isProvided(payload.correct_count) && !isNonNegativeNumber(payload.correct_count)) {
+    errors.push('correct_count must be a non-negative number');
+  }
 
   // Check required_artifacts: each must be present in payload.artifacts
-  if (Array.isArray(task.required_artifacts) && task.required_artifacts.length > 0) {
-    const submitted = Array.isArray(payload.artifacts) ? payload.artifacts : [];
-    for (const artifact of task.required_artifacts) {
-      if (!submitted.includes(artifact)) {
+  if (requiredArtifacts.length > 0) {
+    for (const artifact of requiredArtifacts) {
+      if (!submittedArtifacts.includes(artifact)) {
         errors.push(`Missing required artifact: ${artifact}`);
       }
     }
   }
 
   // Check required_problem_count: if > 0, submitted problems must meet requirement
-  if (task.required_problem_count > 0) {
-    const problemCount = typeof payload.problem_count === 'number' ? payload.problem_count : 0;
-    if (problemCount < task.required_problem_count) {
+  if (requiredProblemCount > 0) {
+    if (problemCount < requiredProblemCount) {
       errors.push(
-        `Submitted problems (${problemCount}) less than required (${task.required_problem_count})`
+        `Submitted problems (${problemCount}) less than required (${requiredProblemCount})`
       );
     }
   }
 
   // Check: if problems > 0, correct_count must be provided
-  const problemCount = typeof payload.problem_count === 'number' ? payload.problem_count : 0;
   if (problemCount > 0 && (payload.correct_count === undefined || payload.correct_count === null)) {
     errors.push('correct_count is required when problem_count > 0');
+  }
+  if (problemCount > 0 && isProvided(payload.correct_count) && correctCount > problemCount) {
+    errors.push('correct_count cannot exceed problem_count');
   }
 
   return { valid: errors.length === 0, errors };
@@ -58,24 +109,27 @@ export function validateCompletion(task, payload) {
  * @param {string|Date} [today] - Reference date for "today" (defaults to now)
  * @returns {{ canPromote: boolean, unmetCriteria: string[] }}
  */
-export function validateMasteryPromotion(topicProgress, today = new Date()) {
+export function validateMasteryPromotion(topicProgress = {}, today = new Date()) {
   const unmetCriteria = [];
-  const now = today instanceof Date ? today : new Date(today);
+  const now = parseDate(today);
+  const totalProblems = nonNegativeCount(topicProgress.total_problems);
+  const recentAccuracy = finiteNumber(topicProgress.recent_14d_accuracy, 0);
+
+  if (!now) {
+    unmetCriteria.push('today is invalid');
+  }
 
   // Criterion 1: total_problems >= 30
-  if (typeof topicProgress.total_problems !== 'number' || topicProgress.total_problems < 30) {
+  if (totalProblems < 30) {
     unmetCriteria.push(
-      `total_problems (${topicProgress.total_problems ?? 0}) must be >= 30`
+      `total_problems (${totalProblems}) must be >= 30`
     );
   }
 
   // Criterion 2: recent_14d_accuracy >= 0.80
-  if (
-    typeof topicProgress.recent_14d_accuracy !== 'number' ||
-    topicProgress.recent_14d_accuracy < 0.80
-  ) {
+  if (recentAccuracy < 0.80) {
     unmetCriteria.push(
-      `recent_14d_accuracy (${topicProgress.recent_14d_accuracy ?? 0}) must be >= 0.80`
+      `recent_14d_accuracy (${recentAccuracy}) must be >= 0.80`
     );
   }
 
@@ -83,15 +137,20 @@ export function validateMasteryPromotion(topicProgress, today = new Date()) {
   if (!topicProgress.last_review) {
     unmetCriteria.push('last_review is missing');
   } else {
-    const lastReview = topicProgress.last_review instanceof Date
-      ? topicProgress.last_review
-      : new Date(topicProgress.last_review);
-    const diffMs = now.getTime() - lastReview.getTime();
-    const diffDays = diffMs / (1000 * 60 * 60 * 24);
-    if (diffDays > 7) {
-      unmetCriteria.push(
-        `daysSinceLastReview (${Math.floor(diffDays)}) must be <= 7`
-      );
+    const lastReview = parseDate(topicProgress.last_review);
+    if (!lastReview) {
+      unmetCriteria.push('last_review is invalid');
+    } else if (now) {
+      const diffMs = now.getTime() - lastReview.getTime();
+      const diffDays = diffMs / (1000 * 60 * 60 * 24);
+      if (diffDays > 7) {
+        unmetCriteria.push(
+          `daysSinceLastReview (${Math.floor(diffDays)}) must be <= 7`
+        );
+      }
+      if (diffDays < 0) {
+        unmetCriteria.push('last_review cannot be in the future');
+      }
     }
   }
 
@@ -107,9 +166,11 @@ export function validateMasteryPromotion(topicProgress, today = new Date()) {
  * @param {number} reviewResult.accuracy - Accuracy of the review (0..1)
  * @returns {{ shouldDemote: boolean, newStatus: string }}
  */
-export function checkMasteryDemotion(topic, reviewResult) {
-  if (topic.mastery_status === 'mastered' && reviewResult.accuracy < 0.60) {
+export function checkMasteryDemotion(topic = {}, reviewResult = {}) {
+  const currentStatus = topic.mastery_status;
+  const accuracy = finiteNumber(reviewResult.accuracy, 1);
+  if (currentStatus === 'mastered' && accuracy < 0.60) {
     return { shouldDemote: true, newStatus: 'needs_review' };
   }
-  return { shouldDemote: false, newStatus: topic.mastery_status };
+  return { shouldDemote: false, newStatus: currentStatus };
 }

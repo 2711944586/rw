@@ -39,6 +39,12 @@ let currentView = null;
 /** The container element for view rendering */
 let appContainer = null;
 
+/** Monotonic token used to ignore stale async navigations */
+let navigationToken = 0;
+
+/** Whether the global hashchange listener has been registered */
+let isListening = false;
+
 /**
  * Extract route name from the URL hash.
  * @returns {string} Route name (defaults to 'today')
@@ -66,6 +72,25 @@ async function loadView(route) {
   return module;
 }
 
+function safelyUnmountView(view) {
+  if (view && typeof view.unmount === 'function') {
+    try {
+      view.unmount();
+    } catch (err) {
+      console.warn('[Router] Failed to unmount current view:', err);
+    }
+  }
+}
+
+/**
+ * Safely unmount the current view without blocking route recovery.
+ */
+function unmountCurrentView() {
+  const view = currentView;
+  currentView = null;
+  safelyUnmountView(view);
+}
+
 /**
  * Navigate to a given route. Unmounts current view, loads and mounts the new one.
  * @param {string} route - Target route name
@@ -75,14 +100,13 @@ async function navigate(route) {
     route = DEFAULT_ROUTE;
   }
 
-  // Skip if already on this route
-  if (route === currentRoute) return;
+  // Skip if already mounted on this route. If the previous load failed, allow retry.
+  if (route === currentRoute && currentView) return;
 
   // Unmount current view
-  if (currentView && typeof currentView.unmount === 'function') {
-    currentView.unmount();
-  }
+  unmountCurrentView();
 
+  const token = ++navigationToken;
   currentRoute = route;
 
   // Update hash without triggering hashchange
@@ -92,15 +116,34 @@ async function navigate(route) {
   }
 
   // Load and mount new view
+  let viewModule;
   try {
-    const viewModule = await loadView(route);
-    currentView = viewModule;
-    if (appContainer && typeof viewModule.mount === 'function') {
-      viewModule.mount(appContainer);
+    viewModule = await loadView(route);
+    if (token !== navigationToken || route !== currentRoute) return;
+
+    if (!appContainer) {
+      currentView = null;
+      return;
     }
+    if (typeof viewModule.mount !== 'function') {
+      throw new Error(`View "${route}" does not export mount()`);
+    }
+
+    viewModule.mount(appContainer);
+    currentView = viewModule;
   } catch (err) {
+    if (token !== navigationToken || route !== currentRoute) return;
+
+    safelyUnmountView(viewModule);
     console.error(`[Router] Failed to load view "${route}":`, err);
     currentView = null;
+    if (appContainer) {
+      const error = document.createElement('div');
+      error.className = 'route-error';
+      error.setAttribute('role', 'alert');
+      error.textContent = '页面加载失败，请刷新后重试。';
+      appContainer.replaceChildren(error);
+    }
   }
 
   // Notify state change
@@ -146,8 +189,19 @@ function preloadTodayView() {
  * @param {HTMLElement} container - The DOM element to mount views into
  */
 function init(container) {
+  const containerChanged = appContainer && appContainer !== container;
+  if (containerChanged) {
+    navigationToken += 1;
+    unmountCurrentView();
+    currentRoute = null;
+    currentView = null;
+  }
+
   appContainer = container;
-  window.addEventListener('hashchange', onHashChange);
+  if (!isListening) {
+    window.addEventListener('hashchange', onHashChange);
+    isListening = true;
+  }
 
   // Navigate to the initial route
   const initialRoute = parseHash();
@@ -161,10 +215,12 @@ function init(container) {
  * Destroy the router, removing listeners and unmounting current view.
  */
 function destroy() {
-  window.removeEventListener('hashchange', onHashChange);
-  if (currentView && typeof currentView.unmount === 'function') {
-    currentView.unmount();
+  navigationToken += 1;
+  if (isListening) {
+    window.removeEventListener('hashchange', onHashChange);
+    isListening = false;
   }
+  unmountCurrentView();
   currentRoute = null;
   currentView = null;
   appContainer = null;

@@ -28,30 +28,65 @@ const SYNCED_TABLES = [
   'project_showcase_items',
 ];
 
+const SYNCED_TABLE_SET = new Set(SYNCED_TABLES);
+let onlineListenerAttached = false;
+
 /**
  * Push dirty records to Supabase via upsert.
  * On RLS rejection or network error, preserves dirty state and emits sync:error.
  *
  * @param {Array<{table: string, id: string, record: Object, timestamp: string}>} dirtyRecords
- * @returns {Promise<{success: boolean, synced: string[], failed: string[], error?: string}>}
+ * @returns {Promise<{success: boolean, synced: string[], failed: string[], localSaved: boolean, error?: string}>}
  */
 export async function pushDirtyRecords(dirtyRecords) {
-  if (!supabaseConfigured || !supabase) {
-    return { success: false, synced: [], failed: [], error: 'Supabase not configured' };
+  const { validRecords, invalidKeys } = normalizeDirtyRecords(dirtyRecords);
+
+  if (validRecords.length === 0) {
+    if (invalidKeys.length > 0) {
+      const error = 'Invalid dirty records skipped';
+      EventBus.emit(EVENTS.SYNC_ERROR, {
+        error,
+        code: 'INVALID_DIRTY_RECORDS',
+        failed: invalidKeys,
+      });
+      return { success: false, synced: [], failed: invalidKeys, localSaved: true, error };
+    }
+    return { success: true, synced: [], failed: [], localSaved: true };
   }
 
-  const user = await getCurrentUser();
+  if (!supabaseConfigured || !supabase) {
+    const error = 'Supabase not configured';
+    const failed = formatFailedDirtyRecords(validRecords, invalidKeys);
+    EventBus.emit(EVENTS.SYNC_ERROR, {
+      error,
+      code: 'SUPABASE_NOT_CONFIGURED',
+      failed,
+    });
+    return { success: false, synced: [], failed, localSaved: true, error };
+  }
+
+  const user = await getCurrentUserSafely();
   if (!user) {
-    return { success: false, synced: [], failed: [], error: 'Not authenticated' };
+    const error = 'Not authenticated';
+    const failed = formatFailedDirtyRecords(validRecords, invalidKeys);
+    EventBus.emit(EVENTS.SYNC_ERROR, {
+      error,
+      code: 'NOT_AUTHENTICATED',
+      failed,
+    });
+    return { success: false, synced: [], failed, localSaved: true, error };
   }
 
   const synced = [];
-  const failed = [];
-  let lastError = null;
+  const failed = [...invalidKeys];
+  let lastError = invalidKeys.length > 0
+    ? { message: 'Invalid dirty records skipped', code: 'INVALID_DIRTY_RECORDS' }
+    : null;
+  let localSaved = true;
 
   // Group records by table for batched upserts
   const byTable = {};
-  for (const entry of dirtyRecords) {
+  for (const entry of validRecords) {
     if (!byTable[entry.table]) byTable[entry.table] = [];
     byTable[entry.table].push(entry);
   }
@@ -92,7 +127,7 @@ export async function pushDirtyRecords(dirtyRecords) {
 
   // Clear dirty flags only for successfully synced records
   if (synced.length > 0) {
-    OfflineCache.clearDirty(synced);
+    localSaved = OfflineCache.clearDirty(synced);
   }
 
   const allSucceeded = failed.length === 0 && synced.length > 0;
@@ -100,12 +135,13 @@ export async function pushDirtyRecords(dirtyRecords) {
   if (allSucceeded) {
     // Update profiles.last_synced_at
     await updateLastSyncedAt(user.id);
-    EventBus.emit(EVENTS.SYNC_SUCCESS, { synced, timestamp: new Date().toISOString() });
+    EventBus.emit(EVENTS.SYNC_SUCCESS, { synced, localSaved, timestamp: new Date().toISOString() });
   } else if (lastError) {
     // Preserve dirty state — do NOT clear failed records
+    const error = errorMessage(lastError);
     EventBus.emit(EVENTS.SYNC_ERROR, {
-      error: lastError.message || String(lastError),
-      code: lastError.code || 'UNKNOWN',
+      error,
+      code: errorCode(lastError),
       failed,
     });
   }
@@ -114,7 +150,8 @@ export async function pushDirtyRecords(dirtyRecords) {
     success: allSucceeded,
     synced,
     failed,
-    error: lastError ? (lastError.message || String(lastError)) : undefined,
+    localSaved,
+    error: lastError ? errorMessage(lastError) : undefined,
   };
 }
 
@@ -125,49 +162,73 @@ export async function pushDirtyRecords(dirtyRecords) {
  */
 export async function pullRemoteState() {
   if (!supabaseConfigured || !supabase) {
-    return { success: false, error: 'Supabase not configured' };
+    const error = 'Supabase not configured';
+    const failed = [...SYNCED_TABLES];
+    EventBus.emit(EVENTS.SYNC_ERROR, {
+      error,
+      code: 'SUPABASE_NOT_CONFIGURED',
+      context: 'pull',
+      failed,
+    });
+    return { success: false, error, failed };
   }
 
-  const user = await getCurrentUser();
+  const user = await getCurrentUserSafely();
   if (!user) {
-    return { success: false, error: 'Not authenticated' };
+    const error = 'Not authenticated';
+    const failed = [...SYNCED_TABLES];
+    EventBus.emit(EVENTS.SYNC_ERROR, {
+      error,
+      code: 'NOT_AUTHENTICATED',
+      context: 'pull',
+      failed,
+    });
+    return { success: false, error, failed };
   }
 
   try {
     const results = await Promise.all(
-      SYNCED_TABLES.map((table) =>
-        supabase
-          .from(table)
-          .select('*')
-          .eq('user_id', user.id)
-          .then((res) => ({ table, data: res.data, error: res.error }))
-      )
+      SYNCED_TABLES.map(async (table) => {
+        try {
+          const res = await supabase
+            .from(table)
+            .select('*')
+            .eq('user_id', user.id);
+          return { table, data: res.data, error: res.error };
+        } catch (error) {
+          return { table, data: [], error };
+        }
+      })
     );
 
     const errors = results.filter((r) => r.error);
     if (errors.length > 0) {
       const firstError = errors[0].error;
+      const error = errorMessage(firstError);
+      const failed = errors.map((result) => result.table);
       EventBus.emit(EVENTS.SYNC_ERROR, {
-        error: firstError.message || String(firstError),
-        code: firstError.code || 'UNKNOWN',
+        error,
+        code: errorCode(firstError),
         context: 'pull',
+        failed,
       });
-      return { success: false, error: firstError.message || String(firstError) };
+      return { success: false, error, failed };
     }
 
     const data = {};
     for (const result of results) {
-      data[result.table] = result.data || [];
+      data[result.table] = normalizeRemoteRows(result.data);
     }
 
     return { success: true, data };
   } catch (err) {
+    const error = errorMessage(err);
     EventBus.emit(EVENTS.SYNC_ERROR, {
-      error: err.message || String(err),
+      error,
       code: 'NETWORK_ERROR',
       context: 'pull',
     });
-    return { success: false, error: err.message || String(err) };
+    return { success: false, error };
   }
 }
 
@@ -181,12 +242,12 @@ export async function pullRemoteState() {
  * @returns {{ winner: Object, loser: Object }}
  */
 export function resolveConflict(local, remote) {
-  const localTime = new Date(local.updated_at).getTime();
-  const remoteTime = new Date(remote.updated_at).getTime();
+  const localTime = parseRecordTime(local?.updated_at);
+  const remoteTime = parseRecordTime(remote?.updated_at);
 
   // Last-write-wins: the record with the later updated_at is the winner
   // On tie, prefer remote (server authority)
-  if (localTime > remoteTime) {
+  if (localTime !== null && (remoteTime === null || localTime > remoteTime)) {
     return { winner: local, loser: remote };
   }
   return { winner: remote, loser: local };
@@ -202,11 +263,20 @@ export function resolveConflict(local, remote) {
  * @returns {Promise<{success: boolean, error?: string}>}
  */
 export async function archiveConflict(tableName, recordId, winner, loser) {
+  const table = normalizeTable(tableName);
+  const id = normalizeId(recordId);
+  const winnerPayload = cloneRecordForSync(winner);
+  const loserPayload = cloneRecordForSync(loser);
+
+  if (!isValidTable(table) || !isValidId(id) || !winnerPayload || !loserPayload) {
+    return { success: false, error: 'Invalid conflict record' };
+  }
+
   if (!supabaseConfigured || !supabase) {
     return { success: false, error: 'Supabase not configured' };
   }
 
-  const user = await getCurrentUser();
+  const user = await getCurrentUserSafely();
   if (!user) {
     return { success: false, error: 'Not authenticated' };
   }
@@ -214,19 +284,19 @@ export async function archiveConflict(tableName, recordId, winner, loser) {
   try {
     const { error } = await supabase.from('conflicts').insert({
       user_id: user.id,
-      table_name: tableName,
-      record_id: recordId,
-      loser_payload: loser,
-      winner_payload: winner,
+      table_name: table,
+      record_id: id,
+      loser_payload: loserPayload,
+      winner_payload: winnerPayload,
       resolved_at: new Date().toISOString(),
     });
 
     if (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: errorMessage(error) };
     }
     return { success: true };
   } catch (err) {
-    return { success: false, error: err.message || String(err) };
+    return { success: false, error: errorMessage(err) };
   }
 }
 
@@ -237,6 +307,11 @@ export async function archiveConflict(tableName, recordId, winner, loser) {
  * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
  */
 export async function exportAllData(userId) {
+  const normalizedUserId = normalizeId(userId);
+  if (!normalizedUserId) {
+    return { success: false, error: 'User ID is required' };
+  }
+
   if (!supabaseConfigured || !supabase) {
     return { success: false, error: 'Supabase not configured' };
   }
@@ -249,7 +324,7 @@ export async function exportAllData(userId) {
         supabase
           .from(table)
           .select('*')
-          .eq('user_id', userId)
+          .eq('user_id', normalizedUserId)
           .then((res) => ({ table, data: res.data, error: res.error }))
       )
     );
@@ -258,17 +333,20 @@ export async function exportAllData(userId) {
     const profileResult = await supabase
       .from('profiles')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', normalizedUserId)
       .maybeSingle();
 
     const errors = results.filter((r) => r.error);
     if (errors.length > 0) {
-      throw new Error(errors[0].error.message || 'Export fetch failed');
+      throw new Error(errorMessage(errors[0].error, 'Export fetch failed'));
+    }
+    if (profileResult.error) {
+      throw new Error(errorMessage(profileResult.error, 'Profile export failed'));
     }
 
     const exportData = {
       exported_at: new Date().toISOString(),
-      user_id: userId,
+      user_id: normalizedUserId,
       profile: profileResult.data || null,
     };
 
@@ -279,15 +357,18 @@ export async function exportAllData(userId) {
     return exportData;
   })();
 
-  const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Export timed out (30s limit)')), TIMEOUT_MS)
-  );
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Export timed out (30s limit)')), TIMEOUT_MS);
+  });
 
   try {
     const data = await Promise.race([exportPromise, timeoutPromise]);
     return { success: true, data };
   } catch (err) {
-    return { success: false, error: err.message || String(err) };
+    return { success: false, error: errorMessage(err) };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -295,43 +376,49 @@ export async function exportAllData(userId) {
  * Perform a full sync cycle: push dirty records, then pull remote state.
  * Emits sync:success or sync:error accordingly.
  *
- * @returns {Promise<{success: boolean, error?: string}>}
+ * @returns {Promise<{success: boolean, localSaved?: boolean, error?: string}>}
  */
 export async function syncAll() {
   const dirtyRecords = OfflineCache.getDirtyRecords();
+  let localSaved = true;
 
   if (dirtyRecords.length > 0) {
     const pushResult = await pushDirtyRecords(dirtyRecords);
-    if (!pushResult.success && pushResult.failed.length > 0) {
-      // Partial failure — dirty state preserved, error already emitted
-      return { success: false, error: pushResult.error };
+    localSaved = pushResult.localSaved !== false;
+    if (!pushResult.success) {
+      // Push failure — dirty state preserved, error already emitted
+      return { success: false, localSaved, error: pushResult.error };
     }
   }
 
   const pullResult = await pullRemoteState();
   if (!pullResult.success) {
-    return { success: false, error: pullResult.error };
+    return { success: false, localSaved, error: pullResult.error };
   }
 
-  return { success: true };
+  return { success: true, localSaved };
 }
 
 /**
  * Initialize the sync service: listen for online events to auto-retry sync.
+ * @returns {boolean} Whether a new listener was attached
  */
 export function initSyncService() {
-  if (typeof window !== 'undefined') {
-    window.addEventListener('online', handleOnline);
-  }
+  if (typeof window === 'undefined' || onlineListenerAttached) return false;
+  window.addEventListener('online', handleOnline);
+  onlineListenerAttached = true;
+  return true;
 }
 
 /**
  * Tear down the sync service listeners.
+ * @returns {boolean} Whether an existing listener was removed
  */
 export function destroySyncService() {
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('online', handleOnline);
-  }
+  if (typeof window === 'undefined' || !onlineListenerAttached) return false;
+  window.removeEventListener('online', handleOnline);
+  onlineListenerAttached = false;
+  return true;
 }
 
 // --- Internal helpers ---
@@ -389,5 +476,123 @@ function getConflictKey(table) {
  */
 function isRLSError(error) {
   // PostgreSQL insufficient_privilege error code
-  return error.code === '42501' || (error.message && error.message.includes('row-level security'));
+  return errorCode(error, '') === '42501' || safeScalarText(error?.message).includes('row-level security');
+}
+
+function parseRecordTime(value) {
+  const type = typeof value;
+  if (!['string', 'number', 'bigint'].includes(type)) return null;
+  const time = new Date(String(value)).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
+async function getCurrentUserSafely() {
+  try {
+    return await getCurrentUser();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeDirtyRecords(dirtyRecords) {
+  const validRecords = [];
+  const invalidKeys = [];
+
+  if (!Array.isArray(dirtyRecords)) {
+    return { validRecords, invalidKeys: ['invalid_table:invalid_id'] };
+  }
+
+  for (const entry of dirtyRecords) {
+    const normalized = normalizeDirtyRecord(entry);
+    if (normalized) {
+      validRecords.push(normalized);
+    } else {
+      invalidKeys.push(formatDirtyKey(entry));
+    }
+  }
+
+  return { validRecords, invalidKeys };
+}
+
+function formatFailedDirtyRecords(validRecords, invalidKeys = []) {
+  return [...validRecords.map(formatDirtyKey), ...invalidKeys];
+}
+
+function normalizeRemoteRows(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(cloneRecordForSync).filter(Boolean);
+}
+
+function normalizeDirtyRecord(entry) {
+  if (!isPlainObject(entry)) return null;
+
+  const table = normalizeTable(entry.table);
+  const id = normalizeId(entry.id);
+  const record = cloneRecordForSync(entry.record);
+  if (!isValidTable(table) || !isValidId(id) || !record) return null;
+
+  return { ...entry, table, id, record };
+}
+
+function isValidTable(table) {
+  return SYNCED_TABLE_SET.has(normalizeTable(table));
+}
+
+function isValidId(id) {
+  return normalizeId(id) !== '';
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function safeScalarText(value, fallback = '') {
+  const type = typeof value;
+  if (!['string', 'number', 'bigint'].includes(type)) return fallback;
+  const text = String(value).trim();
+  return text || fallback;
+}
+
+function errorMessage(error, fallback = 'Sync failed') {
+  if (error instanceof Error) return safeScalarText(error.message, fallback);
+  if (isPlainObject(error)) return safeScalarText(error.message, fallback);
+  return safeScalarText(error, fallback);
+}
+
+function errorCode(error, fallback = 'UNKNOWN') {
+  return isPlainObject(error) ? safeScalarText(error.code, fallback) : fallback;
+}
+
+function cloneRecordForSync(record) {
+  if (!isPlainObject(record)) return null;
+
+  try {
+    const serialized = JSON.stringify(record);
+    if (serialized === undefined) return null;
+    const cloned = JSON.parse(serialized);
+    return isPlainObject(cloned) ? cloned : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeTable(table) {
+  return typeof table === 'string' ? table.trim() : '';
+}
+
+function normalizeId(id) {
+  return typeof id === 'string' ? id.trim() : '';
+}
+
+function formatDirtyKey(entry) {
+  if (!isPlainObject(entry)) return 'invalid_table:invalid_id';
+
+  const table = normalizeTable(entry.table) !== ''
+    ? normalizeTable(entry.table)
+    : 'invalid_table';
+  const id = normalizeId(entry.id) !== ''
+    ? normalizeId(entry.id)
+    : 'invalid_id';
+
+  return `${table}:${id}`;
 }

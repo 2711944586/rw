@@ -23,23 +23,23 @@ describe("study workflow content", () => {
     expect(html).toContain("备考拆解");
   });
 
-  it("anchors the clean-start workflow on 2026-06-08", () => {
+  it("anchors the clean-start workflow on 2026-06-15", () => {
     const app = fs.readFileSync(new URL("../../src/app.js", import.meta.url), "utf8");
     const sync = fs.readFileSync(new URL("../../src/supabaseSync.js", import.meta.url), "utf8");
     const html = fs.readFileSync(new URL("../../index.html", import.meta.url), "utf8");
     const schema = fs.readFileSync(new URL("../../supabase/schema.sql", import.meta.url), "utf8");
 
-    expect(app).toContain('const PLAN_START_DATE = "2026-06-08"');
-    expect(app).toContain('const CLEAN_START_VERSION = "2026-06-08-from-zero-v1"');
+    expect(app).toContain('const PLAN_START_DATE = "2026-06-15"');
+    expect(app).toContain('const CLEAN_START_VERSION = "2026-06-15-from-zero-v1"');
     expect(app).toContain("filterTaskStateFromStart");
     expect(app).toContain("filterDeletedFromStart");
     expect(app).toContain("早于起点的数据仅归档，不再参与计划、统计和复盘");
-    expect(sync).toContain('const PLAN_START_DATE = "2026-06-08"');
+    expect(sync).toContain('const PLAN_START_DATE = "2026-06-15"');
     expect(sync).toContain('gte("study_date", PLAN_START_DATE)');
     expect(sync).toContain('gte("task_date", PLAN_START_DATE)');
     expect(sync).toContain('gte("due_date", PLAN_START_DATE)');
     expect(sync).toContain('gte("mock_date", PLAN_START_DATE)');
-    expect(html).toContain("2026-06-08 从头开始");
-    expect(schema).toContain("3.6-jun8-clean-start-2026-06-08");
+    expect(html).toContain("2026-06-15 从头开始");
+    expect(schema).toContain("3.7-jun15-clean-start-2026-06-15");
   });
 });

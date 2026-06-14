@@ -1,5 +1,8 @@
 const VALID_SUBJECTS = ['math', 'cs408', 'english', 'politics', 'review', 'project'];
 const CORE_SUBJECTS = new Set(['math', 'cs408']);
+const PLAN_INTENSITIES = new Set(['bottomline', 'normal', 'strong']);
+const EXPERIENCE_TRACKS = new Set(['balanced', 'mathHeavy', 'cs408Heavy', 'englishSteady', 'latePolitics']);
+const MS_PER_DAY = 86400000;
 
 export const DEFAULT_PLAN_CONTROLS = {
   planIntensity: 'normal',
@@ -18,47 +21,52 @@ export const strategySources = [
     use: '01-04 方向按政治、英语一、数学一、408 作为当前备考基准，2028 入学仍需当年复核。',
   },
   {
-    title: '408 经验共识',
-    source: '王道/天勤体系与公开经验帖综合',
-    use: '跨考先补 C 与数据结构，随后计组、OS、计网；每章必须有题量、图示、伪代码和错题归档。',
+    title: '408 主线经验',
+    source: '王道论坛、计算机考研论坛、北大软微 11408 公开经验贴',
+    use: '跨考先补 C、复杂度和数据结构，随后计组、OS、计网；每章必须留下题量、过程图、伪代码和错题归档。',
   },
   {
-    title: '数学经验共识',
-    source: '张宇/武忠祥等数学规划与高分经验帖综合',
-    use: '基础期重概念和基础题，强化期重题型，真题期严格限时；错题按识别信号回炉。',
+    title: '数学主线经验',
+    source: '公开高分经验贴与主流数学规划综合',
+    use: '基础期只打定义、公式条件和基础题；强化期按题型识别信号归类；真题期严格限时，错题必须能说出第一步。',
   },
   {
-    title: '英语经验共识',
-    source: '唐迟等阅读方法与经验帖综合',
+    title: '英语稳定经验',
+    source: '英语一阅读方法与公开经验贴综合',
     use: '单词每天不断档，阅读以定位句、同义替换、干扰项原因和精读复盘为核心；低负荷日也保留 20 分钟微积累。',
   },
   {
-    title: '政治经验共识',
-    source: '肖秀荣/腿姐/徐涛等后期资料使用经验综合',
-    use: '政治不宜过早挤占核心时间，暑期后启动选择题，考前再强化主观题和时政。',
+    title: '政治后置经验',
+    source: '政治主流课程节奏与经验贴综合',
+    use: '政治不宜过早挤占数学和 408；2027 年暑期后启动选择题，考前再集中主观题、时政和官方表述。',
   },
   {
     title: '学习科学依据',
-    source: 'practice testing / distributed practice / retrieval practice',
+    source: 'Dunlosky 2013 / Karpicke retrieval practice',
     use: '计划默认用主动回忆、间隔复盘和可验收产出，而不是只把视频或阅读时长写进计划。',
+  },
+  {
+    title: '执行经验边界',
+    source: '多篇经验贴共性抽象',
+    use: '经验贴只用于设计节奏和避坑：资料少而固定、错题回炉优先、周复盘只调一个变量，不把个例分数当作可复制承诺。',
   },
 ];
 
 export const phaseStrategies = {
   A: {
     label: '启动与补前置',
-    method: '低强度建立记录，数学预备、C 语言、单词不断档。',
-    reviewRule: '只做轻量 D+1，避免刚启动就被复盘债务压住。',
+    method: '6 月 15 日起低强度建档，补函数图像、代数变形、C 语言基础和英语句法；每天只追求完成证据。',
+    reviewRule: '只做轻量 D+1，错题当天写清错因，避免刚启动就被复盘债务压住。',
   },
   B: {
     label: '暑假奠基',
-    method: '高数基础、数据结构一轮、英语阅读入门同步推进。',
-    reviewRule: '错题 D+1/D+3 必清，周末合并同类错因。',
+    method: '高数基础、线代预热、C 到数据结构一轮、英语阅读入门同步推进，资料固定一套主线。',
+    reviewRule: '错题 D+1/D+3 必清，周末合并同类错因，连续两周未回炉就减少新内容。',
   },
   C: {
     label: '第一轮主干',
-    method: '数学三大模块和 408 四门建立完整框架，核心占比维持 65%+。',
-    reviewRule: '复盘必须挂回考纲小节，过期 7 天视作未掌握。',
+    method: '数学三大模块和 408 四门建立完整框架，核心占比维持 65%+，每周至少一次章节小测。',
+    reviewRule: '复盘必须挂回考纲小节，过期 7 天视作未掌握，不靠“看懂”标记通过。',
   },
   D: {
     label: '寒假闭合',
@@ -67,8 +75,8 @@ export const phaseStrategies = {
   },
   E: {
     label: '强化专题',
-    method: '分章节真题和题型强化，弱项按 14 天趋势滚动补。',
-    reviewRule: '错题回炉率低于 70% 时减少新题。',
+    method: '分章节真题和题型强化，数学看识别信号，408 看系统链路，弱项按 14 天趋势滚动补。',
+    reviewRule: '错题回炉率低于 70% 时减少新题；专题不过关不进入套卷刷量。',
   },
   F: {
     label: '真题套卷',
@@ -111,18 +119,60 @@ export const syllabusFrameworks = {
   ],
 };
 
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+function objectValue(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function arrayValue(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function safeText(value, fallback = '') {
+  const type = typeof value;
+  if (!['string', 'number', 'bigint'].includes(type)) return fallback;
+  const text = String(value);
+  return text || fallback;
+}
+
+function finiteNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function nonNegativeNumber(value, fallback = 0) {
+  const fallbackNumeric = Math.max(0, finiteNumber(fallback, 0));
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : fallbackNumeric;
+}
+
+function ratioValue(value, fallback = 0) {
+  return Math.min(1, Math.max(0, finiteNumber(value, fallback)));
+}
+
+function isoDateKey(value) {
+  const raw = value instanceof Date ? value.toISOString().slice(0, 10) : safeText(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return '';
+  const date = new Date(`${raw}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === raw ? raw : '';
+}
+
 export function normalizePlanControls(raw = {}) {
-  const next = { ...DEFAULT_PLAN_CONTROLS, ...(raw || {}) };
-  if (!['bottomline', 'normal', 'strong'].includes(next.planIntensity)) next.planIntensity = 'normal';
+  const next = { ...DEFAULT_PLAN_CONTROLS, ...objectValue(raw) };
+  if (!PLAN_INTENSITIES.has(next.planIntensity)) next.planIntensity = 'normal';
+  next.focusSubject = subjectKey(next.focusSubject);
   if (!['auto', ...VALID_SUBJECTS].includes(next.focusSubject)) next.focusSubject = 'auto';
-  if (!['balanced', 'mathHeavy', 'cs408Heavy', 'englishSteady', 'latePolitics'].includes(next.experienceTrack)) {
+  if (!EXPERIENCE_TRACKS.has(next.experienceTrack)) {
     next.experienceTrack = 'balanced';
   }
   next.reviewLoad = clampInt(next.reviewLoad, 15, 60);
   next.maxNewTopics = clampInt(next.maxNewTopics, 0, 4);
   next.rollingWindowDays = clampInt(next.rollingWindowDays, 7, 60);
   const enabled = Array.isArray(next.enabledSubjects) ? next.enabledSubjects : DEFAULT_PLAN_CONTROLS.enabledSubjects;
-  next.enabledSubjects = [...new Set(enabled.filter((item) => VALID_SUBJECTS.includes(item)))];
+  next.enabledSubjects = [...new Set(enabled.map(subjectKey).filter((item) => VALID_SUBJECTS.includes(item)))];
   if (!next.enabledSubjects.some((item) => CORE_SUBJECTS.has(item))) {
     next.enabledSubjects.push('math', 'cs408');
   }
@@ -131,6 +181,7 @@ export function normalizePlanControls(raw = {}) {
 }
 
 export function subjectKey(label = '') {
+  const normalized = safeText(label);
   const map = {
     '数学': 'math',
     '数学一': 'math',
@@ -142,18 +193,20 @@ export function subjectKey(label = '') {
     '补弱': 'review',
     '项目': 'project',
   };
-  return map[label] || label;
+  return hasOwn(map, normalized) ? map[normalized] : normalized;
 }
 
 export function subjectLabel(key = '') {
-  return {
+  const normalized = safeText(key);
+  const map = {
     math: '数学',
     cs408: '408',
     english: '英语',
     politics: '政治',
     review: '复盘',
     project: '项目',
-  }[key] || key;
+  };
+  return hasOwn(map, normalized) ? map[normalized] : normalized;
 }
 
 export function isSubjectEnabled(subject, controls = DEFAULT_PLAN_CONTROLS) {
@@ -162,14 +215,16 @@ export function isSubjectEnabled(subject, controls = DEFAULT_PLAN_CONTROLS) {
 }
 
 export function getPhaseStrategy(phaseId, track = 'balanced') {
-  const base = phaseStrategies[phaseId] || phaseStrategies.A;
-  const trackText = {
+  const base = hasOwn(phaseStrategies, phaseId) ? phaseStrategies[phaseId] : phaseStrategies.A;
+  const trackTexts = {
     balanced: '四科均衡执行，数学和 408 保持主线。',
     mathHeavy: '数学优先，适合数学进度落后或目标 130+。',
     cs408Heavy: '408 优先，适合跨考补计算机体系。',
     englishSteady: '英语每日不断档，阅读精读优先。',
     latePolitics: '政治后置，暑期后再逐步加量。',
-  }[track] || '';
+  };
+  const trackKey = safeText(track);
+  const trackText = hasOwn(trackTexts, trackKey) ? trackTexts[trackKey] : '';
   return { ...base, trackText };
 }
 
@@ -207,19 +262,20 @@ export function subjectPlanWeights(phaseId, controls = DEFAULT_PLAN_CONTROLS) {
 }
 
 export function applyPlanControls(tasks, context = {}) {
-  const controls = normalizePlanControls(context.controls);
-  const targetCount = clampInt(context.targetCount || 3, 1, 6);
-  const budget = clampInt(context.budget || 0, 0, 1440);
+  const safeContext = objectValue(context);
+  const controls = normalizePlanControls(safeContext.controls);
+  const targetCount = clampInt(safeContext.targetCount ?? 3, 1, 6);
+  const budget = clampInt(safeContext.budget ?? 0, 0, 1440);
   const focus = controls.focusSubject;
   let newCount = 0;
 
-  const scored = (tasks || [])
+  const scored = arrayValue(tasks)
     .filter((task) => task && isSubjectEnabled(task.subject, controls))
     .map((task, index) => {
       const key = subjectKey(task.subject);
       const isReview = key === 'review' || task.reviewItemId || task.source === 'carryover';
       const isNew = !isReview;
-      let score = (task.priority || index + 1) * 10;
+      let score = clampInt(task.priority ?? index + 1, 1, 99) * 10;
       if (task.source === 'carryover') score -= 100;
       if (task.reviewItemId) score -= 90;
       if (focus !== 'auto' && key === focus) score -= 35;
@@ -241,7 +297,7 @@ export function applyPlanControls(tasks, context = {}) {
 }
 
 export function buildRollingReviewWindows(reviewItems = [], today, options = {}) {
-  const controls = normalizePlanControls(options.controls);
+  const controls = normalizePlanControls(objectValue(options).controls);
   const windows = [
     { key: 'overdue', label: '逾期', from: -9999, to: -1, count: 0, minutes: 0 },
     { key: 'today', label: '今日', from: 0, to: 0, count: 0, minutes: 0 },
@@ -251,11 +307,12 @@ export function buildRollingReviewWindows(reviewItems = [], today, options = {})
     { key: 'month', label: '15-30天', from: 15, to: controls.rollingWindowDays, count: 0, minutes: 0 },
   ];
 
-  for (const item of reviewItems || []) {
-    if (!item || item.done || item.status === 'done') continue;
+  for (const item of arrayValue(reviewItems)) {
+    if (!item || item.done || ['done', 'failed'].includes(item.status)) continue;
     const due = item.dueDate || item.nextDueAt;
     if (!due) continue;
     const days = diffDays(due, today);
+    if (!Number.isFinite(days)) continue;
     const bucket = windows.find((window) => days >= window.from && days <= window.to);
     if (!bucket) continue;
     bucket.count += 1;
@@ -278,9 +335,10 @@ export function reviewLoadSignal(reviewItems = [], today, controls = DEFAULT_PLA
 export function recommendPlanAdjustment(metrics = {}, controls = DEFAULT_PLAN_CONTROLS, phaseId = 'A') {
   const normalized = normalizePlanControls(controls);
   const phase = getPhaseStrategy(phaseId, normalized.experienceTrack);
-  const activeDays = metrics.activeDays || 0;
-  const coreRatio = metrics.coreRatio || 0;
-  const mistakeRecovery = metrics.mistakeRecovery ?? 1;
+  const safeMetrics = objectValue(metrics);
+  const activeDays = nonNegativeNumber(safeMetrics.activeDays);
+  const coreRatio = ratioValue(safeMetrics.coreRatio);
+  const mistakeRecovery = ratioValue(safeMetrics.mistakeRecovery, 1);
   if (activeDays > 0 && activeDays <= 3) return '先降到底线日，连续恢复 3 天后再加量。';
   if (coreRatio > 0 && coreRatio < 0.6) return '数学和 408 占比偏低，下次计划把聚焦科目设为数学或 408。';
   if (mistakeRecovery < 0.7) return '错题回炉率偏低，把新考点上限降到 1-2，并优先复盘。';
@@ -288,20 +346,22 @@ export function recommendPlanAdjustment(metrics = {}, controls = DEFAULT_PLAN_CO
 }
 
 export function getSyllabusFramework(subject) {
-  return syllabusFrameworks[subject] || [];
+  const key = subjectKey(subject);
+  return hasOwn(syllabusFrameworks, key) ? syllabusFrameworks[key] : [];
 }
 
 function estimateReviewMinutes(item, fallback) {
-  const roundText = String(item.round || '');
-  if (roundText.includes('30')) return Math.max(20, fallback);
-  if (roundText.includes('14') || roundText.includes('7')) return Math.max(15, Math.round(fallback * 0.8));
-  return Math.max(10, Math.round(fallback * 0.6));
+  const safeFallback = nonNegativeNumber(fallback, DEFAULT_PLAN_CONTROLS.reviewLoad);
+  const roundText = safeText(objectValue(item).round);
+  if (roundText.includes('30')) return Math.max(20, safeFallback);
+  if (roundText.includes('14') || roundText.includes('7')) return Math.max(15, Math.round(safeFallback * 0.8));
+  return Math.max(10, Math.round(safeFallback * 0.6));
 }
 
 function fitBudget(tasks, budget) {
   if (!budget) return tasks;
-  let selected = [...tasks];
-  while (selected.length > 1 && selected.reduce((sum, task) => sum + (task.minutes || 0), 0) > budget) {
+  let selected = arrayValue(tasks);
+  while (selected.length > 1 && selected.reduce((sum, task) => sum + nonNegativeNumber(task?.minutes), 0) > budget) {
     const removeIndex = selected.findLastIndex((task) => !task.reviewItemId && task.source !== 'carryover');
     selected.splice(removeIndex >= 0 ? removeIndex : selected.length - 1, 1);
   }
@@ -309,9 +369,12 @@ function fitBudget(tasks, budget) {
 }
 
 function diffDays(dateStr, baseStr) {
-  const date = new Date(`${dateStr}T00:00:00Z`);
-  const base = new Date(`${baseStr}T00:00:00Z`);
-  return Math.round((date - base) / 86400000);
+  const dateKey = isoDateKey(dateStr);
+  const baseKey = isoDateKey(baseStr);
+  if (!dateKey || !baseKey) return Number.NaN;
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  const base = new Date(`${baseKey}T00:00:00Z`);
+  return Math.round((date - base) / MS_PER_DAY);
 }
 
 function clampInt(value, min, max) {

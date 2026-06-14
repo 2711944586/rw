@@ -111,6 +111,252 @@ describe('Router', () => {
     expect(container.innerHTML).toBe(html);
   });
 
+  it('registers only one hashchange listener across repeated init calls', async () => {
+    const addEventListener = vi.spyOn(window, 'addEventListener');
+
+    try {
+      Router.init(container);
+      Router.init(container);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const hashListeners = addEventListener.mock.calls.filter(([event]) => event === 'hashchange');
+      expect(hashListeners).toHaveLength(1);
+    } finally {
+      addEventListener.mockRestore();
+    }
+  });
+
+  it('reinitializes into a new container after unmounting the previous view', async () => {
+    const originalToday = Router._VIEW_MAP.today;
+    const nextContainer = document.createElement('div');
+    const unmount = vi.fn();
+
+    document.body.appendChild(nextContainer);
+    Router._VIEW_MAP.today = vi.fn(async () => ({
+      mount(target) {
+        target.innerHTML = '<div>today-mounted</div>';
+      },
+      unmount,
+    }));
+
+    try {
+      Router.init(container);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(container.innerHTML).toContain('today-mounted');
+
+      Router.init(nextContainer);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(unmount).toHaveBeenCalledTimes(1);
+      expect(nextContainer.innerHTML).toContain('today-mounted');
+      expect(Router.getCurrentRoute()).toBe('today');
+    } finally {
+      Router._VIEW_MAP.today = originalToday;
+      document.body.removeChild(nextContainer);
+    }
+  });
+
+  it('mounts a route that was navigated before init once a container exists', async () => {
+    const originalReviews = Router._VIEW_MAP.reviews;
+    const mount = vi.fn((target) => {
+      target.innerHTML = '<div>reviews-after-init</div>';
+    });
+
+    Router._VIEW_MAP.reviews = vi.fn(async () => ({
+      mount,
+      unmount: vi.fn(),
+    }));
+
+    try {
+      await Router.navigate('reviews');
+
+      expect(Router.getCurrentRoute()).toBe('reviews');
+      expect(mount).not.toHaveBeenCalled();
+
+      Router.init(container);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(mount).toHaveBeenCalledTimes(1);
+      expect(container.innerHTML).toContain('reviews-after-init');
+      expect(Router.getCurrentRoute()).toBe('reviews');
+    } finally {
+      Router._VIEW_MAP.reviews = originalReviews;
+    }
+  });
+
+  it('ignores stale async view loads after a newer navigation wins', async () => {
+    const originalToday = Router._VIEW_MAP.today;
+    const originalReviews = Router._VIEW_MAP.reviews;
+    let resolveToday;
+    let resolveReviews;
+    const todayMount = vi.fn((target) => {
+      target.innerHTML = '<div>stale-today</div>';
+    });
+    const reviewsMount = vi.fn((target) => {
+      target.innerHTML = '<div>current-reviews</div>';
+    });
+
+    Router._VIEW_MAP.today = vi.fn(() => new Promise((resolve) => {
+      resolveToday = resolve;
+    }));
+    Router._VIEW_MAP.reviews = vi.fn(() => new Promise((resolve) => {
+      resolveReviews = resolve;
+    }));
+
+    try {
+      window.location.hash = '#/today';
+      Router.init(container);
+
+      const reviewsNavigation = Router.navigate('reviews');
+      resolveReviews({ mount: reviewsMount, unmount: vi.fn() });
+      await reviewsNavigation;
+      expect(container.innerHTML).toContain('current-reviews');
+
+      resolveToday({ mount: todayMount, unmount: vi.fn() });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(todayMount).not.toHaveBeenCalled();
+      expect(container.innerHTML).toContain('current-reviews');
+      expect(Router.getCurrentRoute()).toBe('reviews');
+    } finally {
+      Router._VIEW_MAP.today = originalToday;
+      Router._VIEW_MAP.reviews = originalReviews;
+    }
+  });
+
+  it('continues navigation when the previous view unmount throws', async () => {
+    const originalToday = Router._VIEW_MAP.today;
+    const originalSettings = Router._VIEW_MAP.settings;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    Router._VIEW_MAP.today = vi.fn(async () => ({
+      mount(target) {
+        target.innerHTML = '<div>today-ready</div>';
+      },
+      unmount() {
+        throw new Error('unmount failed');
+      },
+    }));
+    Router._VIEW_MAP.settings = vi.fn(async () => ({
+      mount(target) {
+        target.innerHTML = '<div>settings-ready</div>';
+      },
+      unmount: vi.fn(),
+    }));
+
+    try {
+      window.location.hash = '#/today';
+      Router.init(container);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      await Router.navigate('settings');
+
+      expect(container.innerHTML).toContain('settings-ready');
+      expect(Router.getCurrentRoute()).toBe('settings');
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      Router._VIEW_MAP.today = originalToday;
+      Router._VIEW_MAP.settings = originalSettings;
+      warn.mockRestore();
+    }
+  });
+
+  it('does not unmount the same previous view twice during overlapping navigations', async () => {
+    const originalToday = Router._VIEW_MAP.today;
+    const originalSettings = Router._VIEW_MAP.settings;
+    const originalReviews = Router._VIEW_MAP.reviews;
+    const todayUnmount = vi.fn();
+    let resolveSettings;
+
+    Router._VIEW_MAP.today = vi.fn(async () => ({
+      mount(target) {
+        target.innerHTML = '<div>today-ready</div>';
+      },
+      unmount: todayUnmount,
+    }));
+    Router._VIEW_MAP.settings = vi.fn(() => new Promise((resolve) => {
+      resolveSettings = resolve;
+    }));
+    Router._VIEW_MAP.reviews = vi.fn(async () => ({
+      mount(target) {
+        target.innerHTML = '<div>reviews-ready</div>';
+      },
+      unmount: vi.fn(),
+    }));
+
+    try {
+      window.location.hash = '#/today';
+      Router.init(container);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const settingsNavigation = Router.navigate('settings');
+      await Router.navigate('reviews');
+
+      resolveSettings({
+        mount(target) {
+          target.innerHTML = '<div>stale-settings</div>';
+        },
+        unmount: vi.fn(),
+      });
+      await settingsNavigation;
+
+      expect(todayUnmount).toHaveBeenCalledTimes(1);
+      expect(container.innerHTML).toContain('reviews-ready');
+      expect(container.innerHTML).not.toContain('stale-settings');
+      expect(Router.getCurrentRoute()).toBe('reviews');
+    } finally {
+      Router._VIEW_MAP.today = originalToday;
+      Router._VIEW_MAP.settings = originalSettings;
+      Router._VIEW_MAP.reviews = originalReviews;
+    }
+  });
+
+  it('shows a route error and allows retrying the same route after load failure', async () => {
+    const originalToday = Router._VIEW_MAP.today;
+    const originalSettings = Router._VIEW_MAP.settings;
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let attempts = 0;
+
+    Router._VIEW_MAP.today = vi.fn(async () => ({
+      mount(target) {
+        target.innerHTML = '<div>today-base</div>';
+      },
+      unmount: vi.fn(),
+    }));
+    Router._VIEW_MAP.settings = vi.fn(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error('load failed');
+      }
+
+      return {
+        mount(target) {
+          target.innerHTML = '<div>settings-recovered</div>';
+        },
+        unmount: vi.fn(),
+      };
+    });
+
+    try {
+      Router.init(container);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await Router.navigate('settings');
+
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe('页面加载失败，请刷新后重试。');
+      expect(Router.getCurrentRoute()).toBe('settings');
+
+      await Router.navigate('settings');
+
+      expect(container.innerHTML).toContain('settings-recovered');
+      expect(Router.getCurrentRoute()).toBe('settings');
+      expect(Router._VIEW_MAP.settings).toHaveBeenCalledTimes(2);
+    } finally {
+      Router._VIEW_MAP.today = originalToday;
+      Router._VIEW_MAP.settings = originalSettings;
+      error.mockRestore();
+    }
+  });
+
   it('destroy cleans up state', async () => {
     Router.init(container);
     await new Promise((r) => setTimeout(r, 50));

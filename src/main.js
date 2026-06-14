@@ -1,18 +1,36 @@
 function installShellFallback(error) {
   console.error("[rw] main module fallback", error);
+  const defaultViewId = "dashboard";
+  const isValidView = (viewId) => Boolean(viewId && document.getElementById(viewId)?.classList.contains("view"));
+  const currentHashView = () => {
+    try {
+      return decodeURIComponent(window.location.hash.replace(/^#/, "")).trim();
+    } catch {
+      return window.location.hash.replace(/^#/, "").trim();
+    }
+  };
   const setView = (viewId) => {
-    if (!viewId || !document.getElementById(viewId)?.classList.contains("view")) return;
+    const nextView = isValidView(viewId) ? viewId : defaultViewId;
     document.querySelectorAll(".nav-item").forEach((item) => {
-      item.classList.toggle("active", item.dataset.view === viewId);
+      const active = item.dataset.view === nextView;
+      item.classList.toggle("active", active);
+      if (active) {
+        item.setAttribute("aria-current", "page");
+      } else {
+        item.removeAttribute("aria-current");
+      }
     });
     document.querySelectorAll(".view").forEach((view) => {
-      view.classList.toggle("active", view.id === viewId);
+      const active = view.id === nextView;
+      view.classList.toggle("active", active);
+      view.hidden = !active;
+      view.setAttribute("aria-hidden", String(!active));
     });
-    const nav = [...document.querySelectorAll(".nav-item[data-view]")].find((item) => item.dataset.view === viewId);
+    const nav = [...document.querySelectorAll(".nav-item[data-view]")].find((item) => item.dataset.view === nextView);
     const title = nav?.dataset.title || nav?.textContent?.trim() || "总览";
     const heading = document.getElementById("viewTitle");
     if (heading) heading.textContent = title;
-    if (window.location.hash !== `#${viewId}`) window.history.replaceState(null, "", `#${viewId}`);
+    if (window.location.hash !== `#${nextView}`) window.history.replaceState(null, "", `#${nextView}`);
   };
 
   document.addEventListener("click", (event) => {
@@ -35,11 +53,10 @@ function installShellFallback(error) {
   }, true);
 
   window.addEventListener("hashchange", () => {
-    const view = window.location.hash.replace(/^#/, "");
-    setView(view || "dashboard");
+    setView(currentHashView());
   });
 
-  setView(window.location.hash.replace(/^#/, "") || "dashboard");
+  setView(currentHashView());
   const hint = document.getElementById("authHint");
   if (hint) hint.textContent = "页面进入恢复模式。请先清理本机缓存，再刷新页面。";
 }

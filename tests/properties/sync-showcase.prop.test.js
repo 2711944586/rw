@@ -227,11 +227,27 @@ describe('Property 28: Showcase data desensitization', () => {
  * **Validates: Requirements 10.5, 10.6**
  *
  * For any item with < 2 filled fields in {artifact_type, item_date, output_link},
- * validateShowcaseItem returns valid=false. With >= 2, returns valid=true.
+ * validateShowcaseItem returns valid=false. With >= 2, returns valid=true
+ * when output_link is a safe absolute http(s) URL if present.
  */
 describe('Property 29: Showcase item submission validation', () => {
-  const arbNonEmpty = fc.string({ minLength: 1, maxLength: 100 });
+  const arbNonEmpty = fc.string({ minLength: 1, maxLength: 100 })
+    .filter((s) => s.trim().length > 0);
   const arbEmpty = fc.constantFrom('', null, undefined);
+  const arbValidDate = fc
+    .integer({ min: Date.UTC(2020, 0, 1), max: Date.UTC(2035, 11, 31) })
+    .map((ts) => new Date(ts).toISOString().slice(0, 10));
+  const arbHostLabel = fc.string({ minLength: 1, maxLength: 20 })
+    .filter((s) => /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(s));
+  const arbUrlPath = fc.string({ maxLength: 24 })
+    .filter((s) => /^[A-Za-z0-9._~/-]*$/.test(s));
+  const arbSafeOutputLink = fc
+    .tuple(fc.constantFrom('http', 'https'), arbHostLabel, arbUrlPath)
+    .map(([protocol, hostLabel, path]) => `${protocol}://${hostLabel}.example.com/${path}`);
+  const arbUnsafeOutputLink = fc.oneof(
+    fc.constantFrom('javascript:alert(1)', '/relative/path', '//example.com/path', 'data:text/html,<script>alert(1)</script>', 'ftp://example.com/file'),
+    fc.string({ minLength: 1, maxLength: 24 }).filter((s) => s.trim().length > 0 && !/^https?:\/\//i.test(s))
+  );
 
   // Items with 0 filled fields → invalid
   test.prop([arbEmpty, arbEmpty, arbEmpty])(
@@ -266,7 +282,7 @@ describe('Property 29: Showcase item submission validation', () => {
     }
   );
 
-  test.prop([arbNonEmpty])(
+  test.prop([arbSafeOutputLink])(
     'returns valid=false when only output_link is filled',
     (outputLink) => {
       const item = { artifact_type: '', item_date: '', output_link: outputLink };
@@ -276,7 +292,7 @@ describe('Property 29: Showcase item submission validation', () => {
   );
 
   // Items with exactly 2 filled fields → valid
-  test.prop([arbNonEmpty, arbNonEmpty])(
+  test.prop([arbNonEmpty, arbValidDate])(
     'returns valid=true when artifact_type and item_date are filled',
     (artifactType, itemDate) => {
       const item = { artifact_type: artifactType, item_date: itemDate, output_link: '' };
@@ -285,7 +301,7 @@ describe('Property 29: Showcase item submission validation', () => {
     }
   );
 
-  test.prop([arbNonEmpty, arbNonEmpty])(
+  test.prop([arbNonEmpty, arbSafeOutputLink])(
     'returns valid=true when artifact_type and output_link are filled',
     (artifactType, outputLink) => {
       const item = { artifact_type: artifactType, item_date: '', output_link: outputLink };
@@ -294,7 +310,7 @@ describe('Property 29: Showcase item submission validation', () => {
     }
   );
 
-  test.prop([arbNonEmpty, arbNonEmpty])(
+  test.prop([arbValidDate, arbSafeOutputLink])(
     'returns valid=true when item_date and output_link are filled',
     (itemDate, outputLink) => {
       const item = { artifact_type: '', item_date: itemDate, output_link: outputLink };
@@ -304,7 +320,7 @@ describe('Property 29: Showcase item submission validation', () => {
   );
 
   // Items with all 3 filled fields → valid
-  test.prop([arbNonEmpty, arbNonEmpty, arbNonEmpty])(
+  test.prop([arbNonEmpty, arbValidDate, arbSafeOutputLink])(
     'returns valid=true when all 3 fields are filled',
     (artifactType, itemDate, outputLink) => {
       const item = {
@@ -314,6 +330,19 @@ describe('Property 29: Showcase item submission validation', () => {
       };
       const result = validateShowcaseItem(item);
       expect(result.valid).toBe(true);
+    }
+  );
+
+  test.prop([arbNonEmpty, arbValidDate, arbUnsafeOutputLink])(
+    'returns valid=false when an unsafe output_link is supplied',
+    (artifactType, itemDate, outputLink) => {
+      const item = {
+        artifact_type: artifactType,
+        item_date: itemDate,
+        output_link: outputLink
+      };
+      const result = validateShowcaseItem(item);
+      expect(result.valid).toBe(false);
     }
   );
 });

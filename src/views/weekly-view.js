@@ -9,6 +9,8 @@
 
 import { computeWeeklyRetro } from '../domain/retrospective-engine.js';
 import { StateManager } from '../core/state-manager.js';
+import { escapeHTML } from '../utils/html.js';
+import { nonNegativeNumber, positiveNumber } from '../utils/number.js';
 
 /** @type {HTMLElement|null} */
 let containerEl = null;
@@ -23,11 +25,51 @@ function getToday() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function safeNumber(value, fallback = 0) {
+  return nonNegativeNumber(value, fallback);
+}
+
+function safePositiveNumber(value, fallback) {
+  return positiveNumber(value, fallback);
+}
+
+function safeText(value, fallback = '') {
+  const type = typeof value;
+  if (!['string', 'number', 'bigint'].includes(type)) return fallback;
+  const text = String(value);
+  return text || fallback;
+}
+
+function objectValue(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function safeDateKey(value, fallback = '') {
+  const text = safeText(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return fallback;
+  const date = new Date(`${text}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === text ? text : fallback;
+}
+
+function safePhase(value) {
+  const phase = safeText(value, 'foundation');
+  return ['foundation', 'reinforcement', 'pastExam', 'sprint'].includes(phase) ? phase : 'foundation';
+}
+
+function firstMinute(...values) {
+  for (const value of values) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric >= 0) return numeric;
+  }
+  return 0;
+}
+
 /**
  * Get the start of the current week (Monday).
  */
 function getWeekStart(todayStr) {
-  const d = new Date(todayStr + 'T00:00:00Z');
+  const today = safeDateKey(todayStr, getToday());
+  const d = new Date(today + 'T00:00:00Z');
   const day = d.getUTCDay();
   const diff = day === 0 ? 6 : day - 1; // Monday = 0 offset
   d.setUTCDate(d.getUTCDate() - diff);
@@ -39,8 +81,9 @@ function getWeekStart(todayStr) {
  */
 function getWeekDates(weekStart) {
   const dates = [];
+  const start = safeDateKey(weekStart, getWeekStart(getToday()));
   for (let i = 0; i < 7; i++) {
-    const d = new Date(weekStart + 'T00:00:00Z');
+    const d = new Date(start + 'T00:00:00Z');
     d.setUTCDate(d.getUTCDate() + i);
     dates.push(d.toISOString().slice(0, 10));
   }
@@ -51,9 +94,9 @@ function getWeekDates(weekStart) {
  * Compute weekly metrics from daily records.
  */
 function computeWeeklyMetrics(weekDates) {
-  const records = StateManager.getState('daily_records') || {};
-  const settings = StateManager.getState('settings') || {};
-  const phase = settings.phase || 'foundation';
+  const records = objectValue(StateManager.getState('daily_records'));
+  const settings = objectValue(StateManager.getState('settings'));
+  const phase = safePhase(settings.phase);
 
   let totalMinutes = 0;
   let breakDays = 0;
@@ -62,26 +105,32 @@ function computeWeeklyMetrics(weekDates) {
   const coreRatios = [];
 
   for (const date of weekDates) {
-    const r = records[date];
-    if (!r) {
+    const rawRecord = records[date];
+    const r = objectValue(rawRecord);
+    if (!rawRecord || Array.isArray(rawRecord) || typeof rawRecord !== 'object') {
       breakDays++;
       continue;
     }
-    const dayTotal = (r.mathMin || 0) + (r.csMin || 0) + (r.engMin || 0) + (r.polMin || 0) + (r.projectMin || 0);
+    const dayMathMin = firstMinute(r.mathMin, r.math);
+    const dayCsMin = firstMinute(r.csMin, r.cs408);
+    const dayEngMin = firstMinute(r.engMin, r.english);
+    const dayPolMin = firstMinute(r.polMin, r.politics);
+    const dayProjectMin = firstMinute(r.projectMin, r.project);
+    const dayTotal = dayMathMin + dayCsMin + dayEngMin + dayPolMin + dayProjectMin;
     if (dayTotal === 0) {
       breakDays++;
       continue;
     }
     totalMinutes += dayTotal;
-    mathMin += r.mathMin || 0;
-    csMin += r.csMin || 0;
-    engMin += r.engMin || 0;
-    polMin += r.polMin || 0;
-    projectMin += r.projectMin || 0;
-    newMistakes += r.newMistakes || 0;
-    fixedMistakes += r.fixedMistakes || 0;
+    mathMin += dayMathMin;
+    csMin += dayCsMin;
+    engMin += dayEngMin;
+    polMin += dayPolMin;
+    projectMin += dayProjectMin;
+    newMistakes += safeNumber(r.newMistakes);
+    fixedMistakes += safeNumber(r.fixedMistakes);
 
-    const core = (r.mathMin || 0) + (r.csMin || 0);
+    const core = dayMathMin + dayCsMin;
     const ratio = dayTotal > 0 ? core / dayTotal : 0;
     coreRatios.push(ratio);
   }
@@ -92,7 +141,7 @@ function computeWeeklyMetrics(weekDates) {
 
   const mistakeRecoveryRate = newMistakes > 0 ? Math.min(1, fixedMistakes / newMistakes) : 1;
 
-  const plannedMinutes = (settings.weekdayMinutes || 240) * 5 + (settings.weekendMinutes || 360) * 2;
+  const plannedMinutes = safePositiveNumber(settings.weekdayMinutes, 240) * 5 + safePositiveNumber(settings.weekendMinutes, 360) * 2;
 
   return {
     totalMinutes,
@@ -111,7 +160,8 @@ function computeWeeklyMetrics(weekDates) {
 function signalBadge(signal, label) {
   const colors = { green: 'var(--green)', yellow: 'var(--amber)', red: 'var(--red)' };
   const bgColors = { green: 'var(--green-soft)', yellow: 'var(--amber-soft)', red: 'var(--red-soft)' };
-  return `<span class="signal-badge" style="background:${bgColors[signal]};color:${colors[signal]};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:720;">${label}: ${signal === 'green' ? '正常' : signal === 'yellow' ? '注意' : '需调整'}</span>`;
+  const safeSignal = colors[signal] ? signal : 'red';
+  return `<span class="signal-badge" style="background:${bgColors[safeSignal]};color:${colors[safeSignal]};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:720;">${escapeHTML(label)}: ${safeSignal === 'green' ? '正常' : safeSignal === 'yellow' ? '注意' : '需调整'}</span>`;
 }
 
 /**

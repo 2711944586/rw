@@ -10,6 +10,52 @@
 /** Interval days indexed 0..4 */
 export const INTERVALS = [1, 3, 7, 14, 30];
 
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+const FALLBACK_DATE = '1970-01-01';
+const INVALID_SORT_DATE = '9999-12-31';
+
+function finiteNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function nonNegativeNumber(value, fallback = 0) {
+  const fallbackNumeric = Math.max(0, finiteNumber(fallback, 0));
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : fallbackNumeric;
+}
+
+function nonNegativeCount(value, fallback = 0) {
+  return Math.round(nonNegativeNumber(value, fallback));
+}
+
+function boundedIntervalIndex(value) {
+  return Math.min(INTERVALS.length - 1, nonNegativeCount(value));
+}
+
+function arrayValue(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function safeDateText(value) {
+  const type = typeof value;
+  if (!['string', 'number', 'bigint'].includes(type)) return '';
+  const text = String(value).trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+}
+
+function parseISODate(value) {
+  const text = safeDateText(value);
+  if (!text) return null;
+  const date = new Date(`${text}T00:00:00Z`);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.toISOString().slice(0, 10) === text ? date : null;
+}
+
+function safeDateKey(dateStr, fallback = INVALID_SORT_DATE) {
+  return parseISODate(dateStr)?.toISOString().slice(0, 10) || fallback;
+}
+
 /**
  * Add days to an ISO date string, returning a new ISO date string (YYYY-MM-DD).
  * @param {string} dateStr - ISO date string (YYYY-MM-DD)
@@ -17,8 +63,8 @@ export const INTERVALS = [1, 3, 7, 14, 30];
  * @returns {string} New ISO date string
  */
 function addDays(dateStr, days) {
-  const date = new Date(dateStr + 'T00:00:00Z');
-  date.setUTCDate(date.getUTCDate() + days);
+  const date = parseISODate(dateStr) || parseISODate(FALLBACK_DATE);
+  date.setUTCDate(date.getUTCDate() + Math.round(finiteNumber(days, 0)));
   return date.toISOString().slice(0, 10);
 }
 
@@ -29,9 +75,10 @@ function addDays(dateStr, days) {
  * @returns {number} Difference in days (can be negative)
  */
 function diffDays(laterDate, earlierDate) {
-  const a = new Date(laterDate + 'T00:00:00Z');
-  const b = new Date(earlierDate + 'T00:00:00Z');
-  return Math.round((a - b) / (1000 * 60 * 60 * 24));
+  const a = parseISODate(laterDate);
+  const b = parseISODate(earlierDate);
+  if (!a || !b) return 0;
+  return Math.round((a - b) / MS_PER_DAY);
 }
 
 /**
@@ -45,7 +92,7 @@ function diffDays(laterDate, earlierDate) {
  * Validates: Requirements 7.6
  */
 export function canSubmitPass(item, today) {
-  return item.lastSubmittedDate !== today;
+  return item?.lastSubmittedDate !== today;
 }
 
 /**
@@ -59,14 +106,15 @@ export function canSubmitPass(item, today) {
  *
  * Validates: Requirements 7.2
  */
-export function advanceOnPass(item, today) {
-  const newIndex = Math.min(4, item.intervalIndex + 1);
+export function advanceOnPass(item = {}, today) {
+  const newIndex = Math.min(INTERVALS.length - 1, boundedIntervalIndex(item.intervalIndex) + 1);
+  const safeToday = safeDateKey(today, FALLBACK_DATE);
   return {
     ...item,
     intervalIndex: newIndex,
-    nextDueAt: addDays(today, INTERVALS[newIndex]),
+    nextDueAt: addDays(safeToday, INTERVALS[newIndex]),
     lastResult: 'pass',
-    lastSubmittedDate: today,
+    lastSubmittedDate: safeToday,
     failStreak: 0,
   };
 }
@@ -81,12 +129,13 @@ export function advanceOnPass(item, today) {
  *
  * Validates: Requirements 7.3
  */
-export function resetOnFail(item, today) {
+export function resetOnFail(item = {}, today) {
+  const safeToday = safeDateKey(today, FALLBACK_DATE);
   return {
     ...item,
     intervalIndex: 0,
-    failStreak: item.failStreak + 1,
-    nextDueAt: addDays(today, 1),
+    failStreak: nonNegativeCount(item.failStreak) + 1,
+    nextDueAt: addDays(safeToday, 1),
     lastResult: 'fail',
   };
 }
@@ -100,7 +149,7 @@ export function resetOnFail(item, today) {
  * Validates: Requirements 7.4
  */
 export function isHighPriorityRecovery(item) {
-  return item.failStreak >= 3;
+  return nonNegativeCount(item?.failStreak) >= 3;
 }
 
 /**
@@ -113,13 +162,17 @@ export function isHighPriorityRecovery(item) {
  * Validates: Requirements 7.5
  */
 export function sortDueItems(items) {
-  return [...items].sort((a, b) => {
+  return [...arrayValue(items)].sort((a, b) => {
     // failStreak descending
-    if (b.failStreak !== a.failStreak) return b.failStreak - a.failStreak;
+    const aFailStreak = nonNegativeCount(a?.failStreak);
+    const bFailStreak = nonNegativeCount(b?.failStreak);
+    if (bFailStreak !== aFailStreak) return bFailStreak - aFailStreak;
     // nextDueAt ascending
-    if (a.nextDueAt !== b.nextDueAt) return a.nextDueAt < b.nextDueAt ? -1 : 1;
+    const aDate = safeDateKey(a?.nextDueAt);
+    const bDate = safeDateKey(b?.nextDueAt);
+    if (aDate !== bDate) return aDate < bDate ? -1 : 1;
     // intervalIndex ascending
-    return a.intervalIndex - b.intervalIndex;
+    return boundedIntervalIndex(a?.intervalIndex) - boundedIntervalIndex(b?.intervalIndex);
   });
 }
 
@@ -136,11 +189,18 @@ export function sortDueItems(items) {
  * Validates: Requirements 7.5
  */
 export function trimToCapacity(items, capacityMinutes, minutesPerItem) {
-  const maxItems = minutesPerItem > 0 ? Math.floor(capacityMinutes / minutesPerItem) : items.length;
-  const kept = items.slice(0, maxItems);
-  const deferred = items.slice(maxItems).map(item => ({
+  const safeItems = arrayValue(items);
+  const safeMinutesPerItem = finiteNumber(minutesPerItem, 0);
+  if (safeMinutesPerItem <= 0) {
+    return { kept: [...safeItems], deferred: [] };
+  }
+
+  const safeCapacityMinutes = nonNegativeNumber(capacityMinutes);
+  const maxItems = Math.max(0, Math.floor(safeCapacityMinutes / safeMinutesPerItem));
+  const kept = safeItems.slice(0, maxItems);
+  const deferred = safeItems.slice(maxItems).map(item => ({
     ...item,
-    nextDueAt: addDays(item.nextDueAt, 1),
+    nextDueAt: addDays(item?.nextDueAt, 1),
   }));
   return { kept, deferred };
 }
@@ -155,7 +215,7 @@ export function trimToCapacity(items, capacityMinutes, minutesPerItem) {
  * Validates: Requirements 7.7
  */
 export function checkStaleness(item, today) {
-  const daysSinceDue = diffDays(today, item.nextDueAt);
+  const daysSinceDue = diffDays(today, item?.nextDueAt);
   return {
     isStale: daysSinceDue >= 7,
     daysSinceDue,

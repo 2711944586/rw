@@ -14,6 +14,22 @@ const CHECKPOINT_THRESHOLDS = {
   '2027-11': 415,
 };
 
+function finiteNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function clampedNumber(value, min, max, fallback = min) {
+  return Math.min(max, Math.max(min, finiteNumber(value, fallback)));
+}
+
+function normalizeMockScores(scores) {
+  return (Array.isArray(scores) ? scores : [])
+    .map((score) => Number(score))
+    .filter((score) => Number.isFinite(score))
+    .map((score) => clampedNumber(score, 0, 500));
+}
+
 /**
  * Returns the checkpoint threshold for the given date, or null if not a checkpoint month.
  * @param {string} date - ISO date string (e.g., '2027-08-15')
@@ -37,10 +53,13 @@ export function getCheckpointThreshold(date) {
  * @returns {number} predicted score
  */
 export function linearCoveragePredict(coverage, accuracy, minutes) {
+  const safeCoverage = clampedNumber(coverage, 0, 1);
+  const safeAccuracy = clampedNumber(accuracy, 0, 1);
+  const safeMinutes = clampedNumber(minutes, 0, Number.POSITIVE_INFINITY);
   const baseScore = 250;
-  const coverageBonus = coverage * 170;
-  const accuracyFactor = accuracy * 0.8 + 0.2;
-  const timeFactor = Math.min(1.0, minutes / 5400);
+  const coverageBonus = safeCoverage * 170;
+  const accuracyFactor = safeAccuracy * 0.8 + 0.2;
+  const timeFactor = Math.min(1.0, safeMinutes / 5400);
   return baseScore + coverageBonus * accuracyFactor * timeFactor;
 }
 
@@ -53,15 +72,16 @@ export function linearCoveragePredict(coverage, accuracy, minutes) {
  * @returns {{ predicted: number, stddev: number }}
  */
 export function mockRegressionPredict(scores) {
-  if (!scores || scores.length < 2) {
+  const normalizedScores = normalizeMockScores(scores);
+  if (normalizedScores.length < 2) {
     // Not enough data for regression; return null predicted to signal fallback
     return { predicted: null, stddev: 30 };
   }
 
-  const n = scores.length;
+  const n = normalizedScores.length;
 
   // Weights: more recent scores weighted higher (linearly increasing)
-  const weights = scores.map((_, i) => i + 1);
+  const weights = normalizedScores.map((_, i) => i + 1);
   const totalWeight = weights.reduce((a, b) => a + b, 0);
 
   // Weighted linear regression: y = a + b*x, where x is index
@@ -69,7 +89,7 @@ export function mockRegressionPredict(scores) {
   for (let i = 0; i < n; i++) {
     const w = weights[i];
     const x = i;
-    const y = scores[i];
+    const y = normalizedScores[i];
     sumWX += w * x;
     sumWY += w * y;
     sumWXX += w * x * x;
@@ -99,7 +119,7 @@ export function mockRegressionPredict(scores) {
     let sumWResidualSq = 0;
     for (let i = 0; i < n; i++) {
       const fitted = intercept + slope * i;
-      const residual = scores[i] - fitted;
+      const residual = normalizedScores[i] - fitted;
       sumWResidualSq += weights[i] * residual * residual;
     }
     stddev = Math.sqrt(sumWResidualSq / totalWeight);
@@ -119,7 +139,9 @@ export function mockRegressionPredict(scores) {
  * @returns {Array<{ tier: string, description: string, probabilityRange: [number, number] }>}
  */
 export function generateTierFallback(predictedLower, threshold) {
-  const gap = threshold - predictedLower;
+  const safeThreshold = finiteNumber(threshold, 0);
+  const safePredictedLower = finiteNumber(predictedLower, safeThreshold);
+  const gap = Math.max(0, safeThreshold - safePredictedLower);
 
   // Tier 1: Stay with PKU-SWM (aggressive)
   // Tier 2: Same-tier alternatives
@@ -156,12 +178,17 @@ export function generateTierFallback(predictedLower, threshold) {
  */
 export function calibrate(input) {
   const { mockScores, topicCoverage, recent30DayAccuracy, recent30DayMinutes, currentDate } = input;
+  const normalizedMockScores = normalizeMockScores(mockScores);
 
   // 1. Linear Coverage Model
-  const linearPrediction = linearCoveragePredict(topicCoverage, recent30DayAccuracy, recent30DayMinutes);
+  const linearPrediction = linearCoveragePredict(
+    clampedNumber(topicCoverage, 0, 1),
+    clampedNumber(recent30DayAccuracy, 0, 1, 0.6),
+    clampedNumber(recent30DayMinutes, 0, Number.POSITIVE_INFINITY)
+  );
 
   // 2. Mock Regression Model
-  const regression = mockRegressionPredict(mockScores);
+  const regression = mockRegressionPredict(normalizedMockScores);
   let regressionPrediction;
   let stddev;
 
@@ -194,8 +221,8 @@ export function calibrate(input) {
   }
 
   // Compute confidence (simple heuristic based on data availability)
-  const hasEnoughMocks = mockScores && mockScores.length >= 2;
-  const confidence = hasEnoughMocks ? Math.min(0.9, 0.5 + mockScores.length * 0.1) : 0.3;
+  const hasEnoughMocks = normalizedMockScores.length >= 2;
+  const confidence = hasEnoughMocks ? Math.min(0.9, 0.5 + normalizedMockScores.length * 0.1) : 0.3;
 
   return {
     predictedScore: predicted,

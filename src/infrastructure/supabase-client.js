@@ -22,7 +22,11 @@ export const supabase = supabaseConfigured
  */
 export async function getCurrentUser() {
   if (!supabase) return null;
-  const { data, error } = await supabase.auth.getUser();
-  if (error) return null;
-  return data.user || null;
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) return null;
+    return data?.user || null;
+  } catch {
+    return null;
+  }
 }

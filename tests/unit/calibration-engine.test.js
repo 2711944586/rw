@@ -59,6 +59,12 @@ describe('calibration-engine', () => {
       const result = linearCoveragePredict(0.5, 0.8, 2700);
       expect(result).toBeCloseTo(285.7, 1);
     });
+
+    it('sanitizes malformed direct inputs', () => {
+      const result = linearCoveragePredict('bad', 'Infinity', -100);
+      expect(Number.isFinite(result)).toBe(true);
+      expect(result).toBe(250);
+    });
   });
 
   describe('mockRegressionPredict', () => {
@@ -83,6 +89,14 @@ describe('calibration-engine', () => {
       expect(result.predicted).toBeCloseTo(400, 0);
       expect(result.stddev).toBe(5);
     });
+
+    it('ignores malformed scores and clamps out-of-range scores', () => {
+      const result = mockRegressionPredict([{}, 'bad', '300', Infinity, 520, -10]);
+
+      expect(result.predicted).not.toBeNull();
+      expect(Number.isFinite(result.predicted)).toBe(true);
+      expect(Number.isFinite(result.stddev)).toBe(true);
+    });
   });
 
   describe('generateTierFallback', () => {
@@ -106,6 +120,13 @@ describe('calibration-engine', () => {
       const tiers = generateTierFallback(350, 405);
       const names = tiers.map(t => t.tier);
       expect(new Set(names).size).toBe(3);
+    });
+
+    it('sanitizes malformed direct inputs', () => {
+      const tiers = generateTierFallback('bad', 'Infinity');
+      expect(tiers).toHaveLength(3);
+      expect(JSON.stringify(tiers)).not.toContain('NaN');
+      expect(JSON.stringify(tiers)).not.toContain('Infinity');
     });
   });
 
@@ -194,6 +215,24 @@ describe('calibration-engine', () => {
       const result = calibrate(input);
       expect(result.confidence).toBe(0.3);
       expect(result.regressionModel.stddev).toBe(30);
+    });
+
+    it('sanitizes malformed calibration input instead of returning NaN', () => {
+      const result = calibrate({
+        mockScores: [{ total: 330 }, '350', Infinity, 'bad'],
+        topicCoverage: 'bad',
+        recent30DayAccuracy: 'Infinity',
+        recent30DayMinutes: -100,
+        currentDate: '2027-08-15',
+      });
+
+      expect(Number.isFinite(result.predictedScore)).toBe(true);
+      expect(Number.isFinite(result.lowerBound)).toBe(true);
+      expect(Number.isFinite(result.upperBound)).toBe(true);
+      expect(Number.isFinite(result.coverageModel.predicted)).toBe(true);
+      expect(Number.isFinite(result.regressionModel.predicted)).toBe(true);
+      expect(result.predictedScore).toBeGreaterThanOrEqual(0);
+      expect(result.predictedScore).toBeLessThanOrEqual(500);
     });
 
     it('has coverageModel and regressionModel in output', () => {

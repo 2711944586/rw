@@ -162,57 +162,65 @@ describe('Property 3: Verification gate for admission-type claims', () => {
 });
 
 /**
- * Property 4: URL-less claims filtered from display
+ * Property 4: Unsafe URL claims filtered from display
  * **Validates: Requirements 1.6**
  *
  * For any set of claims, filterDisplayableClaims returns only those
- * with non-empty source_url string.
+ * with safe absolute http(s) source_url strings.
  */
-describe('Property 4: URL-less claims filtered from display', () => {
-  const arbClaimWithUrl = fc.record({
+describe('Property 4: Unsafe URL claims filtered from display', () => {
+  const arbHostLabel = fc.string({ minLength: 1, maxLength: 20 })
+    .filter((s) => /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(s));
+  const arbUrlPath = fc.string({ maxLength: 24 })
+    .filter((s) => /^[A-Za-z0-9._~/-]*$/.test(s));
+  const arbSafeAbsoluteUrl = fc
+    .tuple(fc.constantFrom('http', 'https'), arbHostLabel, arbUrlPath)
+    .map(([protocol, hostLabel, path]) => `${protocol}://${hostLabel}.example.com/${path}`);
+
+  const arbUnsafeUrl = fc.oneof(
+    fc.constantFrom('', null, undefined, ' ', 'javascript:alert(1)', '/relative/path', '//example.com/path', 'data:text/html,<script>alert(1)</script>'),
+    fc.string({ minLength: 1, maxLength: 24 }).filter((s) => !/^https?:\/\//i.test(s))
+  );
+
+  const arbClaimWithDisplayableUrl = fc.record({
     claim_id: fc.string({ minLength: 1 }),
     claim_text: fc.string(),
-    source_url: fc.string({ minLength: 1 }).filter((s) => s.length > 0)
+    source_url: arbSafeAbsoluteUrl
   });
 
-  const arbClaimWithoutUrl = fc.record({
+  const arbClaimWithoutDisplayableUrl = fc.record({
     claim_id: fc.string({ minLength: 1 }),
     claim_text: fc.string(),
-    source_url: fc.constantFrom('', null, undefined)
+    source_url: arbUnsafeUrl
   });
 
-  test.prop([fc.array(arbClaimWithUrl, { maxLength: 20 }), fc.array(arbClaimWithoutUrl, { maxLength: 20 })])(
-    'returns only claims with non-empty source_url, filtering out empty/null/undefined',
-    (withUrl, withoutUrl) => {
-      const allClaims = fc.shuffledSubarray([...withUrl, ...withoutUrl], {
-        minLength: withUrl.length + withoutUrl.length,
-        maxLength: withUrl.length + withoutUrl.length
-      });
-      // Use a simpler approach: just interleave them
-      const mixed = [...withUrl, ...withoutUrl];
+  test.prop([fc.array(arbClaimWithDisplayableUrl, { maxLength: 20 }), fc.array(arbClaimWithoutDisplayableUrl, { maxLength: 20 })])(
+    'returns only claims with safe absolute http(s) source_url',
+    (withDisplayableUrl, withoutDisplayableUrl) => {
+      const mixed = [...withDisplayableUrl, ...withoutDisplayableUrl];
       const result = filterDisplayableClaims(mixed);
 
-      // All results should have non-empty source_url
+      // All results should have displayable source_url values.
       for (const claim of result) {
         expect(typeof claim.source_url).toBe('string');
-        expect(claim.source_url.length).toBeGreaterThan(0);
+        expect(claim.source_url.trim()).toMatch(/^https?:\/\//i);
       }
 
-      // Count should match the claims that had valid URLs
-      expect(result.length).toBe(withUrl.length);
+      // Count should match the claims that had safe displayable URLs.
+      expect(result.length).toBe(withDisplayableUrl.length);
     }
   );
 
-  test.prop([fc.array(arbClaimWithUrl, { minLength: 1, maxLength: 20 })])(
-    'claims all with valid URLs are all returned',
+  test.prop([fc.array(arbClaimWithDisplayableUrl, { minLength: 1, maxLength: 20 })])(
+    'claims all with displayable URLs are all returned',
     (claims) => {
       const result = filterDisplayableClaims(claims);
       expect(result.length).toBe(claims.length);
     }
   );
 
-  test.prop([fc.array(arbClaimWithoutUrl, { minLength: 1, maxLength: 20 })])(
-    'claims all without URLs result in empty array',
+  test.prop([fc.array(arbClaimWithoutDisplayableUrl, { minLength: 1, maxLength: 20 })])(
+    'claims all without displayable URLs result in empty array',
     (claims) => {
       const result = filterDisplayableClaims(claims);
       expect(result.length).toBe(0);

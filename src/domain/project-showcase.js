@@ -4,10 +4,52 @@
  * No side effects — all functions are pure.
  */
 
+import { safeExternalUrl } from '../utils/html.js';
+
 /**
  * Fields to completely remove from user data during desensitization.
  */
 const SENSITIVE_FIELDS = ['email', 'phone', 'real_name'];
+const ROW_REDACTIONS = {
+  source_registry: ['notes', 'internal_notes'],
+  topics: ['name', 'topic_name'],
+  topic_progress: ['name', 'topic_name'],
+  mistakes: ['content', 'error_content', 'description'],
+  errors: ['content', 'error_content', 'description'],
+  retrospectives: ['text', 'reflection', 'personal_notes'],
+};
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cloneForDesensitize(value) {
+  const seen = new WeakSet();
+  try {
+    const serialized = JSON.stringify(value, (_key, current) => {
+      if (current && typeof current === 'object') {
+        if (seen.has(current)) return undefined;
+        seen.add(current);
+      }
+      return current;
+    });
+    if (!serialized) return {};
+    const clone = JSON.parse(serialized);
+    return clone && typeof clone === 'object' ? clone : {};
+  } catch {
+    return {};
+  }
+}
+
+function redactRowFields(rows, fields) {
+  if (!Array.isArray(rows)) return;
+  for (const row of rows) {
+    if (!isPlainObject(row)) continue;
+    for (const field of fields) {
+      delete row[field];
+    }
+  }
+}
 
 /**
  * Desensitizes user data for public showcase display.
@@ -27,8 +69,8 @@ export function desensitizeData(userData) {
     return {};
   }
 
-  // Deep clone to avoid mutating original
-  const clone = JSON.parse(JSON.stringify(userData));
+  // Deep clone to avoid mutating original. Circular references are dropped.
+  const clone = cloneForDesensitize(userData);
 
   // Remove top-level sensitive fields
   for (const field of SENSITIVE_FIELDS) {
@@ -36,12 +78,9 @@ export function desensitizeData(userData) {
   }
 
   // Remove source_registry internal notes
-  if (clone.source_registry && Array.isArray(clone.source_registry)) {
-    for (const entry of clone.source_registry) {
-      delete entry.notes;
-      delete entry.internal_notes;
-    }
-  } else if (clone.source_registry && typeof clone.source_registry === 'object') {
+  if (Array.isArray(clone.source_registry)) {
+    redactRowFields(clone.source_registry, ROW_REDACTIONS.source_registry);
+  } else if (isPlainObject(clone.source_registry)) {
     delete clone.source_registry.notes;
     delete clone.source_registry.internal_notes;
   }
@@ -50,44 +89,11 @@ export function desensitizeData(userData) {
   // Remove conflicts table data entirely
   delete clone.conflicts;
 
-  // Redact specific topic names
-  if (Array.isArray(clone.topics)) {
-    for (const topic of clone.topics) {
-      delete topic.name;
-      delete topic.topic_name;
-    }
-  }
-  if (Array.isArray(clone.topic_progress)) {
-    for (const tp of clone.topic_progress) {
-      delete tp.name;
-      delete tp.topic_name;
-    }
+  // Redact row-level sensitive fields while tolerating malformed rows.
+  for (const [table, fields] of Object.entries(ROW_REDACTIONS)) {
+    redactRowFields(clone[table], fields);
   }
 
-  // Redact mistake/error content
-  if (Array.isArray(clone.mistakes)) {
-    for (const mistake of clone.mistakes) {
-      delete mistake.content;
-      delete mistake.error_content;
-      delete mistake.description;
-    }
-  }
-  if (Array.isArray(clone.errors)) {
-    for (const error of clone.errors) {
-      delete error.content;
-      delete error.error_content;
-      delete error.description;
-    }
-  }
-
-  // Redact personal retro text
-  if (Array.isArray(clone.retrospectives)) {
-    for (const retro of clone.retrospectives) {
-      delete retro.text;
-      delete retro.reflection;
-      delete retro.personal_notes;
-    }
-  }
   if (clone.retro_text !== undefined) {
     delete clone.retro_text;
   }
@@ -114,12 +120,22 @@ export function validateShowcaseItem(item) {
   }
 
   const filledFields = [];
-  const requiredFields = ['artifact_type', 'item_date', 'output_link'];
+  const requiredFields = ['artifact_type', 'item_date'];
 
   for (const field of requiredFields) {
     const value = item[field];
-    if (value !== undefined && value !== null && value !== '') {
+    if (field === 'item_date' ? isValidDateKey(value) : isFilled(value)) {
       filledFields.push(field);
+    } else if (field === 'item_date' && isFilled(value)) {
+      errors.push('item_date must be a valid YYYY-MM-DD date.');
+    }
+  }
+
+  if (isFilled(item.output_link)) {
+    if (typeof item.output_link === 'string' && safeExternalUrl(item.output_link) !== '#') {
+      filledFields.push('output_link');
+    } else {
+      errors.push('output_link must be an absolute http(s) URL.');
     }
   }
 
@@ -131,4 +147,23 @@ export function validateShowcaseItem(item) {
   }
 
   return { valid: errors.length === 0, errors };
+}
+
+function isFilled(value) {
+  if (value === undefined || value === null) return false;
+  const type = typeof value;
+  if (!['string', 'number', 'bigint'].includes(type)) return false;
+  return String(value).trim().length > 0;
+}
+
+function isValidDateKey(value) {
+  let text = '';
+  if (value instanceof Date) {
+    text = Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : '';
+  } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') {
+    text = String(value).trim().slice(0, 10);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const date = new Date(`${text}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === text;
 }

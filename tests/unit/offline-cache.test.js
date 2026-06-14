@@ -6,11 +6,20 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // Mock localStorage
 const localStorageMock = (() => {
   let store = {};
+  const getItem = (key) => store[key] ?? null;
+  const setItem = (key, value) => { store[key] = value; };
+  const removeItem = (key) => { delete store[key]; };
+  const clear = () => { store = {}; };
+
   return {
-    getItem: vi.fn((key) => store[key] ?? null),
-    setItem: vi.fn((key, value) => { store[key] = value; }),
-    removeItem: vi.fn((key) => { delete store[key]; }),
-    clear: vi.fn(() => { store = {}; }),
+    getItem: vi.fn(getItem),
+    setItem: vi.fn(setItem),
+    removeItem: vi.fn(removeItem),
+    clear: vi.fn(clear),
+    __getItem: getItem,
+    __setItem: setItem,
+    __removeItem: removeItem,
+    __clear: clear,
   };
 })();
 
@@ -20,14 +29,22 @@ import { OfflineCache } from '../../src/infrastructure/offline-cache.js';
 
 describe('OfflineCache', () => {
   beforeEach(() => {
+    localStorageMock.getItem.mockImplementation(localStorageMock.__getItem);
+    localStorageMock.setItem.mockImplementation(localStorageMock.__setItem);
+    localStorageMock.removeItem.mockImplementation(localStorageMock.__removeItem);
+    localStorageMock.clear.mockImplementation(localStorageMock.__clear);
     localStorageMock.clear();
     OfflineCache.clear();
+    localStorageMock.getItem.mockClear();
+    localStorageMock.setItem.mockClear();
+    localStorageMock.removeItem.mockClear();
+    localStorageMock.clear.mockClear();
   });
 
   describe('setDirty', () => {
     it('stores a record in the dirty queue', () => {
       const record = { subject: 'math', minutes: 30 };
-      OfflineCache.setDirty('daily_records', 'rec-1', record);
+      expect(OfflineCache.setDirty('daily_records', 'rec-1', record)).toBe(true);
 
       const dirty = OfflineCache.getDirtyRecords();
       expect(dirty).toHaveLength(1);
@@ -63,16 +80,121 @@ describe('OfflineCache', () => {
     });
 
     it('ignores calls with empty table or id', () => {
-      OfflineCache.setDirty('', 'id1', { x: 1 });
-      OfflineCache.setDirty('table', '', { x: 1 });
+      expect(OfflineCache.setDirty('', 'id1', { x: 1 })).toBe(false);
+      expect(OfflineCache.setDirty('table', '', { x: 1 })).toBe(false);
+      expect(OfflineCache.setDirty('unknown_table', 'id1', { x: 1 })).toBe(false);
 
       expect(OfflineCache.getDirtyRecords()).toHaveLength(0);
+    });
+
+    it('rejects dirty records that cannot be synced as row objects', () => {
+      localStorageMock.setItem.mockClear();
+      const circular = { subject: 'math' };
+      circular.self = circular;
+
+      expect(OfflineCache.setDirty('daily_records', 'null-record', null)).toBe(false);
+      expect(OfflineCache.setDirty('daily_records', 'array-record', [{ x: 1 }])).toBe(false);
+      expect(OfflineCache.setDirty('daily_records', 'string-record', 'bad')).toBe(false);
+      expect(OfflineCache.setDirty('daily_records', 'circular-record', circular)).toBe(false);
+      expect(OfflineCache.setDirty('daily_records', 'bigint-record', { minutes: BigInt(60) })).toBe(false);
+
+      expect(OfflineCache.getDirtyRecords()).toEqual([]);
+      expect(OfflineCache.getLocalState('daily_records')).toEqual({});
+      expect(localStorageMock.setItem).not.toHaveBeenCalled();
+    });
+
+    it('normalizes tracked table and record ids before storing dirty records', () => {
+      const record = { subject: 'math', minutes: 30 };
+
+      expect(OfflineCache.setDirty(' daily_records ', ' rec:with:colons ', record)).toBe(true);
+
+      expect(OfflineCache.getDirtyRecords()).toMatchObject([{
+        table: 'daily_records',
+        id: 'rec:with:colons',
+        record,
+      }]);
+      expect(OfflineCache.getLocalState('daily_records')['rec:with:colons']).toEqual(record);
+    });
+
+    it('keeps the local record and dirty queue in memory when cache persistence fails', () => {
+      localStorageMock.setItem.mockImplementationOnce(() => {
+        throw new Error('storage blocked');
+      });
+
+      const record = { subject: 'math', minutes: 30 };
+      expect(OfflineCache.setDirty('daily_records', 'rec-memory', record)).toBe(false);
+
+      expect(OfflineCache.getLocalState('daily_records')['rec-memory']).toEqual(record);
+      expect(OfflineCache.getDirtyRecords()).toMatchObject([
+        { table: 'daily_records', id: 'rec-memory', record },
+      ]);
+    });
+
+    it('keeps the dirty queue in memory when queue persistence fails after cache save', () => {
+      localStorageMock.setItem
+        .mockImplementationOnce(localStorageMock.__setItem)
+        .mockImplementationOnce(() => {
+          throw new Error('queue blocked');
+        });
+
+      const record = { subject: 'english', minutes: 45 };
+      expect(OfflineCache.setDirty('daily_records', 'rec-queue', record)).toBe(false);
+
+      expect(OfflineCache.getLocalState('daily_records')['rec-queue']).toEqual(record);
+      expect(OfflineCache.getDirtyRecords()).toMatchObject([
+        { table: 'daily_records', id: 'rec-queue', record },
+      ]);
+    });
+
+    it('merges the latest app state before writing the shared cache key', () => {
+      localStorageMock.setItem('pku_swm_420_dashboard_v3', JSON.stringify({
+        settings: { density: 'compact' },
+      }));
+
+      OfflineCache.setDirty('daily_records', 'rec-merge', { minutes: 20 });
+
+      const saved = JSON.parse(localStorageMock.getItem('pku_swm_420_dashboard_v3'));
+      expect(saved.settings).toEqual({ density: 'compact' });
+      expect(saved.daily_records['rec-merge']).toEqual({ minutes: 20 });
     });
   });
 
   describe('getDirtyRecords', () => {
     it('returns empty array when no records are dirty', () => {
       expect(OfflineCache.getDirtyRecords()).toEqual([]);
+    });
+
+    it('filters malformed persisted dirty queue entries and dedupes by table/id', async () => {
+      localStorageMock.setItem('pku_swm_420_dirty_queue', JSON.stringify([
+        { table: 'daily_records', id: 'd1', record: { version: 1 }, timestamp: 'old' },
+        { table: ' mock_scores ', id: ' score:1 ', record: { version: 1 }, timestamp: 'trimmed' },
+        { table: 'unknown_table', id: 'u1', record: { bad: true }, timestamp: 'bad-table' },
+        { table: 'study_tasks', id: '', record: { bad: true }, timestamp: 'bad-id' },
+        { table: 'resources', id: 'bad-record-null', record: null, timestamp: 'bad-record-null' },
+        { table: 'resources', id: 'bad-record-array', record: [{ bad: true }], timestamp: 'bad-record-array' },
+        { table: 'daily_records', id: 'd1', record: { version: 2 }, timestamp: 'new' },
+        'not-an-entry',
+      ]));
+
+      vi.resetModules();
+      const { OfflineCache: FreshOfflineCache } = await import('../../src/infrastructure/offline-cache.js');
+
+      expect(FreshOfflineCache.getDirtyRecords()).toEqual([
+        expect.objectContaining({
+          table: 'daily_records',
+          id: 'd1',
+          record: { version: 2 },
+          timestamp: 'new',
+        }),
+        expect.objectContaining({
+          table: 'mock_scores',
+          id: 'score:1',
+          record: { version: 1 },
+          timestamp: 'trimmed',
+        }),
+      ]);
+
+      FreshOfflineCache.clear();
     });
 
     it('returns records across multiple tables', () => {
@@ -117,11 +239,51 @@ describe('OfflineCache', () => {
 
     it('does nothing with empty or null ids', () => {
       OfflineCache.setDirty('resources', 'res1', { url: 'http://x' });
-      OfflineCache.clearDirty([]);
+      expect(OfflineCache.clearDirty([])).toBe(true);
       expect(OfflineCache.getDirtyRecords()).toHaveLength(1);
 
-      OfflineCache.clearDirty(null);
+      expect(OfflineCache.clearDirty(null)).toBe(true);
       expect(OfflineCache.getDirtyRecords()).toHaveLength(1);
+    });
+
+    it('normalizes clear ids and preserves record ids that contain colons', () => {
+      OfflineCache.setDirty('daily_records', ' r1 ', { x: 1 });
+      OfflineCache.setDirty('topic_progress', 'topic:with:colons', { status: 'mastered' });
+
+      expect(OfflineCache.clearDirty([' daily_records : r1 ', ' topic_progress : topic:with:colons '])).toBe(true);
+
+      expect(OfflineCache.getDirtyRecords()).toEqual([]);
+    });
+
+    it('does not rewrite the dirty queue when clearing invalid or missing ids', () => {
+      OfflineCache.setDirty('daily_records', 'r1', { x: 1 });
+      localStorageMock.setItem.mockClear();
+
+      expect(OfflineCache.clearDirty(['', 'missing-separator', 'unknown_table:r1', 'daily_records:missing'])).toBe(true);
+
+      expect(OfflineCache.getDirtyRecords()).toMatchObject([
+        { table: 'daily_records', id: 'r1' },
+      ]);
+      expect(localStorageMock.setItem).not.toHaveBeenCalled();
+    });
+
+    it('preserves the dirty queue in memory when clearing cannot persist', () => {
+      OfflineCache.setDirty('daily_records', 'r1', { x: 1 });
+      OfflineCache.setDirty('study_tasks', 't1', { y: 2 });
+
+      localStorageMock.setItem.mockImplementationOnce(() => {
+        throw new Error('queue blocked');
+      });
+
+      expect(OfflineCache.clearDirty(['daily_records:r1'])).toBe(false);
+
+      const dirty = OfflineCache.getDirtyRecords();
+      expect(dirty).toHaveLength(2);
+      expect(dirty).toEqual(expect.arrayContaining([
+        expect.objectContaining({ table: 'daily_records', id: 'r1' }),
+        expect.objectContaining({ table: 'study_tasks', id: 't1' }),
+      ]));
+      expect(OfflineCache.hasPendingSync()).toBe(true);
     });
   });
 
@@ -138,6 +300,31 @@ describe('OfflineCache', () => {
       expect(Object.keys(local)).toHaveLength(2);
       expect(local['t1'].title).toBe('A');
       expect(local['t2'].title).toBe('B');
+    });
+
+    it('normalizes table names before reading local state', () => {
+      OfflineCache.setDirty(' daily_records ', ' d1 ', { mins: 60 });
+
+      expect(OfflineCache.getLocalState(' daily_records ')).toEqual({
+        d1: { mins: 60 },
+      });
+    });
+
+    it('does not expose untracked tables from persisted cache', async () => {
+      localStorageMock.setItem('pku_swm_420_dashboard_v3', JSON.stringify({
+        daily_records: { d1: { mins: 60 } },
+        unknown_table: { leaked: { unsafe: true } },
+      }));
+
+      vi.resetModules();
+      const { OfflineCache: FreshOfflineCache } = await import('../../src/infrastructure/offline-cache.js');
+
+      expect(FreshOfflineCache.getLocalState('daily_records')).toEqual({
+        d1: { mins: 60 },
+      });
+      expect(FreshOfflineCache.getLocalState('unknown_table')).toEqual({});
+
+      FreshOfflineCache.clear();
     });
 
     it('local state persists after clearing dirty flags', () => {
@@ -178,8 +365,23 @@ describe('OfflineCache', () => {
       OfflineCache.setDirty('daily_records', 'd1', { x: 1 });
       OfflineCache.setDirty('study_tasks', 't1', { y: 2 });
 
-      OfflineCache.clear();
+      expect(OfflineCache.clear()).toBe(true);
 
+      expect(OfflineCache.getDirtyRecords()).toEqual([]);
+      expect(OfflineCache.getLocalState('daily_records')).toEqual({});
+    });
+
+    it('does not throw and clears memory when storage removal fails', () => {
+      OfflineCache.setDirty('daily_records', 'd1', { x: 1 });
+      localStorageMock.removeItem
+        .mockImplementationOnce(() => {
+          throw new Error('cache blocked');
+        })
+        .mockImplementationOnce(() => {
+          throw new Error('queue blocked');
+        });
+
+      expect(OfflineCache.clear()).toBe(false);
       expect(OfflineCache.getDirtyRecords()).toEqual([]);
       expect(OfflineCache.getLocalState('daily_records')).toEqual({});
     });

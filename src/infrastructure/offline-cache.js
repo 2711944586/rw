@@ -23,25 +23,29 @@ const TRACKED_TABLES = [
   'project_showcase_items',
 ];
 
+const TRACKED_TABLE_SET = new Set(TRACKED_TABLES);
+
 /**
  * Load the full cache object from localStorage.
  * @returns {Object}
  */
 function loadCache() {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+  return normalizeCache(readStorageJson(CACHE_KEY, {}).value);
 }
 
 /**
  * Persist the full cache object to localStorage.
  * @param {Object} cache
+ * @returns {boolean}
  */
 function saveCache(cache) {
-  localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+    ignoreStoredCache = false;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -50,21 +54,139 @@ function saveCache(cache) {
  * @returns {Array}
  */
 function loadDirtyQueue() {
+  return normalizeDirtyQueue(readStorageJson(DIRTY_QUEUE_KEY, []).value);
+}
+
+function readStorageJson(key, fallback) {
   try {
-    const raw = localStorage.getItem(DIRTY_QUEUE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const raw = localStorage.getItem(key);
+    return { ok: true, value: raw ? JSON.parse(raw) : fallback };
   } catch {
-    return [];
+    return { ok: false, value: fallback };
   }
 }
 
 /**
  * Persist the dirty queue to localStorage.
  * @param {Array} queue
+ * @returns {boolean}
  */
 function saveDirtyQueue(queue) {
-  localStorage.setItem(DIRTY_QUEUE_KEY, JSON.stringify(queue));
+  try {
+    localStorage.setItem(DIRTY_QUEUE_KEY, JSON.stringify(queue));
+    return true;
+  } catch {
+    return false;
+  }
 }
+
+function removeStorageItem(key) {
+  try {
+    localStorage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeCache(value) {
+  return isPlainObject(value) ? value : {};
+}
+
+function normalizeTable(table) {
+  return typeof table === 'string' ? table.trim() : '';
+}
+
+function normalizeId(id) {
+  return typeof id === 'string' ? id.trim() : '';
+}
+
+function isValidTable(table) {
+  return TRACKED_TABLE_SET.has(normalizeTable(table));
+}
+
+function isValidId(id) {
+  return normalizeId(id) !== '';
+}
+
+function isValidRecord(record) {
+  return isPlainObject(record);
+}
+
+function cloneRecordForStorage(record) {
+  if (!isValidRecord(record)) return null;
+  try {
+    const cloned = JSON.parse(JSON.stringify(record));
+    return isPlainObject(cloned) ? cloned : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeCompositeDirtyKey(key) {
+  if (typeof key !== 'string') return null;
+  const [table, ...rest] = key.split(':');
+  const normalizedTable = normalizeTable(table);
+  const normalizedId = normalizeId(rest.join(':'));
+  if (!isValidTable(normalizedTable) || !isValidId(normalizedId)) return null;
+  return `${normalizedTable}:${normalizedId}`;
+}
+
+function normalizeDirtyQueue(value) {
+  if (!Array.isArray(value)) return [];
+
+  const byKey = new Map();
+  for (const entry of value) {
+    if (!isPlainObject(entry) || !isValidTable(entry.table) || !isValidId(entry.id) || !isValidRecord(entry.record)) continue;
+    const table = normalizeTable(entry.table);
+    const id = normalizeId(entry.id);
+    const record = cloneRecordForStorage(entry.record);
+    if (!record) continue;
+    byKey.set(`${table}:${id}`, { ...entry, table, id, record });
+  }
+  return Array.from(byKey.values());
+}
+
+function cloneJson(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return value;
+  }
+}
+
+function mergeDirtyRecordsIntoCache(cache, queue) {
+  const next = { ...normalizeCache(cache) };
+
+  for (const entry of normalizeDirtyQueue(queue)) {
+    if (!isPlainObject(next[entry.table])) {
+      next[entry.table] = {};
+    } else {
+      next[entry.table] = { ...next[entry.table] };
+    }
+    next[entry.table][entry.id] = entry.record;
+  }
+
+  return next;
+}
+
+function readLatestCache() {
+  if (!ignoreStoredCache) {
+    const result = readStorageJson(CACHE_KEY, {});
+    if (result.ok) {
+      memoryCache = mergeDirtyRecordsIntoCache(result.value, memoryDirtyQueue);
+    }
+  }
+  return memoryCache;
+}
+
+let memoryDirtyQueue = loadDirtyQueue();
+let memoryCache = mergeDirtyRecordsIntoCache(loadCache(), memoryDirtyQueue);
+let ignoreStoredCache = false;
 
 export const OfflineCache = {
   /**
@@ -77,38 +199,44 @@ export const OfflineCache = {
    * @param {string} table - Table name (must be one of TRACKED_TABLES)
    * @param {string} id - Record identifier
    * @param {Object} record - Full record data to sync
+   * @returns {boolean} Whether both cache and queue were persisted
    */
   setDirty(table, id, record) {
-    if (!table || !id) return;
+    if (!isValidTable(table) || !isValidId(id) || !isValidRecord(record)) return false;
+    const normalizedTable = normalizeTable(table);
+    const normalizedId = normalizeId(id);
+    const localRecord = cloneRecordForStorage(record);
+    if (!localRecord) return false;
 
     // Update local table state
-    const cache = loadCache();
-    if (!cache[table]) {
-      cache[table] = {};
-    }
-    cache[table][id] = record;
-    saveCache(cache);
+    const cache = readLatestCache();
+    const tableState = isPlainObject(cache[normalizedTable]) ? { ...cache[normalizedTable] } : {};
+    tableState[normalizedId] = localRecord;
+    memoryCache = { ...cache, [normalizedTable]: tableState };
+    const cacheSaved = saveCache(memoryCache);
 
     // Update dirty queue — replace existing entry for same table+id
-    const queue = loadDirtyQueue();
-    const existingIndex = queue.findIndex(
-      (entry) => entry.table === table && entry.id === id
+    const existingIndex = memoryDirtyQueue.findIndex(
+      (entry) => entry.table === normalizedTable && entry.id === normalizedId
     );
 
     const entry = {
-      table,
-      id,
-      record,
+      table: normalizedTable,
+      id: normalizedId,
+      record: localRecord,
       timestamp: new Date().toISOString(),
     };
 
     if (existingIndex >= 0) {
-      queue[existingIndex] = entry;
+      memoryDirtyQueue = memoryDirtyQueue.map((item, index) =>
+        index === existingIndex ? entry : item
+      );
     } else {
-      queue.push(entry);
+      memoryDirtyQueue = [...memoryDirtyQueue, entry];
     }
 
-    saveDirtyQueue(queue);
+    const queueSaved = saveDirtyQueue(memoryDirtyQueue);
+    return cacheSaved && queueSaved;
   },
 
   /**
@@ -119,7 +247,10 @@ export const OfflineCache = {
    * @returns {Array<{table: string, id: string, record: Object, timestamp: string}>}
    */
   getDirtyRecords() {
-    return loadDirtyQueue();
+    return memoryDirtyQueue.map((entry) => ({
+      ...entry,
+      record: cloneJson(entry.record),
+    }));
   },
 
   /**
@@ -130,16 +261,25 @@ export const OfflineCache = {
    * ensuring that records which failed to sync remain queued.
    *
    * @param {Array<string>} ids - Array of composite keys in "table:id" format
+   * @returns {boolean} Whether the updated queue was persisted
    */
   clearDirty(ids) {
-    if (!ids || !ids.length) return;
+    if (!Array.isArray(ids) || ids.length === 0) return true;
 
-    const idSet = new Set(ids);
-    const queue = loadDirtyQueue();
-    const remaining = queue.filter(
+    const idSet = new Set(ids.map(normalizeCompositeDirtyKey).filter(Boolean));
+    if (idSet.size === 0) return true;
+    const previousQueue = memoryDirtyQueue;
+    const nextQueue = memoryDirtyQueue.filter(
       (entry) => !idSet.has(`${entry.table}:${entry.id}`)
     );
-    saveDirtyQueue(remaining);
+    if (nextQueue.length === memoryDirtyQueue.length) return true;
+
+    memoryDirtyQueue = nextQueue;
+    const saved = saveDirtyQueue(memoryDirtyQueue);
+    if (!saved) {
+      memoryDirtyQueue = previousQueue;
+    }
+    return saved;
   },
 
   /**
@@ -150,8 +290,11 @@ export const OfflineCache = {
    * @returns {Object} Map of id → record, or empty object if table has no local data
    */
   getLocalState(table) {
-    const cache = loadCache();
-    return cache[table] || {};
+    const normalizedTable = normalizeTable(table);
+    if (!isValidTable(normalizedTable)) return {};
+
+    const cache = readLatestCache();
+    return cloneJson(isPlainObject(cache[normalizedTable]) ? cache[normalizedTable] : {});
   },
 
   /**
@@ -159,7 +302,7 @@ export const OfflineCache = {
    * @returns {boolean}
    */
   hasPendingSync() {
-    return loadDirtyQueue().length > 0;
+    return memoryDirtyQueue.length > 0;
   },
 
   /**
@@ -167,9 +310,8 @@ export const OfflineCache = {
    * @returns {Object} Map of table → count
    */
   getDirtyCounts() {
-    const queue = loadDirtyQueue();
     const counts = {};
-    for (const entry of queue) {
+    for (const entry of memoryDirtyQueue) {
       counts[entry.table] = (counts[entry.table] || 0) + 1;
     }
     return counts;
@@ -177,10 +319,15 @@ export const OfflineCache = {
 
   /**
    * Clear all cached data and dirty queue (useful for testing or logout).
+   * @returns {boolean} Whether both localStorage entries were removed
    */
   clear() {
-    localStorage.removeItem(CACHE_KEY);
-    localStorage.removeItem(DIRTY_QUEUE_KEY);
+    memoryCache = {};
+    memoryDirtyQueue = [];
+    const cacheRemoved = removeStorageItem(CACHE_KEY);
+    const queueRemoved = removeStorageItem(DIRTY_QUEUE_KEY);
+    ignoreStoredCache = !cacheRemoved;
+    return cacheRemoved && queueRemoved;
   },
 
   /** Exposed for reference by consumers */

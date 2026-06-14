@@ -15,6 +15,8 @@ import {
 import { calibrate } from '../domain/calibration-engine.js';
 import { StateManager } from '../core/state-manager.js';
 import { EventBus, EVENTS } from '../core/event-bus.js';
+import { escapeHTML } from '../utils/html.js';
+import { nonNegativeNumber, positiveNumber } from '../utils/number.js';
 
 /** @type {HTMLElement|null} */
 let containerEl = null;
@@ -26,16 +28,107 @@ function getToday() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function finiteNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function roundedOrDash(value) {
+  const numeric = finiteNumber(value);
+  return numeric === null ? '—' : String(Math.round(numeric));
+}
+
+function boundedScore(value) {
+  const numeric = finiteNumber(value);
+  if (numeric === null) return null;
+  return Math.min(500, Math.max(0, numeric));
+}
+
+function subjectScore(value, max) {
+  const numeric = finiteNumber(value);
+  if (numeric === null) return null;
+  return Math.min(max, Math.max(0, numeric));
+}
+
+function objectValue(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function arrayValue(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function safeText(value, fallback = '') {
+  const type = typeof value;
+  if (!['string', 'number', 'bigint'].includes(type)) return fallback;
+  const text = String(value);
+  return text || fallback;
+}
+
+function validDateKey(value) {
+  const text = safeText(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return '';
+  const date = new Date(`${text}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === text ? text : '';
+}
+
+function reviewIsActive(item) {
+  return item && typeof item === 'object' && !item.done && !['done', 'failed'].includes(item.status);
+}
+
+function isDueReviewItem(item, today) {
+  const dueDate = validDateKey(item?.nextDueAt);
+  return Boolean(reviewIsActive(item) && dueDate && dueDate <= today);
+}
+
+function extractMockScoreValues(mockScores) {
+  return arrayValue(mockScores).flatMap((score) => {
+    const directScore = typeof score === 'object' && score !== null
+      ? boundedScore(score.total ?? score.score)
+      : boundedScore(score);
+    if (directScore !== null) return [directScore];
+
+    if (typeof score !== 'object' || score === null) return [];
+    const parts = [
+      subjectScore(score.politics, 100),
+      subjectScore(score.english, 100),
+      subjectScore(score.math, 150),
+      subjectScore(score.cs408, 150),
+    ];
+    return parts.some((part) => part !== null)
+      ? [parts.reduce((sum, part) => sum + (part || 0), 0)]
+      : [];
+  });
+}
+
+function recordMinutes(record) {
+  return nonNegativeNumber(record?.mathMin)
+    + nonNegativeNumber(record?.csMin)
+    + nonNegativeNumber(record?.engMin)
+    + nonNegativeNumber(record?.polMin)
+    + nonNegativeNumber(record?.projectMin);
+}
+
+function coreMinutes(record) {
+  return nonNegativeNumber(record?.mathMin) + nonNegativeNumber(record?.csMin);
+}
+
+function problemCount(record) {
+  return nonNegativeNumber(record?.mathProblems) + nonNegativeNumber(record?.csProblems);
+}
+
 /**
  * Get daily retro input from current state.
  */
 function getDailyRetroInput() {
-  const settings = StateManager.getState('settings') || {};
-  const todayTasks = StateManager.getState('today.tasks') || [];
-  const records = StateManager.getState('daily_records') || {};
+  const settings = objectValue(StateManager.getState('settings'));
+  const todayTasks = arrayValue(StateManager.getState('today.tasks'));
+  const records = objectValue(StateManager.getState('daily_records'));
   const today = getToday();
-  const todayRecord = records[today];
-  const reviewItems = StateManager.getState('review_items') || [];
+  const rawTodayRecord = records[today];
+  const todayRecord = objectValue(rawTodayRecord);
+  const hasTodayRecord = rawTodayRecord && typeof rawTodayRecord === 'object' && !Array.isArray(rawTodayRecord);
+  const reviewItems = arrayValue(StateManager.getState('review_items'));
   const phase = settings.phase || 'foundation';
 
   // Task completion rate
@@ -44,19 +137,18 @@ function getDailyRetroInput() {
   const taskCompletionRate = taskCount > 0 ? completedTasks / taskCount : 0;
 
   // Record count
-  const recordCount = todayRecord ? 1 : 0;
+  const recordCount = hasTodayRecord ? 1 : 0;
 
   // Review due processed rate
-  const dueItems = (Array.isArray(reviewItems) ? reviewItems : [])
-    .filter(item => item.nextDueAt && item.nextDueAt <= today);
+  const dueItems = reviewItems.filter(item => isDueReviewItem(item, today));
   const processedItems = dueItems.filter(item => item.lastSubmittedDate === today);
   const reviewDueProcessedRate = dueItems.length > 0 ? processedItems.length / dueItems.length : 1;
 
   // Core ratio
   let coreRatio = 0.65;
-  if (todayRecord) {
-    const total = (todayRecord.mathMin || 0) + (todayRecord.csMin || 0) + (todayRecord.engMin || 0) + (todayRecord.polMin || 0) + (todayRecord.projectMin || 0);
-    const core = (todayRecord.mathMin || 0) + (todayRecord.csMin || 0);
+  if (hasTodayRecord) {
+    const total = recordMinutes(todayRecord);
+    const core = coreMinutes(todayRecord);
     coreRatio = total > 0 ? core / total : 0;
   }
 
@@ -70,10 +162,11 @@ function signalDot(signal, label) {
   const colors = { green: 'var(--green)', yellow: 'var(--amber)', red: 'var(--red)' };
   const bgColors = { green: 'var(--green-soft)', yellow: 'var(--amber-soft)', red: 'var(--red-soft)' };
   const labels = { green: '正常', yellow: '注意', red: '需调整' };
+  const safeSignal = colors[signal] ? signal : 'red';
   return `
-    <div class="metric-card" style="border-left:3px solid ${colors[signal]};">
-      <span>${label}</span>
-      <strong style="color:${colors[signal]};">${labels[signal]}</strong>
+    <div class="metric-card" style="border-left:3px solid ${colors[safeSignal]};">
+      <span>${escapeHTML(label)}</span>
+      <strong style="color:${colors[safeSignal]};">${labels[safeSignal]}</strong>
     </div>
   `;
 }
@@ -102,8 +195,8 @@ function renderDailyRetro() {
  * Render weekly retro section.
  */
 function renderWeeklyRetro() {
-  const records = StateManager.getState('daily_records') || {};
-  const settings = StateManager.getState('settings') || {};
+  const records = objectValue(StateManager.getState('daily_records'));
+  const settings = objectValue(StateManager.getState('settings'));
   const phase = settings.phase || 'foundation';
   const today = getToday();
 
@@ -120,14 +213,15 @@ function renderWeeklyRetro() {
     const dd = new Date(d);
     dd.setUTCDate(dd.getUTCDate() + i);
     const dateStr = dd.toISOString().slice(0, 10);
-    const r = records[dateStr];
-    if (!r) { breakDays++; continue; }
-    const dayTotal = (r.mathMin || 0) + (r.csMin || 0) + (r.engMin || 0) + (r.polMin || 0) + (r.projectMin || 0);
+    const rawRecord = records[dateStr];
+    const r = objectValue(rawRecord);
+    if (!rawRecord || Array.isArray(rawRecord) || typeof rawRecord !== 'object') { breakDays++; continue; }
+    const dayTotal = recordMinutes(r);
     if (dayTotal === 0) { breakDays++; continue; }
     totalMinutes += dayTotal;
-    newMistakes += r.newMistakes || 0;
-    fixedMistakes += r.fixedMistakes || 0;
-    const core = (r.mathMin || 0) + (r.csMin || 0);
+    newMistakes += nonNegativeNumber(r.newMistakes);
+    fixedMistakes += nonNegativeNumber(r.fixedMistakes);
+    const core = coreMinutes(r);
     coreRatios.push(dayTotal > 0 ? core / dayTotal : 0);
   }
 
@@ -135,7 +229,8 @@ function renderWeeklyRetro() {
     ? [...coreRatios].sort((a, b) => a - b)[Math.floor(coreRatios.length / 2)]
     : 0;
   const mistakeRecoveryRate = newMistakes > 0 ? Math.min(1, fixedMistakes / newMistakes) : 1;
-  const plannedMinutes = (settings.weekdayMinutes || 240) * 5 + (settings.weekendMinutes || 360) * 2;
+  const plannedMinutes = positiveNumber(settings.weekdayMinutes, 240) * 5
+    + positiveNumber(settings.weekendMinutes, 360) * 2;
 
   const weekData = { totalEffectiveMinutes: totalMinutes, plannedMinutes, breakDays, mistakeRecoveryRate, coreRatioMedian, phase };
   const result = computeWeeklyRetro([], weekData);
@@ -164,21 +259,22 @@ function renderWeeklyRetro() {
  * Render monthly audit section.
  */
 function renderMonthlyAudit() {
-  const records = StateManager.getState('daily_records') || {};
-  const settings = StateManager.getState('settings') || {};
+  const records = objectValue(StateManager.getState('daily_records'));
+  const settings = objectValue(StateManager.getState('settings'));
 
   // Compute current month actual minutes
   const today = getToday();
   const monthPrefix = today.slice(0, 7);
   let actualMinutes = 0;
   for (const [date, r] of Object.entries(records)) {
-    if (date.startsWith(monthPrefix)) {
-      actualMinutes += (r.mathMin || 0) + (r.csMin || 0) + (r.engMin || 0) + (r.polMin || 0) + (r.projectMin || 0);
+    const dateKey = validDateKey(date);
+    if (dateKey && dateKey.startsWith(monthPrefix)) {
+      actualMinutes += recordMinutes(r);
     }
   }
 
   const dayOfMonth = new Date().getDate();
-  const dailyTarget = (settings.weekdayMinutes || 240);
+  const dailyTarget = positiveNumber(settings.weekdayMinutes, 240);
   const cumulativePlannedMinutes = dailyTarget * dayOfMonth;
 
   const audit = computeMonthlyAudit({ actualMinutes }, { cumulativePlannedMinutes });
@@ -188,6 +284,7 @@ function renderMonthlyAudit() {
     shrink_to_core: '⚠ 建议收缩至核心科目',
     tier_fallback: '⚠ 触发志愿梯度重评估',
   };
+  const recommendation = recommendationLabels[audit.recommendation] || safeText(audit.recommendation);
 
   return `
     <section class="panel" style="margin-bottom:14px;">
@@ -198,7 +295,7 @@ function renderMonthlyAudit() {
         <div class="metric-card"><span>完成比</span><strong>${(audit.ratio * 100).toFixed(0)}%</strong></div>
       </div>
       <p style="margin-top:12px;font-size:13px;color:${audit.recommendation === 'on_track' ? 'var(--green)' : 'var(--red)'};">
-        ${recommendationLabels[audit.recommendation] || audit.recommendation}
+        ${escapeHTML(recommendation)}
       </p>
       ${audit.shouldTierFallback ? `
         <div id="retro-tier-fallback-trigger" style="margin-top:12px;">
@@ -213,8 +310,8 @@ function renderMonthlyAudit() {
  * Render snapshot history (read-only).
  */
 function renderSnapshotHistory() {
-  const snapshots = StateManager.getState('calibration_snapshots') || [];
-  const recentSnapshots = (Array.isArray(snapshots) ? snapshots : []).slice(-5).reverse();
+  const snapshots = arrayValue(StateManager.getState('calibration_snapshots'));
+  const recentSnapshots = snapshots.slice(-5).reverse();
 
   if (recentSnapshots.length === 0) {
     return `
@@ -225,13 +322,15 @@ function renderSnapshotHistory() {
     `;
   }
 
-  const rows = recentSnapshots.map(s => {
-    const result = s.result_payload || {};
+  const rows = recentSnapshots.map((snapshot) => {
+    const s = objectValue(snapshot);
+    const result = objectValue(s.result_payload);
+    const checkpointDate = safeText(s.checkpoint_date, '未知日期');
     return `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius);background:#fbfcfa;">
-        <span style="font-size:12px;color:var(--muted);">${s.checkpoint_date || '未知日期'}</span>
-        <strong style="font-size:14px;color:var(--ink);">${result.predictedScore ? Math.round(result.predictedScore) : '—'}分</strong>
-        <span style="font-size:11px;color:var(--muted);">[${result.lowerBound ? Math.round(result.lowerBound) : '—'}, ${result.upperBound ? Math.round(result.upperBound) : '—'}]</span>
+        <span style="font-size:12px;color:var(--muted);">${escapeHTML(checkpointDate)}</span>
+        <strong style="font-size:14px;color:var(--ink);">${roundedOrDash(result.predictedScore)}分</strong>
+        <span style="font-size:11px;color:var(--muted);">[${roundedOrDash(result.lowerBound)}, ${roundedOrDash(result.upperBound)}]</span>
       </div>
     `;
   }).join('');
@@ -293,14 +392,15 @@ function showTierModal() {
   if (!modal || !content) return;
 
   // Run calibration to get tier fallback data
-  const mockScores = StateManager.getState('mock_scores') || [];
-  const topicProgress = StateManager.getState('topic_progress') || [];
-  const records = StateManager.getState('daily_records') || {};
+  const mockScores = arrayValue(StateManager.getState('mock_scores'));
+  const topicProgress = arrayValue(StateManager.getState('topic_progress'));
+  const records = objectValue(StateManager.getState('daily_records'));
   const today = getToday();
 
-  const scores = Array.isArray(mockScores) ? mockScores.map(s => s.score || s) : [];
-  const topicCoverage = Array.isArray(topicProgress) && topicProgress.length > 0
-    ? topicProgress.filter(t => t.mastery_status === 'mastered').length / topicProgress.length
+  const scores = extractMockScoreValues(mockScores);
+  const progressRows = topicProgress.filter((item) => item && typeof item === 'object' && !Array.isArray(item));
+  const topicCoverage = progressRows.length > 0
+    ? progressRows.filter(t => t.mastery_status === 'mastered').length / progressRows.length
     : 0.3;
 
   // Compute recent 30 day metrics
@@ -310,10 +410,12 @@ function showTierModal() {
   const cutoff = thirtyDaysAgo.toISOString().slice(0, 10);
 
   for (const [date, r] of Object.entries(records)) {
-    if (date >= cutoff) {
-      recent30Minutes += (r.mathMin || 0) + (r.csMin || 0) + (r.engMin || 0) + (r.polMin || 0) + (r.projectMin || 0);
-      problemsTotal += (r.mathProblems || 0) + (r.csProblems || 0);
-      problemsCorrect += (r.mathProblems || 0) * 0.7 + (r.csProblems || 0) * 0.7; // estimate
+    const dateKey = validDateKey(date);
+    if (dateKey && dateKey >= cutoff) {
+      const problems = problemCount(r);
+      recent30Minutes += recordMinutes(r);
+      problemsTotal += problems;
+      problemsCorrect += problems * 0.7; // estimate
     }
   }
 
@@ -328,13 +430,16 @@ function showTierModal() {
   });
 
   if (result.tierFallback) {
-    content.innerHTML = result.tierFallback.map(t => `
+    content.innerHTML = result.tierFallback.map((tier) => {
+      const t = objectValue(tier);
+      return `
       <div style="padding:10px;border:1px solid var(--line);border-radius:var(--radius);margin-bottom:8px;">
-        <strong style="color:var(--ink);">${t.tier}</strong>
-        <p style="margin:4px 0 0;font-size:12px;color:var(--muted);">${t.description}</p>
-        <span style="font-size:11px;color:var(--blue);">概率: ${(t.probabilityRange[0] * 100).toFixed(0)}% ~ ${(t.probabilityRange[1] * 100).toFixed(0)}%</span>
+        <strong style="color:var(--ink);">${escapeHTML(safeText(t.tier))}</strong>
+        <p style="margin:4px 0 0;font-size:12px;color:var(--muted);">${escapeHTML(safeText(t.description))}</p>
+        <span style="font-size:11px;color:var(--blue);">概率: ${((finiteNumber(t.probabilityRange?.[0]) || 0) * 100).toFixed(0)}% ~ ${((finiteNumber(t.probabilityRange?.[1]) || 0) * 100).toFixed(0)}%</span>
       </div>
-    `).join('');
+    `;
+    }).join('');
   } else {
     content.innerHTML = '<p>当前监测值在内部目标线上方，暂不需要调整院校梯度。</p>';
   }

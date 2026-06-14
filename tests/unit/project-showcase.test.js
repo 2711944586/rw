@@ -29,6 +29,33 @@ describe('project-showcase', () => {
       expect(userData).toEqual(original);
     });
 
+    it('drops circular references and redacts malformed row arrays safely', () => {
+      const userData = {
+        email: 'test@example.com',
+        source_registry: [
+          null,
+          { claim_id: '1', notes: 'internal note', internal_notes: 'secret' }
+        ],
+        topic_progress: [
+          'bad-row',
+          { topicId: 't1', name: '导数定义', mastery_status: 'mastered' }
+        ],
+      };
+      userData.self = userData;
+
+      const result = desensitizeData(userData);
+
+      expect(result.email).toBeUndefined();
+      expect(result.self).toBeUndefined();
+      expect(result.source_registry[0]).toBeNull();
+      expect(result.source_registry[1]).toMatchObject({ claim_id: '1' });
+      expect(result.source_registry[1].notes).toBeUndefined();
+      expect(result.source_registry[1].internal_notes).toBeUndefined();
+      expect(result.topic_progress[0]).toBe('bad-row');
+      expect(result.topic_progress[1].name).toBeUndefined();
+      expect(result.topic_progress[1].topicId).toBe('t1');
+    });
+
     it('removes source_registry internal notes', () => {
       const userData = {
         source_registry: [
@@ -110,6 +137,26 @@ describe('project-showcase', () => {
       expect(validateShowcaseItem({ item_date: '2025-01-01', output_link: 'https://x.com' }).valid).toBe(true);
     });
 
+    it('rejects unsafe output links even when other fields are filled', () => {
+      const unsafeLinks = [
+        'javascript:alert(1)',
+        '/relative/path',
+        '//example.com/path',
+        'ftp://example.com/file'
+      ];
+
+      for (const output_link of unsafeLinks) {
+        const result = validateShowcaseItem({
+          artifact_type: 'code',
+          item_date: '2025-01-01',
+          output_link
+        });
+
+        expect(result.valid).toBe(false);
+        expect(result.errors.join(' ')).toContain('absolute http(s) URL');
+      }
+    });
+
     it('returns invalid when only 1 field is filled', () => {
       const result = validateShowcaseItem({ artifact_type: 'code' });
       expect(result.valid).toBe(false);
@@ -126,9 +173,37 @@ describe('project-showcase', () => {
       expect(result.valid).toBe(false);
     });
 
+    it('treats whitespace-only strings as not filled', () => {
+      const result = validateShowcaseItem({ artifact_type: '  ', item_date: '\t', output_link: ' \n ' });
+      expect(result.valid).toBe(false);
+    });
+
     it('treats null values as not filled', () => {
       const result = validateShowcaseItem({ artifact_type: null, item_date: '2025-01-01', output_link: null });
       expect(result.valid).toBe(false);
+    });
+
+    it('does not count object-like fields as filled', () => {
+      const result = validateShowcaseItem({
+        artifact_type: { bad: true },
+        item_date: { bad: true },
+        output_link: { bad: true },
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).not.toContain('[object Object]');
+    });
+
+    it('requires item_date to be a valid calendar date when present', () => {
+      const invalid = validateShowcaseItem({ artifact_type: 'code', item_date: '2025-02-31' });
+      expect(invalid.valid).toBe(false);
+      expect(invalid.errors.join(' ')).toContain('valid YYYY-MM-DD date');
+
+      const validDateObject = validateShowcaseItem({ artifact_type: 'code', item_date: new Date('2025-02-28T00:00:00Z') });
+      expect(validDateObject.valid).toBe(true);
+
+      const invalidDateObject = validateShowcaseItem({ artifact_type: 'code', item_date: new Date('bad-date') });
+      expect(invalidDateObject.valid).toBe(false);
     });
   });
 });

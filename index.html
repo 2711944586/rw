@@ -4,6 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>软微 420 学习台</title>
+  <meta name="description" content="从 2026 年 6 月 15 日开始的北大软微 420 备考学习台，覆盖计划、记录、复盘、考纲证据和云同步。">
+  <meta property="og:title" content="软微 420 学习台">
+  <meta property="og:description" content="按官方信息、公开经验样本和学习科学方法生成可执行的每日计划。">
+  <meta property="og:type" content="website">
   <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="%23111827"/><text x="32" y="39" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="white">420</text></svg>'>
   <link rel="stylesheet" href="./styles.css">
 </head>
@@ -31,7 +35,7 @@
       <nav class="nav-list">
         <div class="nav-section">
           <span class="nav-label">执行</span>
-          <button type="button" class="nav-item active" data-view="dashboard" data-title="总览" data-icon="home" aria-label="总览">
+          <button type="button" class="nav-item active" data-view="dashboard" data-title="总览" data-icon="home" aria-label="总览" aria-current="page">
             <i class="nav-ico nav-ico-home" aria-hidden="true"></i><span class="nav-text">总览</span><em id="navRiskDot">待记录</em>
           </button>
           <button type="button" class="nav-item" data-view="today" data-title="今日" data-icon="today" aria-label="今日">
@@ -87,10 +91,10 @@
       </div>
     </aside>
 
-    <main class="main" id="main-content">
+    <main class="main" id="main-content" tabindex="-1">
       <header class="topbar">
         <div>
-          <p class="eyebrow" id="officialBasisText">资料核验 2026-06-08：科目以北大软微 2026 已发布信息为备考基准；2027 年 12 月仍为推算窗口，官方日期待发布。</p>
+          <p class="eyebrow" id="officialBasisText">资料核验 2026-06-15：科目以北大软微 2026 已发布信息为备考基准；2027 年 12 月仍为推算窗口，官方日期待发布。</p>
           <h2 id="viewTitle">总览</h2>
         </div>
           <div class="top-actions">
@@ -100,9 +104,9 @@
             </div>
           <button class="ghost-button" id="authOpenBtn" type="button" aria-label="账号管理"><i data-lucide="user-round" aria-hidden="true"></i><span>账号</span></button>
           <div class="density-toggle" role="group" aria-label="信息密度切换">
-            <button type="button" data-density="focus" aria-label="专注模式">专注</button>
-            <button type="button" data-density="balanced" aria-label="平衡模式">平衡</button>
-            <button type="button" data-density="detail" aria-label="详尽模式">详尽</button>
+            <button type="button" data-density="focus" aria-label="专注模式" aria-pressed="true">专注</button>
+            <button type="button" data-density="balanced" aria-label="平衡模式" aria-pressed="false">平衡</button>
+            <button type="button" data-density="detail" aria-label="详尽模式" aria-pressed="false">详尽</button>
           </div>
           <button class="ghost-button" id="exportBtn" type="button" aria-label="导出全部数据"><i data-lucide="download" aria-hidden="true"></i><span>导出</span></button>
           <label class="import-label" aria-label="导入数据文件">
@@ -112,10 +116,10 @@
         </div>
       </header>
 
-      <section class="view active" id="dashboard">
+      <section class="view active" id="dashboard" aria-hidden="false">
         <section class="command-panel">
           <div>
-            <span class="command-label">2026-06-08 从头开始 · 9 月起加压 · 目标日期待官方复核</span>
+            <span class="command-label">2026-06-15 从头开始 · 9 月起加压 · 目标日期待官方复核</span>
             <h3>今日入口</h3>
             <p id="commandText">先执行任务，再保存记录；复盘到期时优先处理。</p>
           </div>
@@ -323,7 +327,7 @@
             <article class="metric-card">
               <span>累计有效学习</span>
               <strong id="totalHours">0h</strong>
-              <p id="totalProgressText">目标 2660h</p>
+              <p id="totalProgressText">目标 2648h</p>
             </article>
             <article class="metric-card">
               <span>本月完成率</span>
@@ -398,7 +402,7 @@
 
       </section>
 
-      <section class="view" id="today">
+      <section class="view" id="today" hidden aria-hidden="true">
         <div class="today-workbench">
           <section class="panel hero-panel today-plan-panel">
             <div class="panel-head">
@@ -542,7 +546,7 @@
         </div>
       </section>
 
-      <section class="view" id="week">
+      <section class="view" id="week" hidden aria-hidden="true">
         <div class="content-grid">
           <section class="panel wide">
             <div class="panel-head">
@@ -573,7 +577,7 @@
         </div>
       </section>
 
-      <section class="view" id="foundation">
+      <section class="view" id="foundation" hidden aria-hidden="true">
         <div class="content-grid">
           <section class="panel wide">
             <div class="panel-head">
@@ -605,7 +609,7 @@
         </div>
       </section>
 
-      <section class="view" id="syllabus">
+      <section class="view" id="syllabus" hidden aria-hidden="true">
         <div class="panel">
           <div class="panel-head">
             <div>
@@ -614,11 +618,11 @@
             </div>
             <div class="syllabus-tools">
               <input class="syllabus-search" type="search" id="syllabusSearch" placeholder="搜索考点 / 任务证据" aria-label="搜索考点">
-              <div class="segmented">
-                <button class="seg active" type="button" data-syllabus="math">数学一</button>
-                <button class="seg" type="button" data-syllabus="cs408">408</button>
-                <button class="seg" type="button" data-syllabus="english">英语一</button>
-                <button class="seg" type="button" data-syllabus="politics">政治</button>
+              <div class="segmented" role="group" aria-label="考纲科目切换">
+                <button class="seg active" type="button" data-syllabus="math" aria-pressed="true">数学一</button>
+                <button class="seg" type="button" data-syllabus="cs408" aria-pressed="false">408</button>
+                <button class="seg" type="button" data-syllabus="english" aria-pressed="false">英语一</button>
+                <button class="seg" type="button" data-syllabus="politics" aria-pressed="false">政治</button>
               </div>
             </div>
           </div>
@@ -627,7 +631,7 @@
         </div>
       </section>
 
-      <section class="view" id="records">
+      <section class="view" id="records" hidden aria-hidden="true">
         <div class="content-grid">
           <section class="panel wide">
             <div class="panel-head">
@@ -655,7 +659,7 @@
         </div>
       </section>
 
-      <section class="view" id="review">
+      <section class="view" id="review" hidden aria-hidden="true">
         <div class="content-grid">
           <section class="panel wide">
             <div class="panel-head">
@@ -679,7 +683,7 @@
             <div class="panel-head">
               <div>
                 <h3>月度计划</h3>
-                <p>按 2026-06-08 到 2027 年 12 月推算窗口的累计目标推进，官方日期发布后必须更新</p>
+                <p>按 2026-06-15 到 2027 年 12 月推算窗口的累计目标推进，官方日期发布后必须更新</p>
               </div>
             </div>
             <div class="month-table" id="monthTable"></div>
@@ -698,7 +702,7 @@
         </div>
       </section>
 
-      <section class="view" id="scores">
+      <section class="view" id="scores" hidden aria-hidden="true">
         <div class="content-grid">
           <section class="panel">
             <div class="panel-head">
@@ -731,7 +735,7 @@
         </div>
       </section>
 
-      <section class="view" id="resources">
+      <section class="view" id="resources" hidden aria-hidden="true">
         <div class="content-grid">
           <section class="panel wide">
             <div class="panel-head">
@@ -763,7 +767,7 @@
         </div>
       </section>
 
-      <section class="view" id="settings">
+      <section class="view" id="settings" hidden aria-hidden="true">
         <div class="content-grid">
           <section class="panel wide">
             <div class="panel-head">
@@ -849,7 +853,7 @@
             <form class="custom-task-form" id="customTaskForm">
               <label>科目<input type="text" id="customSubject" placeholder="例如：数学"></label>
               <label>任务<input type="text" id="customText" placeholder="例如：高数极限错题回炉"></label>
-              <label>分钟<input type="number" min="10" max="240" id="customMinutes"></label>
+              <label>分钟<input type="number" min="10" max="240" id="customMinutes" inputmode="numeric"></label>
               <button type="submit" class="primary-button">添加模板</button>
             </form>
             <div class="custom-task-list" id="customTaskList"></div>
@@ -936,18 +940,18 @@
     </main>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <dialog class="auth-dialog" id="authDialog">
-    <form class="auth-card" id="authForm">
+  <dialog class="auth-dialog" id="authDialog" aria-labelledby="authDialogTitle" aria-describedby="authHint">
+    <form class="auth-card" id="authForm" novalidate>
       <div class="panel-head">
         <div>
-          <h3>账号与云同步</h3>
+          <h3 id="authDialogTitle">账号与云同步</h3>
           <p id="authHint">登录后可在多设备同步计划、记录、复盘和模考。</p>
           <span class="auth-build" id="authBuildText">版本检测中</span>
         </div>
         <button class="icon-button" id="authCloseBtn" type="button" aria-label="关闭账号对话框">×</button>
       </div>
-      <label>邮箱<input type="email" id="authEmail" autocomplete="email" placeholder="you@example.com"></label>
-      <label>密码<input type="password" id="authPassword" autocomplete="current-password" placeholder="至少 6 位"></label>
+      <label>邮箱<input type="email" id="authEmail" autocomplete="email" placeholder="you@example.com" aria-describedby="authResult"></label>
+      <label>密码<input type="password" id="authPassword" autocomplete="current-password" placeholder="至少 6 位" aria-describedby="authResult"></label>
       <div class="auth-actions">
         <button class="primary-button" id="signInBtn" type="button">登录并同步</button>
         <button class="ghost-button" id="signUpBtn" type="button">注册新账号</button>
@@ -960,12 +964,17 @@
       <p class="auth-help">首次使用：填写邮箱和密码后点“注册新账号”。如果邮箱确认已开启，请先打开确认邮件，再回到这里登录。</p>
       <div class="migration-box" id="migrationBox">
         <strong>本地数据迁移</strong>
-        <p>检测到旧版本地数据时，先下载备份，再决定是否导入云端。</p>
+        <p id="migrationText">检测到旧版本地数据时，先下载备份，再决定是否导入云端。</p>
         <div class="auth-actions">
           <button class="ghost-button" id="downloadBackupBtn" type="button">下载备份</button>
           <button class="ghost-button" id="pushLocalBtn" type="button">导入云端</button>
           <button class="ghost-button" id="keepLocalBtn" type="button">保留本机</button>
         </div>
+      </div>
+      <div class="snapshot-box" id="snapshotBox">
+        <strong>最近快照</strong>
+        <p id="snapshotHint">删除、导入和清理前会自动保留快照。</p>
+        <div class="snapshot-list" id="snapshotList" aria-live="polite"></div>
       </div>
       <div class="auth-danger">
         <strong>页面异常修复</strong>

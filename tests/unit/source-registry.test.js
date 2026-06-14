@@ -31,6 +31,17 @@ describe('source-registry', () => {
     it('returns "outdated" at exactly 180 days', () => {
       expect(computeVerificationStatus('2024-01-01', '2024-06-29')).toBe('outdated');
     });
+
+    it('treats malformed verification dates as outdated', () => {
+      expect(computeVerificationStatus('not-a-date', '2024-06-29')).toBe('outdated');
+      expect(computeVerificationStatus('2024-02-31', '2024-06-29')).toBe('outdated');
+      expect(computeVerificationStatus('2024-01-01', 'not-a-date')).toBe('outdated');
+      expect(computeVerificationStatus(null, '2024-06-29')).toBe('outdated');
+    });
+
+    it('treats future verification dates as outdated', () => {
+      expect(computeVerificationStatus('2024-07-01', '2024-06-29')).toBe('outdated');
+    });
   });
 
   describe('filterDisplayableClaims', () => {
@@ -56,8 +67,27 @@ describe('source-registry', () => {
       expect(filterDisplayableClaims(claims)).toHaveLength(0);
     });
 
+    it('excludes claims with unsafe or non-absolute source_url values', () => {
+      const claims = [
+        { claim_id: '1', source_url: 'javascript:alert(1)' },
+        { claim_id: '2', source_url: '/relative/path' },
+        { claim_id: '3', source_url: '//example.com/path' },
+        { claim_id: '4', source_url: 'data:text/html,<script>alert(1)</script>' },
+        { claim_id: '5', source_url: ' https://example.com/fact ' },
+        { claim_id: '6', source_url: 'http://example.com/fact' }
+      ];
+
+      const result = filterDisplayableClaims(claims);
+      expect(result.map((claim) => claim.claim_id)).toEqual(['5', '6']);
+    });
+
     it('returns empty array for empty input', () => {
       expect(filterDisplayableClaims([])).toHaveLength(0);
+    });
+
+    it('returns empty array for non-array input', () => {
+      expect(filterDisplayableClaims(null)).toHaveLength(0);
+      expect(filterDisplayableClaims({ source_url: 'https://example.com' })).toHaveLength(0);
     });
   });
 
@@ -92,6 +122,41 @@ describe('source-registry', () => {
       expect(html).not.toContain('<script>');
       expect(html).toContain('&lt;script&gt;');
     });
+
+    it('escapes publisher HTML and falls back for invalid dates', () => {
+      const html = renderClaimHTML({
+        claim_text: 'Test claim',
+        source_publisher: '<img src=x onerror="window.__publisherXss=1">',
+        last_verified_at: '<img src=x onerror="window.__dateXss=1">'
+      });
+
+      expect(html).not.toContain('<img');
+      expect(html).toContain('&lt;img src=x onerror=&quot;window.__publisherXss=1&quot;&gt;');
+      expect(html).toContain('未知');
+      expect(html).not.toContain('Invalid Date');
+    });
+
+    it('renders missing publisher without throwing', () => {
+      const html = renderClaimHTML({
+        claim_text: 'Test claim',
+        last_verified_at: 'not-a-date'
+      });
+
+      expect(html).toContain('未知');
+      expect(html).not.toContain('undefined');
+      expect(html).not.toContain('Invalid Date');
+    });
+
+    it('keeps object claim text and publisher out of rendered HTML', () => {
+      const html = renderClaimHTML({
+        claim_text: { bad: true },
+        source_publisher: { bad: true },
+        last_verified_at: '2024-06-01'
+      });
+
+      expect(html).toContain('未知');
+      expect(html).not.toContain('[object Object]');
+    });
   });
 
   describe('isVerificationGateActive', () => {
@@ -120,11 +185,26 @@ describe('source-registry', () => {
       expect(isVerificationGateActive('2027-09-01', [])).toBe(false);
     });
 
+    it('returns false for malformed dates or non-array claims', () => {
+      expect(isVerificationGateActive('not-a-date', admissionClaims)).toBe(false);
+      expect(isVerificationGateActive('2027-09-01', null)).toBe(false);
+      expect(isVerificationGateActive('2027-09-01', { claim_type: 'admission_subject' })).toBe(false);
+    });
+
     it('detects all admission claim types', () => {
       const types = ['admission_subject', 'admission_score_line', 'admission_deadline', 'retest_rule'];
       for (const type of types) {
         expect(isVerificationGateActive('2027-09-01', [{ claim_type: type }])).toBe(true);
       }
+    });
+
+    it('ignores malformed claim rows without throwing', () => {
+      expect(isVerificationGateActive('2027-09-01', [
+        null,
+        {},
+        { claim_type: 'constructor' },
+        { claim_type: 'admission_deadline' },
+      ])).toBe(true);
     });
   });
 });

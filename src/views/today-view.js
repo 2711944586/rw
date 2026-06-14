@@ -19,6 +19,8 @@ import {
 import { OfflineCache } from '../infrastructure/offline-cache.js';
 import { EventBus, EVENTS } from '../core/event-bus.js';
 import { StateManager } from '../core/state-manager.js';
+import { escapeAttr, escapeHTML } from '../utils/html.js';
+import { nonNegativeNumber, positiveNumber } from '../utils/number.js';
 
 /** @type {HTMLElement|null} */
 let containerEl = null;
@@ -26,9 +28,114 @@ let containerEl = null;
 /** @type {Function[]} Event listener cleanup registry */
 let cleanupFns = [];
 
+/** @type {{status: 'success'|'error', message: string}|null} */
+let todayActionFeedback = null;
+
 /** Today ISO date string */
 function getToday() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function safeNumber(value, fallback = 0) {
+  return nonNegativeNumber(value, fallback);
+}
+
+function safeInteger(value, fallback = 0) {
+  return Math.round(nonNegativeNumber(value, fallback));
+}
+
+function objectValue(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function arrayValue(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function safeText(value, fallback = '') {
+  const type = typeof value;
+  if (!['string', 'number', 'bigint'].includes(type)) return fallback;
+  const text = String(value);
+  return text || fallback;
+}
+
+function firstArrayValue(values) {
+  return arrayValue(values).find(Array.isArray) || [];
+}
+
+function firstSafeInteger(values, fallback = 0) {
+  for (const value of arrayValue(values)) {
+    const type = typeof value;
+    if (!['string', 'number', 'bigint'].includes(type)) continue;
+    if (type === 'string' && value.trim() === '') continue;
+    const number = Number(value);
+    if (Number.isFinite(number)) return Math.round(Math.max(0, number));
+  }
+  return safeInteger(fallback);
+}
+
+function normalizedTaskContract(task) {
+  const item = objectValue(task);
+  const contract = objectValue(item.contract);
+  return {
+    required_artifacts: firstArrayValue([
+      contract.required_artifacts,
+      contract.requiredArtifacts,
+      item.required_artifacts,
+      item.requiredArtifacts,
+    ]).map(value => safeText(value)).filter(Boolean),
+    required_problem_count: firstSafeInteger([
+      contract.required_problem_count,
+      contract.requiredProblemCount,
+      item.required_problem_count,
+      item.requiredProblemCount,
+    ])
+  };
+}
+
+function reviewTopicId(item) {
+  return safeText(objectValue(item).topicId);
+}
+
+function reviewTopicLabel(item) {
+  const review = objectValue(item);
+  return reviewTopicId(review) || safeText(review.topic) || '未命名';
+}
+
+function hasReviewIdentity(item) {
+  const review = objectValue(item);
+  return Boolean(reviewTopicId(review) || safeText(review.topic));
+}
+
+function taskLabelFor(task) {
+  const item = objectValue(task);
+  return safeText(item.title) || safeText(item.topicId) || safeText(item.topic) || '学习任务';
+}
+
+function taskIndexFromControl(control) {
+  const index = Number(control?.dataset?.taskIndex);
+  return Number.isInteger(index) && index >= 0 ? index : -1;
+}
+
+function reviewIndexFromButton(btn) {
+  const index = Number(btn.dataset.reviewIndex);
+  return Number.isInteger(index) && index >= 0 ? index : -1;
+}
+
+function validDateKey(value) {
+  const text = safeText(value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return '';
+  const date = new Date(`${text}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === text ? text : '';
+}
+
+function reviewIsActive(item) {
+  return item && !item.done && !['done', 'failed'].includes(item.status);
+}
+
+function isDueReviewItem(item, today) {
+  const dueDate = validDateKey(item?.nextDueAt);
+  return Boolean(reviewIsActive(item) && dueDate && dueDate <= today);
 }
 
 /**
@@ -43,25 +150,29 @@ function getDensityMode() {
  * Build the plan input from current state for generateDailyPlan.
  */
 function buildPlanInput() {
-  const settings = StateManager.getState('settings') || {};
-  const records = StateManager.getState('daily_records') || {};
-  const reviewItems = StateManager.getState('review_items') || [];
+  const settings = objectValue(StateManager.getState('settings'));
+  const records = objectValue(StateManager.getState('daily_records'));
+  const reviewItems = arrayValue(StateManager.getState('review_items'));
   const today = getToday();
 
   // Compute consecutive missed days
-  const recordDates = Object.keys(records).sort().reverse();
+  const recordDates = Object.keys(records)
+    .map(validDateKey)
+    .filter(dateKey => dateKey && dateKey <= today)
+    .sort()
+    .reverse();
   let consecutiveMissedDays = 0;
   if (recordDates.length > 0) {
     const lastDate = new Date(recordDates[0] + 'T00:00:00Z');
     const now = new Date(today + 'T00:00:00Z');
-    consecutiveMissedDays = Math.round((now - lastDate) / (1000 * 60 * 60 * 24));
+    consecutiveMissedDays = Math.max(0, Math.round((now - lastDate) / (1000 * 60 * 60 * 24)));
   } else {
     consecutiveMissedDays = 0;
   }
 
   // Due reviews
-  const dueReviews = (Array.isArray(reviewItems) ? reviewItems : [])
-    .filter(item => item.nextDueAt && item.nextDueAt <= today)
+  const dueReviews = reviewItems
+    .filter(item => isDueReviewItem(item, today))
     .map(item => ({
       ...item,
       category: 'review',
@@ -71,28 +182,29 @@ function buildPlanInput() {
   const dayOfWeek = new Date().getDay();
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
   const availableMinutes = isWeekend
-    ? (settings.weekendMinutes || 360)
-    : (settings.weekdayMinutes || 240);
+    ? positiveNumber(settings.weekendMinutes, 360)
+    : positiveNumber(settings.weekdayMinutes, 240);
 
   // Candidate topics from state
-  const candidateTopics = StateManager.getState('candidate_topics') || [];
-  const blockedTopics = StateManager.getState('blocked_topics') || [];
+  const candidateTopics = arrayValue(StateManager.getState('candidate_topics'));
+  const blockedTopics = arrayValue(StateManager.getState('blocked_topics'));
 
   // Compute 7-day history median
   const last7 = recordDates.slice(0, 7);
   let historyMedian = { taskCount: 4, minutes: availableMinutes };
   if (last7.length >= 3) {
     const minutesList = last7.map(d => {
-      const r = records[d];
-      return (r.mathMin || 0) + (r.csMin || 0) + (r.engMin || 0) + (r.polMin || 0) + (r.projectMin || 0);
+      const r = objectValue(records[d]);
+      return safeNumber(r.mathMin) + safeNumber(r.csMin) + safeNumber(r.engMin) + safeNumber(r.polMin) + safeNumber(r.projectMin);
     }).sort((a, b) => a - b);
     historyMedian.minutes = minutesList[Math.floor(minutesList.length / 2)];
   }
+  const coreRatioTarget = Math.min(1, Math.max(0, nonNegativeNumber(settings.coreRatio, 65) / 100));
 
   return {
     availableMinutes,
     phase: settings.phase || 'foundation',
-    coreRatioTarget: settings.coreRatio ? settings.coreRatio / 100 : 0.65,
+    coreRatioTarget,
     blockedTopics,
     dueReviews,
     historyMedian,
@@ -110,30 +222,64 @@ function renderSyncStatus() {
   const text = lastSynced
     ? `上次同步: ${new Date(lastSynced).toLocaleString('zh-CN')}`
     : '尚未同步';
-  return `<div class="sync-indicator" aria-live="polite"><span>${text}</span></div>`;
+  return `<div class="sync-indicator" aria-live="polite"><span>${escapeHTML(text)}</span></div>`;
+}
+
+function renderTodayActionFeedback() {
+  if (!todayActionFeedback) {
+    return '<div class="today-action-feedback" aria-live="polite" hidden></div>';
+  }
+
+  const role = todayActionFeedback.status === 'error' ? 'alert' : 'status';
+  const live = todayActionFeedback.status === 'error' ? 'assertive' : 'polite';
+  return `
+    <div class="today-action-feedback ${todayActionFeedback.status}" role="${role}" aria-live="${live}">
+      ${escapeHTML(todayActionFeedback.message)}
+    </div>
+  `;
+}
+
+function setTodayActionFeedback(saved, successMessage) {
+  todayActionFeedback = saved
+    ? { status: 'success', message: successMessage }
+    : {
+      status: 'error',
+      message: '操作已保留在当前页面，本机缓存写入失败，请立即导出备份。',
+    };
+}
+
+function updateTodayActionFeedbackElement() {
+  const feedback = containerEl?.querySelector('.today-action-feedback');
+  if (!feedback || !todayActionFeedback) return;
+  feedback.hidden = false;
+  feedback.className = `today-action-feedback ${todayActionFeedback.status}`;
+  feedback.setAttribute('role', todayActionFeedback.status === 'error' ? 'alert' : 'status');
+  feedback.setAttribute('aria-live', todayActionFeedback.status === 'error' ? 'assertive' : 'polite');
+  feedback.textContent = todayActionFeedback.message;
 }
 
 /**
  * Render a single plan task card.
  */
 function renderTaskCard(task, index) {
-  const contract = task.contract || {};
-  const artifacts = Array.isArray(contract.required_artifacts)
-    ? contract.required_artifacts.join(', ')
-    : '';
-  const requiredProblems = contract.required_problem_count || 0;
+  const item = objectValue(task);
+  const taskContract = normalizedTaskContract(item);
+  const artifacts = taskContract.required_artifacts.map(escapeHTML).join(', ');
+  const requiredProblems = taskContract.required_problem_count;
+  const taskId = safeText(item.id, String(index));
+  const taskLabel = taskLabelFor(item);
 
   return `
-    <article class="plan-card" data-task-index="${index}" data-task-id="${task.id || index}" tabindex="0" role="listitem">
+    <article class="plan-card" data-task-index="${index}" data-task-id="${escapeAttr(taskId)}" tabindex="0" role="listitem">
       <div class="plan-card-head">
         <label class="plan-card-check">
           <input type="checkbox" class="task-complete-check" data-task-index="${index}"
-            aria-label="标记任务完成: ${task.title || task.topicId || ''}" />
+            aria-label="标记任务完成: ${escapeAttr(taskLabel)}" />
         </label>
         <div class="plan-card-info">
-          <span class="plan-card-subject">${task.subject || ''}</span>
-          <strong class="plan-card-title">${task.title || task.topicId || '学习任务'}</strong>
-          <em class="plan-card-time">${task.estimatedMinutes || 0} 分钟</em>
+          <span class="plan-card-subject">${escapeHTML(safeText(item.subject))}</span>
+          <strong class="plan-card-title">${escapeHTML(taskLabel)}</strong>
+          <em class="plan-card-time">${safeNumber(item.estimatedMinutes)} 分钟</em>
         </div>
       </div>
       ${(artifacts || requiredProblems > 0) ? `
@@ -199,7 +345,7 @@ function renderRecordForm() {
     <section class="panel today-entry-panel">
       <div class="panel-head">
         <div><h3>学习记录</h3><p>只填分钟数和题量</p></div>
-        <input class="date-input" type="date" id="tv-entry-date" value="${today}" aria-label="记录日期" />
+        <input class="date-input" type="date" id="tv-entry-date" value="${escapeAttr(today)}" aria-label="记录日期" />
       </div>
       <div class="quick-row">
         <div class="quick-group" aria-label="今日节奏档位" role="group">
@@ -232,9 +378,10 @@ function renderRecordForm() {
  */
 function renderReviewQueue() {
   const today = getToday();
-  const reviewItems = StateManager.getState('review_items') || [];
-  const dueItems = (Array.isArray(reviewItems) ? reviewItems : [])
-    .filter(item => item.nextDueAt && item.nextDueAt <= today);
+  const reviewItems = arrayValue(StateManager.getState('review_items'));
+  const dueItems = reviewItems
+    .map((item, index) => ({ ...objectValue(item), _reviewIndex: index }))
+    .filter(item => isDueReviewItem(item, today));
   const sorted = sortDueItems(dueItems);
 
   if (sorted.length === 0) {
@@ -249,18 +396,22 @@ function renderReviewQueue() {
     const intervalLabel = `D+${INTERVALS[item.intervalIndex] || 1}`;
     const isDeferred = item.deferred;
     const deferredMark = isDeferred ? ' <em class="deferred-mark">延迟</em>' : '';
+    const topicId = reviewTopicId(item);
+    const topicLabel = reviewTopicLabel(item);
+    const reviewIndex = Number.isInteger(item._reviewIndex) && item._reviewIndex >= 0 ? item._reviewIndex : i;
+    const failStreak = safeNumber(item.failStreak);
 
     return `
-      <article class="review-item" data-review-index="${i}" data-topic-id="${item.topicId}" tabindex="0">
+      <article class="review-item" data-review-index="${reviewIndex}" data-topic-id="${escapeAttr(topicId)}" tabindex="0">
         <div class="review-item-info">
-          <strong>${item.topicId || item.topic || '未命名'}</strong>
-          <span class="review-interval">${intervalLabel}</span>
-          ${item.failStreak > 0 ? `<span class="review-fail-streak">连续失败: ${item.failStreak}</span>` : ''}
+          <strong>${escapeHTML(topicLabel)}</strong>
+          <span class="review-interval">${escapeHTML(intervalLabel)}</span>
+          ${failStreak > 0 ? `<span class="review-fail-streak">连续失败: ${failStreak}</span>` : ''}
           ${deferredMark}
         </div>
         <div class="review-item-actions" role="group" aria-label="复习结果">
-          <button type="button" class="review-pass-btn" data-topic-id="${item.topicId}" aria-label="通过: ${item.topicId}">通过</button>
-          <button type="button" class="review-fail-btn" data-topic-id="${item.topicId}" aria-label="未通过: ${item.topicId}">未通过</button>
+          <button type="button" class="review-pass-btn" data-review-index="${reviewIndex}" data-topic-id="${escapeAttr(topicId)}" aria-label="通过: ${escapeAttr(topicLabel)}">通过</button>
+          <button type="button" class="review-fail-btn" data-review-index="${reviewIndex}" data-topic-id="${escapeAttr(topicId)}" aria-label="未通过: ${escapeAttr(topicLabel)}">未通过</button>
         </div>
       </article>
     `;
@@ -285,12 +436,16 @@ function render() {
   const density = getDensityMode();
 
   // Store generated tasks in state for completion tracking
-  StateManager.setState('today.tasks', tasks);
+  const tasksSaved = StateManager.setState('today.tasks', tasks);
+  if (!tasksSaved) {
+    setTodayActionFeedback(false, '今日计划已保存。');
+  }
 
   const focusOnly = density === 'focus';
 
   let html = `<section class="view today-view active">`;
   html += renderSyncStatus();
+  html += renderTodayActionFeedback();
   html += renderDailyPlan(tasks);
   html += renderRecordForm();
   html += renderReviewQueue();
@@ -315,7 +470,8 @@ function onTaskCheckboxChange(e) {
   const checkbox = e.target;
   if (!checkbox.classList.contains('task-complete-check')) return;
 
-  const index = parseInt(checkbox.dataset.taskIndex, 10);
+  const index = taskIndexFromControl(checkbox);
+  if (index < 0) return;
   const formEl = containerEl.querySelector(`.plan-card-completion-form[data-task-index="${index}"]`);
 
   if (checkbox.checked && formEl) {
@@ -334,10 +490,12 @@ function onCompletionSubmit(e) {
   const btn = e.target;
   if (!btn.classList.contains('completion-submit-btn')) return;
 
-  const index = parseInt(btn.dataset.taskIndex, 10);
-  const tasks = StateManager.getState('today.tasks') || [];
-  const task = tasks[index];
-  if (!task) return;
+  const index = taskIndexFromControl(btn);
+  if (index < 0) return;
+  const tasks = arrayValue(StateManager.getState('today.tasks'));
+  const rawTask = tasks[index];
+  if (!rawTask || typeof rawTask !== 'object' || Array.isArray(rawTask)) return;
+  const task = rawTask;
 
   const formEl = containerEl.querySelector(`.plan-card-completion-form[data-task-index="${index}"]`);
   if (!formEl) return;
@@ -347,9 +505,11 @@ function onCompletionSubmit(e) {
   const artifactsSelect = formEl.querySelector('.completion-artifacts');
   const errorsEl = formEl.querySelector('.completion-errors');
 
-  const problemCount = parseInt(problemsInput.value, 10) || 0;
-  const correctCount = correctInput.value !== '' ? parseInt(correctInput.value, 10) : undefined;
-  const selectedArtifacts = Array.from(artifactsSelect.selectedOptions).map(o => o.value);
+  const problemCount = safeInteger(problemsInput?.value);
+  const correctCount = correctInput && correctInput.value !== '' ? safeInteger(correctInput.value) : undefined;
+  const selectedArtifacts = artifactsSelect
+    ? Array.from(artifactsSelect.selectedOptions).map(o => o.value)
+    : [];
 
   // Build validation payload
   const payload = {
@@ -359,21 +519,20 @@ function onCompletionSubmit(e) {
   };
 
   // Build task contract for validation
-  const taskContract = {
-    required_artifacts: task.contract?.required_artifacts || task.required_artifacts || [],
-    required_problem_count: task.contract?.required_problem_count || task.required_problem_count || 0,
-  };
+  const taskContract = normalizedTaskContract(task);
 
   const result = validateCompletion(taskContract, payload);
 
   if (!result.valid) {
-    errorsEl.textContent = result.errors.join('; ');
-    errorsEl.style.display = 'block';
+    if (errorsEl) {
+      errorsEl.textContent = result.errors.join('; ');
+      errorsEl.style.display = 'block';
+    }
     return;
   }
 
   // Validation passed — mark completed
-  errorsEl.style.display = 'none';
+  if (errorsEl) errorsEl.style.display = 'none';
   const card = containerEl.querySelector(`.plan-card[data-task-index="${index}"]`);
   if (card) {
     card.classList.add('completed');
@@ -381,27 +540,33 @@ function onCompletionSubmit(e) {
   }
 
   // Emit task completion event
+  const taskTopicId = safeText(task.topicId);
   EventBus.emit(EVENTS.TASK_COMPLETED, {
-    taskId: task.id || index,
-    topicId: task.topicId,
-    subject: task.subject,
+    taskId: safeText(task.id, String(index)),
+    topicId: taskTopicId,
+    subject: safeText(task.subject),
     payload,
   });
 
   // Add to review queue
-  const reviewItems = StateManager.getState('review_items') || [];
+  const reviewItems = arrayValue(StateManager.getState('review_items')).filter(item => item && typeof item === 'object');
   const today = getToday();
-  if (task.topicId && !reviewItems.find(r => r.topicId === task.topicId)) {
-    reviewItems.push({
-      topicId: task.topicId,
+  if (taskTopicId && !reviewItems.find(r => reviewTopicId(r) === taskTopicId)) {
+    const nextReviewItems = [...reviewItems, {
+      topicId: taskTopicId,
       addedAt: today,
       nextDueAt: addDaysStr(today, 1),
       intervalIndex: 0,
       lastResult: null,
       failStreak: 0,
       lastSubmittedDate: null,
-    });
-    StateManager.setState('review_items', reviewItems);
+    }];
+    const saved = StateManager.setState('review_items', nextReviewItems);
+    setTodayActionFeedback(saved, '任务完成已保存，并加入复盘队列。');
+    updateTodayActionFeedbackElement();
+  } else {
+    setTodayActionFeedback(true, '任务完成已记录。');
+    updateTodayActionFeedbackElement();
   }
 }
 
@@ -414,13 +579,15 @@ function onReviewAction(e) {
   const isFail = btn.classList.contains('review-fail-btn');
   if (!isPass && !isFail) return;
 
-  const topicId = btn.dataset.topicId;
+  const reviewIndex = reviewIndexFromButton(btn);
   const today = getToday();
-  const reviewItems = StateManager.getState('review_items') || [];
-  const itemIndex = reviewItems.findIndex(r => r.topicId === topicId);
+  const reviewItems = arrayValue(StateManager.getState('review_items'));
+  const itemIndex = reviewIndex >= 0 ? reviewIndex : reviewItems.findIndex(r => reviewTopicId(r) === btn.dataset.topicId);
   if (itemIndex === -1) return;
 
-  const item = reviewItems[itemIndex];
+  const item = objectValue(reviewItems[itemIndex]);
+  if (!hasReviewIdentity(item)) return;
+  const topicId = reviewTopicId(item);
 
   if (isPass) {
     if (!canSubmitPass(item, today)) {
@@ -434,7 +601,8 @@ function onReviewAction(e) {
     reviewItems[itemIndex] = resetOnFail(item, today);
   }
 
-  StateManager.setState('review_items', reviewItems);
+  const saved = StateManager.setState('review_items', reviewItems);
+  setTodayActionFeedback(saved, isPass ? '今日复盘通过已保存。' : '今日复盘失败已保存，已安排回炉。');
   EventBus.emit(EVENTS.REVIEW_RESULT, { topicId, result: isPass ? 'pass' : 'fail' });
 
   // Re-render review section
@@ -444,6 +612,7 @@ function onReviewAction(e) {
     tempDiv.innerHTML = renderReviewQueue();
     reviewPanel.replaceWith(tempDiv.firstElementChild);
   }
+  updateTodayActionFeedbackElement();
 }
 
 /**
@@ -475,40 +644,45 @@ function onRecordSubmit(e) {
   e.preventDefault();
 
   const dateInput = containerEl.querySelector('#tv-entry-date');
-  const date = dateInput ? dateInput.value : getToday();
+  const date = validDateKey(dateInput?.value) || getToday();
 
   const record = {
     date,
-    mathMin: parseInt(containerEl.querySelector('#tv-mathMin')?.value, 10) || 0,
-    csMin: parseInt(containerEl.querySelector('#tv-csMin')?.value, 10) || 0,
-    engMin: parseInt(containerEl.querySelector('#tv-engMin')?.value, 10) || 0,
-    polMin: parseInt(containerEl.querySelector('#tv-polMin')?.value, 10) || 0,
-    projectMin: parseInt(containerEl.querySelector('#tv-projectMin')?.value, 10) || 0,
-    mathProblems: parseInt(containerEl.querySelector('#tv-mathProblems')?.value, 10) || 0,
-    csProblems: parseInt(containerEl.querySelector('#tv-csProblems')?.value, 10) || 0,
-    readingCount: parseInt(containerEl.querySelector('#tv-readingCount')?.value, 10) || 0,
-    newMistakes: parseInt(containerEl.querySelector('#tv-newMistakes')?.value, 10) || 0,
-    fixedMistakes: parseInt(containerEl.querySelector('#tv-fixedMistakes')?.value, 10) || 0,
+    mathMin: safeInteger(containerEl.querySelector('#tv-mathMin')?.value),
+    csMin: safeInteger(containerEl.querySelector('#tv-csMin')?.value),
+    engMin: safeInteger(containerEl.querySelector('#tv-engMin')?.value),
+    polMin: safeInteger(containerEl.querySelector('#tv-polMin')?.value),
+    projectMin: safeInteger(containerEl.querySelector('#tv-projectMin')?.value),
+    mathProblems: safeInteger(containerEl.querySelector('#tv-mathProblems')?.value),
+    csProblems: safeInteger(containerEl.querySelector('#tv-csProblems')?.value),
+    readingCount: safeInteger(containerEl.querySelector('#tv-readingCount')?.value),
+    newMistakes: safeInteger(containerEl.querySelector('#tv-newMistakes')?.value),
+    fixedMistakes: safeInteger(containerEl.querySelector('#tv-fixedMistakes')?.value),
     nextTask: containerEl.querySelector('#tv-nextTask')?.value || '',
     createdAt: new Date().toISOString(),
   };
 
-  // Optimistic update — immediate visual feedback (< 200ms)
   const feedbackEl = containerEl.querySelector('.tv-submit-feedback');
-  if (feedbackEl) {
-    feedbackEl.textContent = '✓ 记录已保存';
-    feedbackEl.style.display = 'block';
-    feedbackEl.className = 'tv-submit-feedback success';
-  }
 
   // Save to state
-  const records = StateManager.getState('daily_records') || {};
-  records[date] = record;
-  StateManager.setState('daily_records', records);
-  StateManager.markDirty('daily_records', date);
+  const records = objectValue(StateManager.getState('daily_records'));
+  const nextRecords = { ...records, [date]: record };
+  const stateSaved = StateManager.setState('daily_records', nextRecords);
+  const dirtySaved = StateManager.markDirty('daily_records', date);
 
   // Also write to offline cache for sync
-  OfflineCache.setDirty('daily_records', date, record);
+  const offlineSaved = OfflineCache.setDirty('daily_records', date, record);
+  const savedLocally = stateSaved && dirtySaved && offlineSaved;
+
+  if (feedbackEl) {
+    feedbackEl.textContent = savedLocally
+      ? '✓ 记录已保存'
+      : '记录已保留在当前页面，本机缓存写入失败，请立即导出备份。';
+    feedbackEl.style.display = 'block';
+    feedbackEl.className = savedLocally
+      ? 'tv-submit-feedback success'
+      : 'tv-submit-feedback error';
+  }
 
   // Clear form
   const form = containerEl.querySelector('#tv-entry-form');
@@ -517,7 +691,7 @@ function onRecordSubmit(e) {
 
   // Delayed sync status feedback
   setTimeout(() => {
-    if (feedbackEl) {
+    if (feedbackEl && savedLocally) {
       const hasPending = OfflineCache.hasPendingSync();
       feedbackEl.textContent = hasPending ? '排队同步中...' : '✓ 已同步';
     }
@@ -533,11 +707,13 @@ function onRegeneratePlan() {
 
   const planInput = buildPlanInput();
   const tasks = generateDailyPlan(planInput);
-  StateManager.setState('today.tasks', tasks);
+  const saved = StateManager.setState('today.tasks', tasks);
+  setTodayActionFeedback(saved, '今日计划已重新生成并保存。');
 
   const tempDiv = document.createElement('div');
   tempDiv.innerHTML = renderDailyPlan(tasks);
   planPanel.replaceWith(tempDiv.firstElementChild);
+  updateTodayActionFeedbackElement();
 
   // Re-attach event listeners for new plan cards
   attachPlanListeners();
@@ -586,6 +762,7 @@ function addDaysStr(dateStr, days) {
  */
 export function mount(container) {
   containerEl = container;
+  todayActionFeedback = null;
   container.innerHTML = render();
 
   // Attach event listeners
@@ -632,4 +809,5 @@ export function unmount() {
     containerEl.innerHTML = '';
   }
   containerEl = null;
+  todayActionFeedback = null;
 }

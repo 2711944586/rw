@@ -64,15 +64,26 @@ import {
 
 const STORAGE_KEY = "pku_swm_420_dashboard_v3";
 const LEGACY_STORAGE_KEY = "pku_swm_420_dashboard_v1";
+const STATE_MANAGER_STORAGE_KEY = "pku_swm_420_state";
+const STATE_MANAGER_DIRTY_KEY = "pku_swm_420_dirty";
+const OFFLINE_DIRTY_QUEUE_KEY = "pku_swm_420_dirty_queue";
+const LEGACY_DIRTY_MAP_KEY = "pku_swm_dirty_map";
+const LEGACY_OFFLINE_CACHE_KEY = "pku_swm_offline_cache";
+const LEGACY_DIRTY_QUEUE_KEY = "pku_swm_dirty_queue";
 const SCHEMA_VERSION = 3;
-const PLAN_LOGIC_VERSION = "3.6-jun8-clean-start-2026-06-08";
-const APP_BUILD = "2026-06-08-420-clean-start";
+const PLAN_LOGIC_VERSION = "3.7-jun15-clean-start-2026-06-15";
+const APP_BUILD = "2026-06-15-420-clean-start";
 const DEFAULT_EXAM_DATE = "2027-12-25";
 const DEFAULT_EXAM_DATE_STATUS = "推算排程日，非官方初试日期";
-const PLAN_START_DATE = "2026-06-08";
-const CLEAN_START_VERSION = "2026-06-08-from-zero-v1";
-const TARGET_TOTAL_HOURS = 2660;
-const SOURCE_CHECK_DATE = "2026-06-08";
+const DEFAULT_VIEW_ID = "dashboard";
+const DENSITY_BUTTON_SELECTOR = ".density-toggle button[data-density]";
+const PLAN_START_DATE = "2026-06-15";
+const CLEAN_START_VERSION = "2026-06-15-from-zero-v1";
+const TARGET_TOTAL_HOURS = 2648;
+const SOURCE_CHECK_DATE = "2026-06-15";
+const DELETED_TYPES = ["records", "scores", "tasks", "reviews"];
+const STORAGE_FAILURE_NOTICE_INTERVAL_MS = 30000;
+const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
 if ("scrollRestoration" in window.history) {
   window.history.scrollRestoration = "manual";
 }
@@ -132,38 +143,49 @@ function removeStorage(key) {
   try {
     window.localStorage.removeItem(key);
     storageAvailable = true;
+    return true;
   } catch {
     storageAvailable = false;
+    return false;
   }
 }
 
 function clearAppLocalStorage() {
-  [
+  const removed = [
     STORAGE_KEY,
     LEGACY_STORAGE_KEY,
-    "pku_swm_420_state",
-    "pku_swm_dirty_map",
-    "pku_swm_offline_cache",
-    "pku_swm_dirty_queue"
-  ].forEach(removeStorage);
+    STATE_MANAGER_STORAGE_KEY,
+    STATE_MANAGER_DIRTY_KEY,
+    OFFLINE_DIRTY_QUEUE_KEY,
+    LEGACY_DIRTY_MAP_KEY,
+    LEGACY_OFFLINE_CACHE_KEY,
+    LEGACY_DIRTY_QUEUE_KEY
+  ].map(removeStorage).every(Boolean);
+  storageAvailable = removed;
+  return removed;
 }
 
 function consumeResetRequest() {
   try {
     const url = new URL(window.location.href);
     const resetValue = url.searchParams.get("reset");
-    if (!["1", "true", "yes"].includes(String(resetValue || "").toLowerCase())) return false;
-    clearAppLocalStorage();
+    if (!["1", "true", "yes"].includes(String(resetValue || "").toLowerCase())) {
+      return { requested: false, confirmed: false, cleared: false };
+    }
     url.searchParams.delete("reset");
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash || "#dashboard"}`);
-    return true;
+    if (!window.confirm("确认清理本浏览器里的学习数据和缓存？建议先导出备份。")) {
+      return { requested: true, confirmed: false, cleared: false };
+    }
+    const cleared = clearAppLocalStorage();
+    return { requested: true, confirmed: true, cleared };
   } catch {
-    return false;
+    return { requested: false, confirmed: false, cleared: false };
   }
 }
 
 const rampBudgets = [
-  { start: PLAN_START_DATE, end: "2026-06-30", weekday: 90, weekend: 150, note: "6 月 8 日从头开始，先恢复连续记录和底线任务" },
+  { start: PLAN_START_DATE, end: "2026-06-30", weekday: 90, weekend: 150, note: "6 月 15 日从头开始，先恢复连续记录和底线任务" },
   { start: "2026-07-01", end: "2026-07-31", weekday: 120, weekend: 210, note: "暑假前段稳步加量" },
   { start: "2026-08-01", end: "2026-08-31", weekday: 150, weekend: 240, note: "暑假后段稳定加量" },
   { start: "2026-09-01", end: "2026-12-31", weekday: 270, weekend: 390, note: "9 月起第一轮主干加压" },
@@ -174,12 +196,13 @@ const rampBudgets = [
   { start: "2027-11-01", end: DEFAULT_EXAM_DATE, weekday: 240, weekend: 360, note: "考前收束期" }
 ];
 
-const resetApplied = consumeResetRequest();
+const resetRequest = consumeResetRequest();
 let state = loadState();
 let currentUser = null;
 let syncTimer = null;
 let appStarted = false;
 let legacyImportPending = Boolean(readStorage(LEGACY_STORAGE_KEY) && !readStorage(STORAGE_KEY));
+let lastStorageFailureNoticeAt = 0;
 let lastAuthResult = {
   status: "idle",
   title: "账号状态",
@@ -193,7 +216,7 @@ const phases = [
     start: PLAN_START_DATE,
     end: "2026-06-30",
     weeklyTarget: 12,
-    cumulativeTarget: 40,
+    cumulativeTarget: 28,
     quotas: { math: 5, cs408: 5, english: 2, politics: 0, project: 0 },
     focus: "上课期低强度启动，建立记录系统，高数预备、C 语言和英语单词不断档。",
     tasks: [
@@ -209,7 +232,7 @@ const phases = [
     start: "2026-07-01",
     end: "2026-08-31",
     weeklyTarget: 22,
-    cumulativeTarget: 230,
+    cumulativeTarget: 218,
     quotas: { math: 9, cs408: 9, english: 4, politics: 0, project: 0 },
     focus: "暑假逐步拉长学习时间，高数基础、数据结构第一轮和英语阅读精读同步推进。",
     tasks: [
@@ -225,7 +248,7 @@ const phases = [
     start: "2026-09-01",
     end: "2026-12-31",
     weeklyTarget: 35,
-    cumulativeTarget: 830,
+    cumulativeTarget: 818,
     quotas: { math: 14, cs408: 15, english: 5, politics: 0, project: 1 },
     focus: "9 月起进入加压期，数学一第一轮主干、408 数据结构二轮、计组和 OS 启动。",
     tasks: [
@@ -241,7 +264,7 @@ const phases = [
     start: "2027-01-01",
     end: "2027-02-28",
     weeklyTarget: 42,
-    cumulativeTarget: 1180,
+    cumulativeTarget: 1168,
     quotas: { math: 16, cs408: 18, english: 5, politics: 0, project: 3 },
     focus: "数学一和 408 四门第一轮闭合，形成知识框架。",
     tasks: [
@@ -257,7 +280,7 @@ const phases = [
     start: "2027-03-01",
     end: "2027-06-30",
     weeklyTarget: 31,
-    cumulativeTarget: 1720,
+    cumulativeTarget: 1708,
     quotas: { math: 12, cs408: 13, english: 5, politics: 0, project: 1 },
     focus: "强化题型、真题分章节、项目能运行。",
     tasks: [
@@ -273,7 +296,7 @@ const phases = [
     start: "2027-07-01",
     end: "2027-08-31",
     weeklyTarget: 44,
-    cumulativeTarget: 2100,
+    cumulativeTarget: 2088,
     quotas: { math: 15, cs408: 17, english: 5, politics: 5, project: 2 },
     focus: "真题套卷、全科成型，政治启动。",
     tasks: [
@@ -289,7 +312,7 @@ const phases = [
     start: "2027-09-01",
     end: "2027-10-31",
     weeklyTarget: 37,
-    cumulativeTarget: 2420,
+    cumulativeTarget: 2408,
     quotas: { math: 13, cs408: 13, english: 4, politics: 7, project: 0 },
     focus: "核验招生信息，完成报名确认，近 5 套全科均分稳定在 405+ 区间。",
     tasks: [
@@ -318,24 +341,24 @@ const phases = [
 ];
 
 const monthlyPlan = [
-  ["2026-06", 40, 40, "函数、极限预备", "C 语言入门", "单词、长难句", "连续记录"],
-  ["2026-07", 90, 130, "极限、导数启动", "C 语言、线性表", "阅读入门", "不测"],
-  ["2026-08", 100, 230, "高数基础、线代预热", "数据结构第一轮", "阅读精读", "不测"],
-  ["2026-09", 150, 380, "高数推进", "数据结构二轮、计组", "阅读真题", "章节小测"],
-  ["2026-10", 150, 530, "线代推进", "计组", "阅读真题", "章节小测"],
-  ["2026-11", 150, 680, "概率启动", "计组、OS", "翻译小练", "章节小测"],
-  ["2026-12", 150, 830, "第一轮收口", "OS 推进", "阅读复盘", "章节测"],
-  ["2027-01", 180, 1010, "概率闭合", "OS、计网", "阅读", "基础综合"],
-  ["2027-02", 170, 1180, "二轮启动", "四门闭合", "阅读", "数学90-105，408 85-100"],
-  ["2027-03", 130, 1310, "强化", "四门强化", "阅读二刷", "小综合"],
-  ["2027-04", 135, 1445, "强化", "专题强化", "翻译新题型", "小综合"],
-  ["2027-05", 135, 1580, "真题分章节", "真题分章节", "作文预热", "小综合"],
-  ["2027-06", 140, 1720, "强化验收", "强化验收", "英语70+", "全科约360"],
-  ["2027-07", 190, 1910, "真题套卷", "真题套卷", "政治启动", "全科375+"],
-  ["2027-08", 190, 2100, "套卷补弱", "套卷补弱", "政治选择题", "全科390+"],
-  ["2027-09", 160, 2260, "套卷", "套卷", "作文定稿、政治", "全科400+"],
-  ["2027-10", 160, 2420, "套卷稳定", "套卷稳定", "政治强化", "近 5 套 405+"],
-  ["2027-11", 150, 2570, "模拟错题", "模拟错题", "背诵", "近10套415+"],
+  ["2026-06", 28, 28, "函数、极限预备", "C 语言入门", "单词、长难句", "连续记录"],
+  ["2026-07", 90, 118, "极限、导数启动", "C 语言、线性表", "阅读入门", "不测"],
+  ["2026-08", 100, 218, "高数基础、线代预热", "数据结构第一轮", "阅读精读", "不测"],
+  ["2026-09", 150, 368, "高数推进", "数据结构二轮、计组", "阅读真题", "章节小测"],
+  ["2026-10", 150, 518, "线代推进", "计组", "阅读真题", "章节小测"],
+  ["2026-11", 150, 668, "概率启动", "计组、OS", "翻译小练", "章节小测"],
+  ["2026-12", 150, 818, "第一轮收口", "OS 推进", "阅读复盘", "章节测"],
+  ["2027-01", 180, 998, "概率闭合", "OS、计网", "阅读", "基础综合"],
+  ["2027-02", 170, 1168, "二轮启动", "四门闭合", "阅读", "数学90-105，408 85-100"],
+  ["2027-03", 130, 1298, "强化", "四门强化", "阅读二刷", "小综合"],
+  ["2027-04", 135, 1433, "强化", "专题强化", "翻译新题型", "小综合"],
+  ["2027-05", 135, 1568, "真题分章节", "真题分章节", "作文预热", "小综合"],
+  ["2027-06", 140, 1708, "强化验收", "强化验收", "英语70+", "全科约360"],
+  ["2027-07", 190, 1898, "真题套卷", "真题套卷", "政治启动", "全科375+"],
+  ["2027-08", 190, 2088, "套卷补弱", "套卷补弱", "政治选择题", "全科390+"],
+  ["2027-09", 160, 2248, "套卷", "套卷", "作文定稿、政治", "全科400+"],
+  ["2027-10", 160, 2408, "套卷稳定", "套卷稳定", "政治强化", "近 5 套 405+"],
+  ["2027-11", 150, 2558, "模拟错题", "模拟错题", "背诵", "近10套415+"],
   ["2027-12", 90, TARGET_TOTAL_HOURS, "保持手感", "保持手感", "背诵收束", "目标420"]
 ];
 
@@ -379,24 +402,24 @@ const liveFactChecks = [
 
 const firstMonthActions = [
   {
-    week: "第 1 周",
-    tasks: ["6 月 8 日从头建档", "确定数学主线资料", "确定 408 主线资料", "确定英语单词工具", "函数图像与常用初等函数", "C 语言变量、分支、循环", "英语每天单词"],
+    week: "6/15-6/21",
+    tasks: ["6 月 15 日从头建档", "确定数学主线资料", "确定 408 主线资料", "确定英语单词工具", "函数图像与常用初等函数", "C 语言变量、分支、循环", "英语每天单词"],
     pass: "9-11h；连续记录 7 天；能写循环程序；数学预备题有错因记录。"
   },
   {
-    week: "第 2 周",
+    week: "6/22-6/28",
     tasks: ["数列和函数极限预备", "C 语言数组和函数", "顺序表概念预习", "英语长难句 2 组"],
     pass: "12-14h；能写数组遍历和函数；极限预备题正确率有记录。"
   },
   {
-    week: "第 3 周",
+    week: "6/29-6/30",
     tasks: ["极限与连续入门", "C 语言指针入门", "顺序表插入删除", "英语阅读 1 篇精读"],
-    pass: "12-14h；能写顺序表基本操作；极限基础题有订正。"
+    pass: "3-4h；能说清 7 月第一周要学的数学和 408 主题。"
   },
   {
-    week: "第 4 周",
-    tasks: ["导数定义预习", "链表概念预习", "英语阅读 2 篇", "6 月月度复盘"],
-    pass: "6 月 8 日起累计 40h 左右；数学和 408 占比 60%+；写出 7-8 月暑假加量表。"
+    week: "月底复盘",
+    tasks: ["整理 6 月错题", "写出 7 月第一周计划", "确认资料只保留一套主线", "把未完成任务顺延到 7 月"],
+    pass: "6 月 15 日起累计 28h 左右；数学和 408 占比 60%+；写出 7-8 月暑假加量表。"
   }
 ];
 
@@ -621,9 +644,9 @@ const foundationPlan = [
 ];
 
 const learningPath = [
-  { id: "start", name: "启动", range: "2026.06.08-06.30", goal: "低强度建立记录、补数学预备和 C 语言", deliverable: "连续记录 7 天，完成 40h 起步" },
-  { id: "base", name: "奠基", range: "2026.07-08", goal: "暑假逐步加长，高数基础、线代启动、数据结构第一轮", deliverable: "累计 230h，线性表/树/图能做基础题" },
-  { id: "map", name: "加压", range: "2026.09-12", goal: "9 月起提高强度，数学一和 408 主干过第一轮", deliverable: "累计 830h，数学一 70% 框架，408 至少两门" },
+  { id: "start", name: "启动", range: "2026.06.15-06.30", goal: "低强度建立记录、补数学预备和 C 语言", deliverable: "连续记录 7 天，完成 28h 起步" },
+  { id: "base", name: "奠基", range: "2026.07-08", goal: "暑假逐步加长，高数基础、线代启动、数据结构第一轮", deliverable: "累计 218h，线性表/树/图能做基础题" },
+  { id: "map", name: "加压", range: "2026.09-12", goal: "9 月起提高强度，数学一和 408 主干过第一轮", deliverable: "累计 818h，数学一 70% 框架，408 至少两门" },
   { id: "close", name: "收口", range: "2027.01-02", goal: "四门 408 和数学一第一轮收口", deliverable: "数学 90+，408 85+" },
   { id: "strength", name: "强化", range: "2027.03-06", goal: "题型化、真题分章节、项目可运行", deliverable: "数学 110，408 105" },
   { id: "battle", name: "套卷", range: "2027.07-08", goal: "真题套卷和政治启动", deliverable: "全科 390+" },
@@ -670,6 +693,7 @@ const subjectMethods = {
 };
 
 const highStandards = [
+  ["前置知识", "6 月下半月只补会直接进入高数和数据结构的东西：函数图像、代数变形、C 循环/数组/函数、复杂度表达和英语句子切分。"],
   ["数学", "定义能复述，公式能默写，基础题正确率 80%+，错题必须写识别信号。"],
   ["408", "概念能画图，算法能写伪代码，大题能写步骤，所有错题归到四门知识点。"],
   ["英语", "每天 20 分钟不断档；单词在真题语境里复现，阅读错题定位到词汇、句法、定位、逻辑或干扰项。"],
@@ -678,7 +702,7 @@ const highStandards = [
 ];
 
 const systemRules = [
-  ["01", "渐进加量", "2026 年 6 月 8 日从头开始；7-8 月逐步加长；9 月起提高到第一轮主干强度。"],
+  ["01", "渐进加量", "2026 年 6 月 15 日从头开始；7-8 月逐步加长；9 月起提高到第一轮主干强度。"],
   ["02", "核心优先", "数学一和 408 优先分配时间，周核心占比低于 65% 就预警。"],
   ["03", "未完成顺延", "昨天没有完成的任务进入今天，同时压缩新增内容，避免补偿式超载。"],
   ["04", "先交付再加量", "每个任务必须有题量、错因、图示或代码交付，只看视频不算真正完成。"],
@@ -686,7 +710,8 @@ const systemRules = [
   ["06", "日审周审月审", "每天收口到明天第一任务；每周看核心占比、回炉率和活跃天数；每月只调总量和弱项，不重写大计划。"],
   ["07", "统计看趋势", "单日波动不判好坏，至少看 7 天有效小时、14 天趋势、错题回炉率和考纲证据。"],
   ["08", "学习曲线", "投入量按阶段爬坡；连续低完成时降到底线日，连续稳定后再增加难度或题量。"],
-  ["09", "英语不断档", "英语用小剂量高频复现，不用单日硬补；任何计划日都至少保留词汇、句法或定位句证据。"]
+  ["09", "英语不断档", "英语用小剂量高频复现，不用单日硬补；任何计划日都至少保留词汇、句法或定位句证据。"],
+  ["10", "专题闭环", "强化期每个专题都要经历识别信号、限时练习、错因归档和二次重做，四步缺一项就不算过关。"]
 ];
 
 const methodEvidence = [
@@ -694,7 +719,8 @@ const methodEvidence = [
   ["分散复盘", "D+1/D+3/D+7/D+14/D+30 是轻量回炉；每次只验证能否重新提取，不把复盘堆成第二套课程。"],
   ["交错练习", "数学和 408 后期在章节题、真题、错题和限时题之间切换，避免只会单章套路。"],
   ["可完成负荷", "任务默认 3 项，顺延时削减新增内容；连续低完成时降到底线日，先恢复执行再加量。"],
-  ["证据化掌握", "一个考点至少留下题量、正确率、错因、图示、代码或默写证据，不能只凭“感觉会了”标记掌握。"]
+  ["证据化掌握", "一个考点至少留下题量、正确率、错因、图示、代码或默写证据，不能只凭“感觉会了”标记掌握。"],
+  ["定时复盘", "每天睡前 5-8 分钟写明天第一任务；周日只看四个指标；月底只决定一个加量或减量动作。"]
 ];
 
 const memoryCurveRules = [
@@ -851,12 +877,17 @@ async function bootstrapApp() {
     bindAuth();
     bindWeekPlanner();
     bindNetworkStatus();
-    upgradeGeneratedPlans();
+    const upgradeSaved = upgradeGeneratedPlans();
     await initCloudSession();
     renderAll();
     initRoute();
     appStarted = true;
-    if (resetApplied) showToast("已清理本机缓存，当前为全新本机数据。");
+    if (upgradeSaved === false) setLocalSaveResult(false, "启动升级已保存", "计划升级状态已写入本机缓存。", "启动升级未写入本机缓存");
+    if (resetRequest.confirmed && resetRequest.cleared) {
+      showToast("已清理本机缓存，当前为全新本机数据。");
+    } else if (resetRequest.confirmed && !resetRequest.cleared) {
+      showToast("本机缓存未完全清理，请在账号面板重试或手动导出后清理浏览器存储。");
+    }
     if (!storageAvailable) showToast("浏览器暂时禁止本机存储，页面可操作，但刷新后本机数据可能不会保留。");
   } catch (error) {
     console.error("[rw] app initialization failed", error);
@@ -905,6 +936,19 @@ function navIconName(icon) {
 }
 
 function loadState() {
+  if (resetRequest.confirmed) {
+    const resetState = freshState();
+    if (!resetRequest.cleared) {
+      resetState.sync = {
+        ...resetState.sync,
+        status: "local",
+        lastError: "local-reset-incomplete",
+        pending: false
+      };
+    }
+    return resetState;
+  }
+
   const currentRaw = readStorage(STORAGE_KEY);
   const legacyRaw = readStorage(LEGACY_STORAGE_KEY);
   const raw = currentRaw || legacyRaw;
@@ -927,28 +971,38 @@ function loadState() {
 
 function migrateState(parsed) {
   try {
-    const settings = { ...defaultSettings, ...(parsed.settings || {}) };
+    const source = parsed && typeof parsed === "object" ? parsed : {};
+    const parsedSettings = source.settings && typeof source.settings === "object" && !Array.isArray(source.settings)
+      ? source.settings
+      : {};
+    const {
+      customTasks: settingsCustomTasks,
+      project: settingsProject,
+      resources: settingsResources,
+      ...settingsInput
+    } = parsedSettings;
+    const settings = { ...defaultSettings, ...settingsInput };
     if (!settings.efficiencyModeApplied) {
       if (settings.taskCount === 4) settings.taskCount = 3;
-      if (!parsed.settings || parsed.settings.density === "balanced") settings.density = "focus";
+      if (!source.settings || source.settings.density === "balanced") settings.density = "focus";
       settings.efficiencyModeApplied = true;
     }
-    settings.weekdayMinutes = sanitizeInteger(settings.weekdayMinutes || defaultSettings.weekdayMinutes, 60, 720);
-    settings.weekendMinutes = sanitizeInteger(settings.weekendMinutes || defaultSettings.weekendMinutes, 60, 840);
-    settings.taskCount = sanitizeInteger(settings.taskCount || defaultSettings.taskCount, 3, 4);
-    settings.coreRatio = sanitizeInteger(settings.coreRatio || defaultSettings.coreRatio, 55, 85);
+    settings.weekdayMinutes = firstIntegerValue([settings.weekdayMinutes, settings.weekday_minutes, defaultSettings.weekdayMinutes], 60, 720, defaultSettings.weekdayMinutes);
+    settings.weekendMinutes = firstIntegerValue([settings.weekendMinutes, settings.weekend_minutes, defaultSettings.weekendMinutes], 60, 840, defaultSettings.weekendMinutes);
+    settings.taskCount = firstIntegerValue([settings.taskCount, settings.task_count, defaultSettings.taskCount], 3, 4, defaultSettings.taskCount);
+    settings.coreRatio = firstIntegerValue([settings.coreRatio, settings.core_ratio, defaultSettings.coreRatio], 55, 85, defaultSettings.coreRatio);
     if (!["focus", "balanced", "detail"].includes(settings.density)) settings.density = "focus";
-    settings.targetExamDate = settings.targetExamDate || DEFAULT_EXAM_DATE;
+    settings.targetExamDate = sanitizeDateOrFallback(settings.targetExamDate, DEFAULT_EXAM_DATE) || DEFAULT_EXAM_DATE;
     settings.reviewDays = Array.isArray(settings.reviewDays)
       ? [...new Set(settings.reviewDays.map((day) => sanitizeInteger(day, 1, 365)).filter(Boolean))].sort((a, b) => a - b)
       : [...defaultSettings.reviewDays];
     settings.planControls = normalizePlanControls(settings.planControls);
-    const rawEntries = sanitizeEntries(parsed.entries || {});
-    const rawScores = sanitizeScores(parsed.scores || []);
-    const rawWeekPlans = sanitizeWeekPlans(parsed.weekPlans || {});
-    const rawReviewItems = sanitizeReviewItems(parsed.reviewItems || []);
-    const rawTopics = sanitizeNumericObject(parsed.topics || {}, 0, 2, true);
-    const rawTopicEvidence = sanitizeTopicEvidence(parsed.topicEvidence || {});
+    const rawEntries = sanitizeEntries(source.entries || {});
+    const rawScores = sanitizeScores(source.scores || []);
+    const rawWeekPlans = sanitizeWeekPlans(source.weekPlans || {});
+    const rawReviewItems = sanitizeReviewItems(source.reviewItems || []);
+    const rawTopics = sanitizeNumericObject(source.topics || {}, 0, 2, true);
+    const rawTopicEvidence = sanitizeTopicEvidence(source.topicEvidence || {});
     const startArchive = buildCleanStartArchive({
       entries: rawEntries,
       scores: rawScores,
@@ -956,19 +1010,24 @@ function migrateState(parsed) {
       reviewItems: rawReviewItems,
       topics: rawTopics,
       topicEvidence: rawTopicEvidence,
-      previousArchive: parsed.cleanStartArchive
+      previousArchive: source.cleanStartArchive
     });
     const cleanStartApplied = settings.cleanStartVersion === CLEAN_START_VERSION;
     const entries = filterEntriesFromStart(rawEntries);
     const scores = filterScoresFromStart(rawScores);
     const topics = cleanStartApplied ? rawTopics : {};
     const topicEvidence = cleanStartApplied ? filterTopicEvidenceFromStart(rawTopicEvidence) : {};
-    const rawTasks = sanitizeTaskState(parsed.tasks || {}, rawWeekPlans);
-    const resourcesState = sanitizeNumericObject(parsed.resources || {}, 0, 100);
-    const deleted = filterDeletedFromStart(sanitizeDeleted(parsed.deleted || {}));
+    const rawTasks = sanitizeTaskState(source.tasks || {}, rawWeekPlans);
+    const hasTopLevelProject = Object.prototype.hasOwnProperty.call(source, "project");
+    const hasTopLevelResources = Object.prototype.hasOwnProperty.call(source, "resources");
+    const hasTopLevelCustomTasks = Object.prototype.hasOwnProperty.call(source, "customTasks");
+    const resourcesState = sanitizeNumericObject(hasTopLevelResources ? source.resources : settingsResources, 0, 100);
+    const customTasksState = hasTopLevelCustomTasks ? source.customTasks : settingsCustomTasks;
+    const deleted = filterDeletedFromStart(sanitizeDeleted(source.deleted || {}));
+    const deletedMeta = sanitizeDeletedMeta(source.deletedMeta ?? source.deleted_meta ?? {}, deleted);
     settings.cleanStartVersion = CLEAN_START_VERSION;
     settings.cleanStartAppliedAt = settings.cleanStartAppliedAt || startArchive.archivedAt;
-    return {
+    const nextState = {
       schemaVersion: SCHEMA_VERSION,
       entries,
       scores,
@@ -976,28 +1035,268 @@ function migrateState(parsed) {
       topicEvidence,
       tasks: filterTaskStateFromStart(rawTasks, rawWeekPlans),
       weekPlans: filterWeekPlansFromStart(rawWeekPlans),
-      project: parsed.project || {},
+      project: sanitizeProjectState(hasTopLevelProject ? source.project : settingsProject),
       resources: resourcesState,
       settings,
-      customTasks: sanitizeCustomTasks(parsed.customTasks || []),
+      customTasks: sanitizeCustomTasks(customTasksState || []),
       reviewItems: filterReviewItemsFromStart(rawReviewItems),
       deleted,
-      snapshots: sanitizeSnapshots(parsed.snapshots || []),
+      deletedMeta,
+      snapshots: sanitizeSnapshots(source.snapshots || []),
       cleanStartArchive: startArchive,
-      sync: {
-        status: "local",
-        lastSyncAt: "",
-        lastError: "",
-        pending: false,
-        localImportPending: false,
-        cloudPaused: false,
-        ...(parsed.sync || {})
-      },
-      user: sanitizeUser(parsed.user)
+      sync: defaultSyncState(source.sync),
+      user: sanitizeUser(source.user)
     };
+    return applyTombstones(nextState);
   } catch {
     return freshState();
   }
+}
+
+function sanitizeBoolean(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) return true;
+    if (["false", "0", "no", "off", ""].includes(normalized)) return false;
+  }
+  if (typeof value === "number") return Number.isFinite(value) && value !== 0;
+  if (typeof value === "bigint") return value !== 0n;
+  return false;
+}
+
+function isPlainStateObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stateObject(value) {
+  return isPlainStateObject(value) ? value : {};
+}
+
+function stateArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function safeScalarText(value, fallback = "", maxLength = 2000) {
+  const type = typeof value;
+  if (!["string", "number", "bigint"].includes(type)) return fallback;
+  const text = String(value);
+  return text ? text.slice(0, maxLength) : fallback;
+}
+
+function safeErrorMessage(error, fallback = "未知错误", maxLength = 500) {
+  const safeFallback = safeScalarText(fallback, "未知错误", maxLength) || "未知错误";
+  const direct = safeScalarText(error, "", maxLength);
+  if (direct) return direct;
+  const source = error instanceof Error || isPlainStateObject(error) ? error : null;
+  if (!source) return safeFallback;
+  for (const field of [source.message, source.error_description, source.details, source.hint, source.code]) {
+    const text = safeScalarText(field, "", maxLength);
+    if (text) return text;
+  }
+  return safeFallback;
+}
+
+function sanitizeDateKey(value) {
+  const text = safeScalarText(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return "";
+  const date = new Date(`${text}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === text ? text : "";
+}
+
+function firstDateKey(values) {
+  for (const value of stateArray(values)) {
+    const date = sanitizeDateKey(value);
+    if (date) return date;
+  }
+  return "";
+}
+
+function sanitizeDateOrFallback(value, fallback = "") {
+  if (value == null) return fallback;
+  if (!["string", "number", "bigint"].includes(typeof value)) return "";
+  const text = safeScalarText(value);
+  return text.trim() ? sanitizeDateKey(text) : fallback;
+}
+
+function ensureSettingsContainer() {
+  const current = stateObject(state.settings);
+  const settings = { ...defaultSettings, ...current };
+  settings.weekdayMinutes = firstIntegerValue([settings.weekdayMinutes, settings.weekday_minutes, defaultSettings.weekdayMinutes], 60, 720, defaultSettings.weekdayMinutes);
+  settings.weekendMinutes = firstIntegerValue([settings.weekendMinutes, settings.weekend_minutes, defaultSettings.weekendMinutes], 60, 840, defaultSettings.weekendMinutes);
+  settings.taskCount = firstIntegerValue([settings.taskCount, settings.task_count, defaultSettings.taskCount], 3, 4, defaultSettings.taskCount);
+  settings.coreRatio = firstIntegerValue([settings.coreRatio, settings.core_ratio, defaultSettings.coreRatio], 55, 85, defaultSettings.coreRatio);
+  if (!["focus", "balanced", "detail"].includes(settings.density)) settings.density = "focus";
+  settings.targetExamDate = sanitizeDateOrFallback(settings.targetExamDate, DEFAULT_EXAM_DATE) || DEFAULT_EXAM_DATE;
+  settings.reviewDays = Array.isArray(settings.reviewDays)
+    ? [...new Set(settings.reviewDays.map((day) => sanitizeInteger(day, 1, 365)).filter(Boolean))].sort((a, b) => a - b)
+    : [...defaultSettings.reviewDays];
+  settings.planControls = normalizePlanControls(settings.planControls);
+  state.settings = settings;
+  return state.settings;
+}
+
+function defaultSyncState(sync = {}) {
+  const source = stateObject(sync);
+  const status = ["local", "pending", "syncing", "synced", "error", "offline", "paused", "unconfigured"].includes(source.status)
+    ? source.status
+    : "local";
+  return {
+    status,
+    lastSyncAt: safeScalarText(source.lastSyncAt, "", 80),
+    lastError: safeScalarText(source.lastError, "", 500),
+    pending: sanitizeBoolean(source.pending),
+    localImportPending: sanitizeBoolean(source.localImportPending),
+    cloudPaused: sanitizeBoolean(source.cloudPaused)
+  };
+}
+
+function ensureSyncContainer() {
+  state.sync = defaultSyncState(state.sync);
+  return state.sync;
+}
+
+function ensureTombstoneContainers() {
+  const deletedSource = stateObject(state.deleted);
+  const deletedMetaSource = stateObject(state.deletedMeta);
+  state.deleted = Object.fromEntries(DELETED_TYPES.map((type) => [type, stateArray(deletedSource[type])]));
+  state.deletedMeta = Object.fromEntries(DELETED_TYPES.map((type) => [type, stateObject(deletedMetaSource[type])]));
+  return { deleted: state.deleted, deletedMeta: state.deletedMeta };
+}
+
+function ensureRuntimeContainers() {
+  ensureSettingsContainer();
+  ensureSyncContainer();
+  ensureTombstoneContainers();
+  return state;
+}
+
+function ensurePlanContainers() {
+  state.weekPlans = stateObject(state.weekPlans);
+  state.tasks = stateObject(state.tasks);
+  return state.weekPlans;
+}
+
+function planTasksForDate(date) {
+  const weekPlans = ensurePlanContainers();
+  weekPlans[date] = stateArray(weekPlans[date]).filter(isPlainStateObject);
+  return weekPlans[date];
+}
+
+function weekPlanEntries() {
+  const weekPlans = ensurePlanContainers();
+  return Object.keys(weekPlans).map((date) => [date, planTasksForDate(date)]);
+}
+
+function ensureLearningContainers() {
+  state.entries = stateObject(state.entries);
+  state.scores = stateArray(state.scores).filter(isPlainStateObject);
+  state.reviewItems = stateArray(state.reviewItems).filter(isPlainStateObject);
+  return state;
+}
+
+function entryRow(date) {
+  const row = ensureLearningContainers().entries[date];
+  return isPlainStateObject(row) ? row : null;
+}
+
+function scoreRows() {
+  return ensureLearningContainers().scores;
+}
+
+function reviewRows() {
+  return ensureLearningContainers().reviewItems;
+}
+
+function ensureAssetContainers() {
+  state.project = stateObject(state.project);
+  state.resources = stateObject(state.resources);
+  state.customTasks = stateArray(state.customTasks).filter(isPlainStateObject);
+  return state;
+}
+
+function customTaskRows() {
+  return ensureAssetContainers().customTasks;
+}
+
+function ensureKnowledgeContainers() {
+  state.topics = stateObject(state.topics);
+  state.topicEvidence = Object.fromEntries(
+    Object.entries(stateObject(state.topicEvidence)).filter(([, evidence]) => isPlainStateObject(evidence))
+  );
+  return state;
+}
+
+function normalizeTopicStatus(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(2, Math.max(0, Math.round(number))) : 0;
+}
+
+function topicStateValue(id) {
+  return normalizeTopicStatus(ensureKnowledgeContainers().topics[id]);
+}
+
+function topicEvidenceRow(id) {
+  return stateObject(ensureKnowledgeContainers().topicEvidence[id]);
+}
+
+function safeStateKey(key, maxLength = 160) {
+  const type = typeof key;
+  if (!["string", "number", "boolean", "bigint"].includes(type)) return "";
+  const text = String(key).trim();
+  if (!text || text.length > maxLength || ["__proto__", "constructor", "prototype"].includes(text)) return "";
+  return text;
+}
+
+function firstSafeStateKey(values, maxLength = 160) {
+  for (const value of stateArray(values)) {
+    const key = safeStateKey(value, maxLength);
+    if (key) return key;
+  }
+  return "";
+}
+
+function safeStateLabel(value, fallback = "", maxLength = 80) {
+  const type = typeof value;
+  if (!["string", "number", "boolean", "bigint"].includes(type)) return fallback;
+  return safeStateKey(value, maxLength) || fallback;
+}
+
+function sanitizeEnum(value, allowedValues, fallback = "") {
+  const label = safeStateLabel(value, "", 80);
+  return allowedValues.includes(label) ? label : fallback;
+}
+
+function sanitizeStringList(value, limit = 12, itemMaxLength = 160) {
+  return stateArray(value).flatMap((item) => {
+    const type = typeof item;
+    if (!["string", "number", "boolean", "bigint"].includes(type)) return [];
+    const text = String(item).trim();
+    return text && safeStateKey(text, itemMaxLength) ? [text] : [];
+  }).slice(0, limit);
+}
+
+function firstStringList(values, limit = 12, itemMaxLength = 160) {
+  for (const value of stateArray(values)) {
+    const list = sanitizeStringList(value, limit, itemMaxLength);
+    if (list.length) return list;
+  }
+  return [];
+}
+
+function sanitizeProjectState(project) {
+  if (!isPlainStateObject(project)) return {};
+  const result = {};
+  Object.entries(project).forEach(([rawKey, rawValue]) => {
+    const key = safeStateKey(rawKey, 120);
+    if (!key) return;
+    if (key === "updatedAt" || key === "updated_at") {
+      result.updatedAt = safeScalarText(rawValue, "", 80);
+      return;
+    }
+    result[key] = sanitizeBoolean(rawValue);
+  });
+  return result;
 }
 
 function sanitizeNumber(value, min = 0, max = Number.POSITIVE_INFINITY) {
@@ -1010,10 +1309,76 @@ function sanitizeInteger(value, min = 0, max = Number.POSITIVE_INFINITY) {
   return Math.round(sanitizeNumber(value, min, max));
 }
 
+function firstNumberValue(values, min = 0, max = Number.POSITIVE_INFINITY, fallback = min) {
+  for (const value of stateArray(values)) {
+    if (value == null || value === "") continue;
+    if (!["string", "number", "bigint"].includes(typeof value)) continue;
+    const number = Number(value);
+    if (Number.isFinite(number)) return Math.min(max, Math.max(min, number));
+  }
+  return sanitizeNumber(fallback, min, max);
+}
+
+function firstIntegerValue(values, min = 0, max = Number.POSITIVE_INFINITY, fallback = min) {
+  return Math.round(firstNumberValue(values, min, max, fallback));
+}
+
+function sanitizeText(value, fallback = "", maxLength = 2000) {
+  return safeScalarText(value, fallback, maxLength);
+}
+
+function firstTextValue(values, fallback = "", maxLength = 2000) {
+  for (const value of stateArray(values)) {
+    const text = sanitizeText(value, "", maxLength);
+    if (text) return text;
+  }
+  return fallback;
+}
+
+function firstStateLabel(values, fallback = "", maxLength = 80) {
+  for (const value of stateArray(values)) {
+    const label = safeStateLabel(value, "", maxLength);
+    if (label) return label;
+  }
+  return fallback;
+}
+
+function firstEnumValue(values, allowedValues, fallback = "") {
+  for (const value of stateArray(values)) {
+    const label = sanitizeEnum(value, allowedValues, "");
+    if (label) return label;
+  }
+  return fallback;
+}
+
+function booleanValue(value) {
+  if (typeof value === "boolean") return { ok: true, value };
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) return { ok: true, value: true };
+    if (["false", "0", "no", "off", ""].includes(normalized)) return { ok: true, value: false };
+    return { ok: false, value: false };
+  }
+  if (typeof value === "number") return { ok: Number.isFinite(value), value: Number.isFinite(value) && value !== 0 };
+  if (typeof value === "bigint") return { ok: true, value: value !== 0n };
+  return { ok: false, value: false };
+}
+
+function firstBooleanValue(values, fallback = false) {
+  for (const value of stateArray(values)) {
+    const result = booleanValue(value);
+    if (result.ok) return result.value;
+  }
+  return fallback;
+}
+
 function sanitizeEntries(entries) {
-  return Object.fromEntries(Object.entries(entries || {}).map(([date, entry]) => {
-    const row = entry || {};
-    return [date, {
+  if (!isPlainStateObject(entries)) return {};
+  return Object.fromEntries(Object.entries(entries).flatMap(([rawDate, entry]) => {
+    const date = sanitizeDateKey(rawDate);
+    if (!date) return [];
+    const row = isPlainStateObject(entry) ? entry : {};
+    return [[date, {
       math: sanitizeNumber(row.math),
       cs408: sanitizeNumber(row.cs408),
       english: sanitizeNumber(row.english),
@@ -1024,151 +1389,201 @@ function sanitizeEntries(entries) {
       reading: sanitizeNumber(row.reading),
       newMistakes: sanitizeNumber(row.newMistakes),
       fixedMistakes: sanitizeNumber(row.fixedMistakes),
-      quality: sanitizeNumber(row.quality || 3, 1, 5),
-      nextTask: String(row.nextTask || ""),
-      note: String(row.note || ""),
-      updatedAt: String(row.updatedAt || "")
-    }];
+      quality: firstIntegerValue([row.quality, row.quality_score, 3], 1, 5, 3),
+      nextTask: sanitizeText(row.nextTask, "", 1000),
+      note: sanitizeText(row.note, "", 2000),
+      updatedAt: sanitizeText(row.updatedAt, "", 80)
+    }]];
   }));
 }
 
 function sanitizeScores(scores) {
-  return (Array.isArray(scores) ? scores : []).map((score) => {
-    const row = score || {};
+  return (Array.isArray(scores) ? scores : []).flatMap((score) => {
+    if (!isPlainStateObject(score)) return [];
+    const row = score;
+    const id = safeStateKey(row.id) || uid("score");
+    const date = sanitizeDateOrFallback(row.date, planTodayISO());
+    if (!date) return [];
     const politics = sanitizeNumber(row.politics, 0, 100);
     const english = sanitizeNumber(row.english, 0, 100);
     const math = sanitizeNumber(row.math, 0, 150);
     const cs408 = sanitizeNumber(row.cs408, 0, 150);
-    return {
-      id: String(row.id || uid("score")),
-      date: String(row.date || planTodayISO()),
-      name: String(row.name || "未命名模考"),
+    return [{
+      id,
+      date,
+      name: sanitizeText(row.name, "未命名模考", 120),
       politics,
       english,
       math,
       cs408,
       total: politics + english + math + cs408,
-      note: String(row.note || ""),
-      updatedAt: String(row.updatedAt || "")
-    };
+      note: sanitizeText(row.note, "", 2000),
+      updatedAt: sanitizeText(row.updatedAt, "", 80)
+    }];
   });
 }
 
 function sanitizeNumericObject(object, min = 0, max = Number.POSITIVE_INFINITY, integer = false) {
-  return Object.fromEntries(Object.entries(object || {}).map(([key, value]) => [
-    key,
-    integer ? sanitizeInteger(value, min, max) : sanitizeNumber(value, min, max)
-  ]));
+  if (!isPlainStateObject(object)) return {};
+  return Object.fromEntries(Object.entries(object).flatMap(([rawKey, value]) => {
+    const key = safeStateKey(rawKey);
+    return key ? [[key, integer ? sanitizeInteger(value, min, max) : sanitizeNumber(value, min, max)]] : [];
+  }));
 }
 
 function sanitizeTopicEvidence(evidenceMap) {
-  return Object.fromEntries(Object.entries(evidenceMap || {}).map(([topicId, evidence]) => {
-    const row = evidence || {};
-    return [topicId, {
+  if (!isPlainStateObject(evidenceMap)) return {};
+  return Object.fromEntries(Object.entries(evidenceMap).flatMap(([rawTopicId, evidence]) => {
+    const topicId = safeStateKey(rawTopicId);
+    if (!topicId) return [];
+    const row = isPlainStateObject(evidence) ? evidence : {};
+    return [[topicId, {
       problems: sanitizeNumber(row.problems),
       accuracy: sanitizeNumber(row.accuracy, 0, 100),
-      evidence: String(row.evidence || ""),
-      lastReviewDate: String(row.lastReviewDate || ""),
-      totalProblems: sanitizeNumber(row.totalProblems ?? row.total_problems),
-      recent14dAccuracy: normalizeRatio(row.recent14dAccuracy ?? row.recent_14d_accuracy),
-      lastReviewAt: String(row.lastReviewAt || row.last_review_at || ""),
-      masteryStatus: String(row.masteryStatus || row.mastery_status || ""),
-      prerequisites: Array.isArray(row.prerequisites) ? row.prerequisites.map((item) => String(item)) : []
-    }];
+      evidence: sanitizeText(row.evidence, "", 2000),
+      lastReviewDate: sanitizeText(row.lastReviewDate, "", 40),
+      totalProblems: firstNumberValue([row.totalProblems, row.total_problems]),
+      recent14dAccuracy: normalizeRatio(firstNumberValue([row.recent14dAccuracy, row.recent_14d_accuracy])),
+      lastReviewAt: firstTextValue([row.lastReviewAt, row.last_review_at], "", 80),
+      masteryStatus: firstEnumValue([row.masteryStatus, row.mastery_status], ["learning", "needs_review", "mastered"], ""),
+      prerequisites: sanitizeStringList(row.prerequisites),
+      updatedAt: firstTextValue([row.updatedAt, row.updated_at], "", 80)
+    }]];
   }));
 }
 
 function sanitizeWeekPlans(weekPlans) {
-  return Object.fromEntries(Object.entries(weekPlans || {}).map(([date, tasks]) => [
-    date,
-    (Array.isArray(tasks) ? tasks : []).filter(Boolean).map((task, index) => sanitizeTask(task, date, index))
-  ]));
+  if (!isPlainStateObject(weekPlans)) return {};
+  return Object.fromEntries(Object.entries(weekPlans).flatMap(([rawDate, tasks]) => {
+    const date = sanitizeDateKey(rawDate);
+    if (!date) return [];
+    return [[date, (Array.isArray(tasks) ? tasks : [])
+      .filter(isPlainStateObject)
+      .map((task, index) => sanitizeTask(task, date, index))]];
+  }));
 }
 
 function sanitizeTask(task, date, index = 0) {
-  const row = task || {};
-  const status = ["todo", "done", "shifted", "delayed", "failed"].includes(row.status) ? row.status : "todo";
+  const row = isPlainStateObject(task) ? task : {};
+  const status = sanitizeEnum(row.status, ["todo", "done", "shifted", "delayed", "failed"], "todo");
+  const taskId = safeStateKey(row.id) || `${date}-${index}`;
   return {
-    id: String(row.id || `${date}-${index}`),
-    date: String(row.date || date),
-    subject: String(row.subject || "复盘"),
-    text: String(row.text || "回炉错题，写明下次识别信号"),
-    topicId: String(row.topicId || row.topic_id || ""),
+    id: taskId,
+    date: sanitizeDateOrFallback(row.date, date) || date,
+    subject: sanitizeText(row.subject, "复盘", 80),
+    text: sanitizeText(row.text, "回炉错题，写明下次识别信号", 1000),
+    topicId: firstSafeStateKey([row.topicId, row.topic_id]),
     minutes: sanitizeInteger(row.minutes, 0, 240),
     priority: sanitizeInteger(row.priority || index + 1, 1, 99),
     status,
-    locked: Boolean(row.locked),
-    source: String(row.source || "generated"),
-    sourceTaskId: String(row.sourceTaskId || row.source_task_id || ""),
-    carriedFrom: String(row.carriedFrom || row.carried_from || ""),
-    shiftedTo: String(row.shiftedTo || row.shifted_to || ""),
-    reviewItemId: String(row.reviewItemId || ""),
-    completedAt: String(row.completedAt || row.completed_at || ""),
-    recordApplied: Boolean(row.recordApplied),
-    updatedAt: String(row.updatedAt || row.updated_at || ""),
-    contractType: String(row.contractType || row.contract_type || "problems"),
-    requiredProblemCount: sanitizeInteger(row.requiredProblemCount ?? row.required_problem_count, 0, 999),
-    requiredAccuracy: normalizeRatio(row.requiredAccuracy ?? row.required_accuracy),
-    requiredArtifacts: Array.isArray(row.requiredArtifacts || row.required_artifacts)
-      ? (row.requiredArtifacts || row.required_artifacts).map((item) => String(item)).slice(0, 8)
-      : [],
-    minutesMin: sanitizeInteger(row.minutesMin ?? row.minutes_min, 0, 240),
-    minutesMax: sanitizeInteger(row.minutesMax ?? row.minutes_max, 0, 240),
-    actualProblems: sanitizeInteger(row.actualProblems ?? row.actual_problems, 0, 999),
-    actualCorrect: sanitizeInteger(row.actualCorrect ?? row.actual_correct, 0, 999),
-    actualMinutes: sanitizeInteger(row.actualMinutes ?? row.actual_minutes, 0, 720),
-    evidenceSubmitted: Boolean(row.evidenceSubmitted || row.evidence_submitted)
+    locked: sanitizeBoolean(row.locked),
+    source: safeStateLabel(row.source, "generated"),
+    sourceTaskId: firstSafeStateKey([row.sourceTaskId, row.source_task_id]),
+    carriedFrom: firstDateKey([row.carriedFrom, row.carried_from]),
+    shiftedTo: firstDateKey([row.shiftedTo, row.shifted_to]),
+    reviewItemId: safeStateKey(row.reviewItemId),
+    completedAt: firstTextValue([row.completedAt, row.completed_at], "", 80),
+    recordApplied: firstBooleanValue([row.recordApplied, row.record_applied]),
+    recordImpact: firstTaskRecordImpact([row.recordImpact, row.record_impact]),
+    updatedAt: firstTextValue([row.updatedAt, row.updated_at], "", 80),
+    contractType: firstStateLabel([row.contractType, row.contract_type], "problems", 40),
+    requiredProblemCount: firstIntegerValue([row.requiredProblemCount, row.required_problem_count], 0, 999),
+    requiredAccuracy: normalizeRatio(firstNumberValue([row.requiredAccuracy, row.required_accuracy])),
+    requiredArtifacts: firstStringList([row.requiredArtifacts, row.required_artifacts], 8),
+    minutesMin: firstIntegerValue([row.minutesMin, row.minutes_min], 0, 240),
+    minutesMax: firstIntegerValue([row.minutesMax, row.minutes_max], 0, 240),
+    actualProblems: firstIntegerValue([row.actualProblems, row.actual_problems], 0, 999),
+    actualCorrect: firstIntegerValue([row.actualCorrect, row.actual_correct], 0, 999),
+    actualMinutes: firstIntegerValue([row.actualMinutes, row.actual_minutes], 0, 720),
+    evidenceSubmitted: firstBooleanValue([row.evidenceSubmitted, row.evidence_submitted])
   };
 }
 
+function normalizeTaskRecordImpact(impact) {
+  if (!impact || typeof impact !== "object") return null;
+  const allowedFields = new Set(["math", "cs408", "english", "politics", "project", "mathProblems", "csProblems", "reading"]);
+  const changes = (Array.isArray(impact.changes) ? impact.changes : [])
+    .map((change) => {
+      const field = safeScalarText(change.field, "", 40) || safeScalarText(change.key, "", 40);
+      return {
+        field,
+        before: sanitizeNumber(change.before, 0, 100000),
+        after: sanitizeNumber(change.after, 0, 100000)
+      };
+    })
+    .filter((change) => allowedFields.has(change.field) && change.before !== change.after)
+    .slice(0, 12);
+
+  if (!changes.length) return null;
+  return {
+    date: sanitizeDateKey(impact.date),
+    changes
+  };
+}
+
+function firstTaskRecordImpact(values) {
+  for (const value of stateArray(values)) {
+    const impact = normalizeTaskRecordImpact(value);
+    if (impact) return impact;
+  }
+  return null;
+}
+
 function sanitizeReviewItems(items) {
-  return (Array.isArray(items) ? items : []).filter(Boolean).map((item) => {
-    const status = ["due", "done", "delayed", "failed"].includes(item.status) ? item.status : (item.done ? "done" : "due");
-    return {
-      id: String(item.id || uid("review")),
-      sourceTaskId: String(item.sourceTaskId || item.source_task_id || ""),
-      subject: String(item.subject || "复盘"),
-      text: String(item.text || item.title || ""),
-      round: String(item.round || item.review_round || ""),
-      dueDate: String(item.dueDate || item.due_date || planTodayISO()),
+  return (Array.isArray(items) ? items : []).filter(isPlainStateObject).flatMap((item) => {
+    const done = sanitizeBoolean(item.done);
+    const status = sanitizeEnum(item.status, ["due", "done", "delayed", "failed"], done ? "done" : "due");
+    const dueDate = firstDateKey([item.dueDate, item.due_date]) || (item.dueDate == null && item.due_date == null ? planTodayISO() : "");
+    if (!dueDate) return [];
+    return [{
+      id: safeStateKey(item.id) || uid("review"),
+      sourceTaskId: firstSafeStateKey([item.sourceTaskId, item.source_task_id]),
+      subject: sanitizeText(item.subject, "复盘", 80),
+      text: firstTextValue([item.text, item.title], "", 1000),
+      round: firstTextValue([item.round, item.review_round], "", 40),
+      dueDate,
       status,
-      done: Boolean(item.done || status === "done"),
-      delayCount: sanitizeInteger(item.delayCount ?? item.delay_count, 0, 99),
-      failureReason: String(item.failureReason || item.failure_reason || ""),
-      quality: sanitizeInteger(item.quality ?? item.quality_score, 0, 5),
-      completedAt: String(item.completedAt || item.completed_at || ""),
-      intervalIndex: sanitizeInteger(item.intervalIndex ?? item.interval_index, 0, 99),
-      failStreak: sanitizeInteger(item.failStreak ?? item.fail_streak, 0, 99),
-      lastResult: String(item.lastResult || item.last_result || ""),
-      lastSubmittedDate: String(item.lastSubmittedDate || item.last_submitted_date || ""),
-      topicId: String(item.topicId || item.topic_id || ""),
-      updatedAt: String(item.updatedAt || item.updated_at || "")
-    };
+      done: done || status === "done",
+      delayCount: firstIntegerValue([item.delayCount, item.delay_count], 0, 99),
+      failureReason: firstTextValue([item.failureReason, item.failure_reason], "", 1000),
+      quality: firstIntegerValue([item.quality, item.quality_score], 0, 5),
+      completedAt: firstTextValue([item.completedAt, item.completed_at], "", 80),
+      intervalIndex: firstIntegerValue([item.intervalIndex, item.interval_index], 0, 99),
+      failStreak: firstIntegerValue([item.failStreak, item.fail_streak], 0, 99),
+      lastResult: firstEnumValue([item.lastResult, item.last_result], ["pass", "fail", "delay"], ""),
+      lastSubmittedDate: firstDateKey([item.lastSubmittedDate, item.last_submitted_date]),
+      topicId: firstSafeStateKey([item.topicId, item.topic_id]),
+      updatedAt: firstTextValue([item.updatedAt, item.updated_at], "", 80)
+    }];
   });
 }
 
 function isOnOrAfterPlanStart(date = "") {
-  return String(date || "") >= PLAN_START_DATE;
+  const dateKey = sanitizeDateKey(date);
+  return Boolean(dateKey && dateKey >= PLAN_START_DATE);
 }
 
 function filterEntriesFromStart(entries = {}) {
-  return Object.fromEntries(Object.entries(entries || {}).filter(([date]) => isOnOrAfterPlanStart(date)));
+  return Object.fromEntries(Object.entries(stateObject(entries)).filter(([date]) => isOnOrAfterPlanStart(date)));
 }
 
 function filterScoresFromStart(scores = []) {
-  return (scores || []).filter((score) => isOnOrAfterPlanStart(score.date));
+  return stateArray(scores).filter((score) => isPlainStateObject(score) && isOnOrAfterPlanStart(score.date));
 }
 
 function filterWeekPlansFromStart(weekPlans = {}) {
-  return Object.fromEntries(Object.entries(weekPlans || {}).filter(([date]) => isOnOrAfterPlanStart(date)));
+  return Object.fromEntries(Object.entries(stateObject(weekPlans)).flatMap(([date, tasks]) => (
+    isOnOrAfterPlanStart(date) ? [[date, stateArray(tasks)]] : []
+  )));
 }
 
 function sanitizeTaskState(tasks = {}, weekPlans = {}) {
   const next = {};
-  Object.entries(tasks || {}).forEach(([id, done]) => {
-    next[String(id)] = Boolean(done);
+  if (isPlainStateObject(tasks)) Object.entries(tasks).forEach(([id, done]) => {
+    const key = safeStateKey(id);
+    if (key) next[key] = sanitizeBoolean(done);
   });
-  Object.values(weekPlans || {}).flat().filter(Boolean).forEach((task) => {
+  Object.values(stateObject(weekPlans)).flatMap(stateArray).filter(isPlainStateObject).forEach((task) => {
     if (!task.id || typeof next[task.id] !== "undefined") return;
     next[task.id] = task.status === "done";
   });
@@ -1176,50 +1591,72 @@ function sanitizeTaskState(tasks = {}, weekPlans = {}) {
 }
 
 function taskIdDate(id = "") {
-  const date = String(id || "").slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : "";
+  const date = safeScalarText(id).slice(0, 10);
+  return sanitizeDateKey(date);
+}
+
+function hasMalformedDatePrefix(value = "") {
+  const date = safeScalarText(value).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && !sanitizeDateKey(date);
 }
 
 function taskDateFromWeekPlans(id, weekPlans = {}) {
+  if (hasMalformedDatePrefix(id)) return "__invalid_date__";
   const directDate = taskIdDate(id);
   if (directDate) return directDate;
-  for (const [date, tasks] of Object.entries(weekPlans || {})) {
-    if ((tasks || []).some((task) => task.id === id)) return date;
+  for (const [date, tasks] of Object.entries(stateObject(weekPlans))) {
+    if (stateArray(tasks).some((task) => isPlainStateObject(task) && task.id === id)) return date;
   }
   return "";
 }
 
 function filterTaskStateFromStart(tasks = {}, weekPlans = {}) {
-  return Object.fromEntries(Object.entries(tasks || {}).filter(([id]) => {
+  if (!isPlainStateObject(tasks)) return {};
+  return Object.fromEntries(Object.entries(tasks).filter(([id]) => {
     const date = taskDateFromWeekPlans(id, weekPlans);
+    if (date === "__invalid_date__") return false;
     return !date || isOnOrAfterPlanStart(date);
   }));
 }
 
 function filterReviewItemsFromStart(items = []) {
-  return (items || []).filter((item) => {
-    const dueDate = item.dueDate || "";
-    const sourceDate = String(item.sourceTaskId || "").slice(0, 10);
-    return isOnOrAfterPlanStart(dueDate) && (!/^\d{4}-\d{2}-\d{2}$/.test(sourceDate) || isOnOrAfterPlanStart(sourceDate));
+  return stateArray(items).filter((item) => {
+    if (!isPlainStateObject(item)) return false;
+    if (
+      hasMalformedDatePrefix(item.dueDate) ||
+      hasMalformedDatePrefix(item.due_date) ||
+      hasMalformedDatePrefix(item.nextDueAt) ||
+      hasMalformedDatePrefix(item.next_due_at) ||
+      hasMalformedDatePrefix(item.sourceTaskId) ||
+      hasMalformedDatePrefix(item.source_task_id)
+    ) return false;
+    const dueDate = firstDateKey([item.dueDate, item.due_date, item.nextDueAt, item.next_due_at]);
+    const sourceDate = taskIdDate(firstSafeStateKey([item.sourceTaskId, item.source_task_id]));
+    return isOnOrAfterPlanStart(dueDate) && (!sourceDate || isOnOrAfterPlanStart(sourceDate));
   });
 }
 
 function filterTopicEvidenceFromStart(evidenceMap = {}) {
-  return Object.fromEntries(Object.entries(evidenceMap || {}).filter(([, evidence]) => {
-    const date = evidence.lastReviewDate || String(evidence.lastReviewAt || "").slice(0, 10);
+  return Object.fromEntries(Object.entries(stateObject(evidenceMap)).filter(([, evidence]) => {
+    if (!isPlainStateObject(evidence)) return false;
+    if (hasMalformedDatePrefix(evidence.lastReviewDate) || hasMalformedDatePrefix(evidence.lastReviewAt)) return false;
+    const date = firstDateKey([evidence.lastReviewDate, evidence.lastReviewAt]);
     return !date || isOnOrAfterPlanStart(date);
   }));
 }
 
 function filterDeletedFromStart(deleted = {}) {
+  const source = stateObject(deleted);
   return {
-    records: (deleted.records || []).filter((date) => isOnOrAfterPlanStart(date)),
-    scores: [...(deleted.scores || [])],
-    tasks: (deleted.tasks || []).filter((id) => {
+    records: stateArray(source.records).filter((date) => isOnOrAfterPlanStart(date)),
+    scores: [...stateArray(source.scores)],
+    tasks: stateArray(source.tasks).filter((id) => {
+      if (hasMalformedDatePrefix(id)) return false;
       const date = taskIdDate(id);
       return !date || isOnOrAfterPlanStart(date);
     }),
-    reviews: (deleted.reviews || []).filter((id) => {
+    reviews: stateArray(source.reviews).filter((id) => {
+      if (hasMalformedDatePrefix(id)) return false;
       const date = taskIdDate(id);
       return !date || isOnOrAfterPlanStart(date);
     })
@@ -1227,21 +1664,22 @@ function filterDeletedFromStart(deleted = {}) {
 }
 
 function buildCleanStartArchive({ entries, scores, weekPlans, reviewItems, topics, topicEvidence, previousArchive }) {
-  const archivedEntries = Object.keys(entries || {}).filter((date) => !isOnOrAfterPlanStart(date));
-  const archivedScores = (scores || []).filter((score) => !isOnOrAfterPlanStart(score.date)).length;
-  const archivedWeekPlans = Object.keys(weekPlans || {}).filter((date) => !isOnOrAfterPlanStart(date));
-  const archivedReviews = (reviewItems || []).filter((item) => !isOnOrAfterPlanStart(item.dueDate)).length;
-  const topicCount = Object.keys(topics || {}).length;
-  const evidenceCount = Object.keys(topicEvidence || {}).length;
-  const archivedAt = previousArchive?.version === CLEAN_START_VERSION && previousArchive.archivedAt
-    ? previousArchive.archivedAt
+  const archivedEntries = Object.keys(stateObject(entries)).filter((date) => !isOnOrAfterPlanStart(date));
+  const archivedScores = stateArray(scores).filter((score) => isPlainStateObject(score) && !isOnOrAfterPlanStart(score.date)).length;
+  const archivedWeekPlans = Object.keys(stateObject(weekPlans)).filter((date) => !isOnOrAfterPlanStart(date));
+  const archivedReviews = stateArray(reviewItems).filter((item) => isPlainStateObject(item) && !isOnOrAfterPlanStart(item.dueDate)).length;
+  const topicCount = Object.keys(stateObject(topics)).length;
+  const evidenceCount = Object.keys(stateObject(topicEvidence)).length;
+  const safePreviousArchive = stateObject(previousArchive);
+  const archivedAt = safePreviousArchive.version === CLEAN_START_VERSION && safePreviousArchive.archivedAt
+    ? safePreviousArchive.archivedAt
     : new Date().toISOString();
   return {
-    ...(previousArchive || {}),
+    ...safePreviousArchive,
     version: CLEAN_START_VERSION,
     startDate: PLAN_START_DATE,
     archivedAt,
-    note: "2026-06-08 从头开始；早于起点的数据仅归档，不再参与计划、统计和复盘。",
+    note: "2026-06-15 从头开始；早于起点的数据仅归档，不再参与计划、统计和复盘。",
     counts: {
       entriesBeforeStart: archivedEntries.length,
       scoresBeforeStart: archivedScores,
@@ -1256,22 +1694,44 @@ function buildCleanStartArchive({ entries, scores, weekPlans, reviewItems, topic
 }
 
 function sanitizeCustomTasks(tasks) {
-  return (Array.isArray(tasks) ? tasks : []).filter(Boolean).map((task) => ({
-    id: String(task.id || uid("custom")),
-    subject: String(task.subject || "复盘"),
-    text: String(task.text || ""),
-    minutes: sanitizeInteger(task.minutes, 10, 240)
+  return (Array.isArray(tasks) ? tasks : []).filter(isPlainStateObject).map((task) => ({
+    id: safeStateKey(task.id) || uid("custom"),
+    subject: sanitizeText(task.subject, "复盘", 80),
+    text: sanitizeText(task.text, "", 1000),
+    minutes: sanitizeInteger(task.minutes, 10, 240),
+    updatedAt: firstTextValue([task.updatedAt, task.updated_at], "", 80)
   })).filter((task) => task.text);
 }
 
 function sanitizeDeleted(deleted) {
-  const asArray = (value) => Array.isArray(value) ? value.map((item) => String(item)) : [];
+  const source = isPlainStateObject(deleted) ? deleted : {};
+  const asArray = (value) => Array.isArray(value) ? value.map((item) => safeStateKey(item)).filter(Boolean) : [];
   return {
-    records: asArray(deleted.records),
-    scores: asArray(deleted.scores),
-    tasks: asArray(deleted.tasks),
-    reviews: asArray(deleted.reviews)
+    records: (Array.isArray(source.records) ? source.records.map(sanitizeDateKey).filter(Boolean) : []),
+    scores: asArray(source.scores),
+    tasks: asArray(source.tasks),
+    reviews: asArray(source.reviews)
   };
+}
+
+function normalizeTimestamp(value, fallback = "") {
+  const text = safeScalarText(value, "", 80);
+  if (!text) return fallback;
+  const date = new Date(text);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : fallback;
+}
+
+function sanitizeDeletedMeta(deletedMeta, deleted = {}) {
+  const source = isPlainStateObject(deletedMeta) ? deletedMeta : {};
+  return Object.fromEntries(DELETED_TYPES.map((type) => {
+    const ids = new Set(Array.isArray(deleted[type]) ? deleted[type].map((item) => String(item)) : []);
+    const rows = isPlainStateObject(source[type]) ? source[type] : {};
+    return [type, Object.fromEntries(Object.entries(rows).flatMap(([id, value]) => {
+      const key = safeStateKey(id);
+      const timestamp = normalizeTimestamp(value);
+      return key && ids.has(key) && timestamp ? [[key, timestamp]] : [];
+    }))];
+  }));
 }
 
 function normalizeRatio(value) {
@@ -1280,21 +1740,83 @@ function normalizeRatio(value) {
 }
 
 function sanitizeSnapshots(snapshots) {
-  return (Array.isArray(snapshots) ? snapshots : []).slice(0, 5).map((snapshot) => {
-    const row = snapshot || {};
+  return stateArray(snapshots).filter(isPlainStateObject).slice(0, 5).map((snapshot) => {
+    const row = snapshot;
     return {
-      reason: String(row.reason || "manual"),
-      createdAt: String(row.createdAt || row.created_at || ""),
-      payload: row.payload && typeof row.payload === "object" ? row.payload : row
+      reason: sanitizeSnapshotReason(row.reason),
+      createdAt: safeScalarText(row.createdAt, "", 80) || safeScalarText(row.created_at, "", 80),
+      payload: sanitizeSnapshotPayload(row.payload && typeof row.payload === "object" ? row.payload : row)
     };
   });
 }
 
+function sanitizeSnapshotReason(value) {
+  const type = typeof value;
+  if (!["string", "number", "boolean", "bigint"].includes(type)) return "manual";
+  const text = String(value).trim().slice(0, 120);
+  if (!text || ["__proto__", "constructor", "prototype"].includes(text)) return "manual";
+  return text;
+}
+
+function snapshotRows(snapshots) {
+  return stateArray(snapshots).filter((snapshot) => isPlainStateObject(snapshot) && isPlainStateObject(snapshot.payload));
+}
+
+function sanitizeSnapshotPayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
+  const allowedKeys = [
+    "schemaVersion",
+    "entries",
+    "scores",
+    "topics",
+    "topicEvidence",
+    "tasks",
+    "weekPlans",
+    "project",
+    "resources",
+    "settings",
+    "customTasks",
+    "reviewItems",
+    "deleted",
+    "deletedMeta",
+    "cleanStartArchive"
+  ];
+  return cloneJson(Object.fromEntries(allowedKeys.flatMap((key) => (
+    Object.prototype.hasOwnProperty.call(payload, key) ? [[key, payload[key]]] : []
+  ))));
+}
+
+function cloneJson(value, fallback = {}) {
+  const seen = new WeakSet();
+  try {
+    const json = JSON.stringify(value, (key, current) => {
+      if (typeof current === "bigint") return String(current);
+      if (current && typeof current === "object") {
+        if (seen.has(current)) return undefined;
+        seen.add(current);
+      }
+      return current;
+    });
+    return json ? JSON.parse(json) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function sanitizeUserText(value, maxLength = 254) {
+  const type = typeof value;
+  if (!["string", "number", "bigint"].includes(type)) return "";
+  return safeStateKey(value, maxLength);
+}
+
 function sanitizeUser(user) {
-  if (!user || typeof user !== "object") return null;
+  if (!isPlainStateObject(user)) return null;
+  const id = sanitizeUserText(user.id, 160);
+  const email = sanitizeUserText(user.email, 254);
+  if (!id && !email) return null;
   return {
-    id: String(user.id || ""),
-    email: String(user.email || "")
+    id,
+    email
   };
 }
 
@@ -1319,6 +1841,7 @@ function freshState() {
     customTasks: [],
     reviewItems: [],
     deleted: { records: [], scores: [], tasks: [], reviews: [] },
+    deletedMeta: { records: {}, scores: {}, tasks: {}, reviews: {} },
     snapshots: [],
     sync: { status: "local", lastSyncAt: "", lastError: "", pending: false, localImportPending: false, cloudPaused: false },
     user: null
@@ -1326,14 +1849,33 @@ function freshState() {
 }
 
 function saveState(options = {}) {
+  state = applyTombstones(state);
   state.schemaVersion = SCHEMA_VERSION;
+  ensureRuntimeContainers();
   state.settings.lastSavedAt = new Date().toISOString();
   const saved = writeStorage(STORAGE_KEY, JSON.stringify(state));
   if (!saved) {
     state.sync = { ...state.sync, status: "local", lastError: "local-storage-unavailable", pending: false };
+    notifyStorageWriteFailure();
   }
   renderSyncStatus();
   if (!options.skipCloud) queueCloudSync();
+  return saved;
+}
+
+function notifyStorageWriteFailure() {
+  const now = Date.now();
+  if (now - lastStorageFailureNoticeAt < STORAGE_FAILURE_NOTICE_INTERVAL_MS) return;
+  lastStorageFailureNoticeAt = now;
+  setAuthResult("error", "本机缓存不可用", "浏览器阻止写入本机缓存，请先导出备份；刷新后本次更改可能不会保留。");
+  renderStorageStatus();
+  renderAuthPanel();
+}
+
+function setLocalSaveResult(saved, successTitle, successMessage, failureTitle) {
+  setAuthResult(saved ? "success" : "error", saved ? successTitle : failureTitle, saved
+    ? successMessage
+    : "浏览器阻止写入本机缓存；本次更改只保留在当前页面。请立即导出备份，刷新前不要关闭页面。");
 }
 
 async function initCloudSession() {
@@ -1346,39 +1888,114 @@ async function initCloudSession() {
     onAuthChange(async (user) => {
       currentUser = user;
       state.user = user ? { id: user.id, email: user.email || "" } : null;
-      if (user) await pullCloudState();
+      let localSaved = true;
+      if (user) {
+        const pullResult = await pullCloudState();
+        localSaved = pullResult?.localSaved !== false;
+      } else {
+        state.sync = {
+          ...state.sync,
+          status: state.sync?.cloudPaused ? "paused" : "local",
+          pending: false,
+          lastError: "not-authenticated"
+        };
+        localSaved = saveState({ skipCloud: true });
+      }
       renderSyncStatus();
       renderAll();
+      renderAuthPanel();
+      if (!localSaved) {
+        setLocalSaveResult(false, "账号会话状态已保存", "账号会话状态已写入本机缓存。", "账号会话状态未写入本机缓存");
+      }
     });
   } catch (error) {
     currentUser = null;
-    state.sync = { ...state.sync, status: "error", lastError: error.message || String(error), pending: false };
+    state.user = null;
+    const message = friendlyAuthError(error);
+    lastAuthResult = {
+      status: "error",
+      title: "云端会话不可用",
+      message
+    };
+    state.sync = { ...state.sync, status: "error", lastError: safeErrorMessage(error, "云端会话不可用"), pending: false };
+    const saved = saveState({ skipCloud: true });
+    if (!saved) {
+      lastAuthResult = {
+        status: "error",
+        title: "云端会话状态未写入本机缓存",
+        message: `${message} 浏览器阻止写入本机缓存；请立即导出备份，刷新前不要关闭页面。`
+      };
+    }
+    renderAuthPanel();
   }
   renderSyncStatus();
 }
 
 async function pullCloudState() {
   if (!currentUser || !supabaseConfigured) {
-    state.sync = { ...state.sync, status: currentUser ? "unconfigured" : "local" };
-    return;
+    const reason = currentUser && !supabaseConfigured ? "unconfigured" : "not-authenticated";
+    if (!currentUser) state.user = null;
+    state.sync = {
+      ...state.sync,
+      status: state.sync?.cloudPaused ? "paused" : (currentUser ? "unconfigured" : "local"),
+      pending: false,
+      lastError: reason
+    };
+    const localSaved = saveState({ skipCloud: true });
+    renderSyncStatus();
+    renderAuthPanel();
+    return { ok: false, reason, localSaved };
+  }
+  if (state.sync?.cloudPaused) {
+    state.sync = { ...state.sync, status: "paused", pending: false };
+    const localSaved = saveState({ skipCloud: true });
+    renderSyncStatus();
+    renderAuthPanel();
+    return { ok: false, reason: "cloud-paused", localSaved };
   }
   if (state.sync?.localImportPending) {
     state.sync = { ...state.sync, status: "pending", pending: true };
+    const localSaved = saveState({ skipCloud: true });
     renderSyncStatus();
-    return;
+    renderAuthPanel();
+    return { ok: false, reason: "local-import-pending", localSaved };
   }
   try {
     state = enforceCleanStartState(state);
     state.sync = { ...state.sync, status: "syncing", lastError: "" };
     renderSyncStatus();
     const cloudState = await loadCloudState(state);
+    if (!cloudState) {
+      currentUser = null;
+      state.user = null;
+      state.sync = { ...state.sync, status: "local", pending: false, lastError: "not-authenticated" };
+      const localSaved = saveState({ skipCloud: true });
+      renderSyncStatus();
+      renderAuthPanel();
+      return { ok: false, reason: "not-authenticated", localSaved };
+    }
     if (cloudState) {
       state = migrateState(mergeStateByUpdatedAt(state, cloudState));
-      saveState({ skipCloud: true });
-      state.sync = { status: "synced", lastSyncAt: new Date().toISOString(), lastError: "", pending: false };
+      state.sync = {
+        status: "synced",
+        lastSyncAt: new Date().toISOString(),
+        lastError: "",
+        pending: false,
+        localImportPending: false,
+        cloudPaused: false
+      };
+      legacyImportPending = false;
+      const localSaved = saveState({ skipCloud: true });
+      return { ok: true, pulled: true, localSaved };
     }
+    return { ok: true, pulled: true, localSaved: true };
   } catch (error) {
-    state.sync = { ...state.sync, status: "error", lastError: error.message || String(error), pending: true };
+    const message = safeErrorMessage(error, "拉取云端失败");
+    state.sync = { ...state.sync, status: "error", lastError: message, pending: true };
+    const localSaved = saveState({ skipCloud: true });
+    renderSyncStatus();
+    renderAuthPanel();
+    return { ok: false, reason: "pull-failed", error: message, localSaved };
   }
 }
 
@@ -1386,26 +2003,30 @@ function mergeStateByUpdatedAt(localState, cloudState) {
   const cloudCleanStarted = cloudState.cloudMeta
     ? cloudState.cloudMeta.cleanStartVersion === CLEAN_START_VERSION
     : cloudState.settings?.cleanStartVersion === CLEAN_START_VERSION;
+  const mergedTopics = mergeTopicState(localState, cloudState, cloudCleanStarted);
+  const mergedDeleted = mergeDeletedTombstones(localState.deleted, cloudState.deleted);
+  const mergedDeletedMeta = mergeDeletedTombstoneMeta(localState.deletedMeta, cloudState.deletedMeta, mergedDeleted);
   const merged = applyTombstones({
     ...localState,
     ...cloudState,
-    settings: { ...localState.settings, ...cloudState.settings },
+    settings: mergeSettingsByVersionedAssets(localState, cloudState),
     entries: mergeObjectsByUpdatedAt(localState.entries, cloudState.entries),
     tasks: { ...localState.tasks, ...cloudState.tasks },
     weekPlans: mergeWeekPlans(localState.weekPlans, cloudState.weekPlans),
     reviewItems: mergeArrayById(localState.reviewItems, cloudState.reviewItems),
     scores: mergeArrayById(localState.scores, cloudState.scores),
-    topics: cloudCleanStarted ? { ...localState.topics, ...cloudState.topics } : { ...localState.topics },
-    topicEvidence: cloudCleanStarted ? { ...localState.topicEvidence, ...cloudState.topicEvidence } : { ...localState.topicEvidence },
-    resources: { ...localState.resources, ...cloudState.resources },
-    deleted: {
-      records: [],
-      scores: [],
-      tasks: [],
-      reviews: [],
-      ...(cloudState.deleted || {}),
-      ...(localState.deleted || {})
-    },
+    customTasks: mergeCustomTasks(localState, cloudState),
+    project: mergeVersionedObject(localState.project, cloudState.project),
+    topics: mergedTopics.topics,
+    topicEvidence: mergedTopics.topicEvidence,
+    resources: mergeVersionedObject(
+      localState.resources,
+      cloudState.resources,
+      localState.settings?.resourcesUpdatedAt,
+      cloudState.settings?.resourcesUpdatedAt
+    ),
+    deleted: mergedDeleted,
+    deletedMeta: mergedDeletedMeta,
     sync: cloudState.sync,
     user: cloudState.user
   });
@@ -1427,118 +2048,323 @@ function enforceCleanStartState(nextState) {
   };
 }
 
+function timestampMs(value) {
+  const type = typeof value;
+  if (!["string", "number", "bigint"].includes(type)) return 0;
+  const time = Date.parse(String(value));
+  return Number.isFinite(time) ? time : 0;
+}
+
 function mergeArrayById(localItems = [], cloudItems = []) {
   const map = new Map();
-  [...localItems, ...cloudItems].forEach((item) => {
-    const id = item.id || `${item.date}-${item.name}`;
+  [...stateArray(localItems), ...stateArray(cloudItems)].filter(isPlainStateObject).forEach((item) => {
+    const dateKey = safeScalarText(item.date, "", 80);
+    const nameKey = safeScalarText(item.name, "", 120);
+    const id = safeStateKey(item.id) || safeStateKey(dateKey || nameKey ? `${dateKey}-${nameKey}` : "");
+    if (!id) return;
     const existing = map.get(id);
     if (!existing) {
       map.set(id, item);
       return;
     }
-    const oldTime = Date.parse(existing.updatedAt || existing.completedAt || existing.date || 0);
-    const newTime = Date.parse(item.updatedAt || item.completedAt || item.date || 0);
+    const oldTime = timestampMs(existing.updatedAt || existing.completedAt || existing.date);
+    const newTime = timestampMs(item.updatedAt || item.completedAt || item.date);
     map.set(id, newTime >= oldTime ? item : existing);
   });
   return [...map.values()];
 }
 
+function mergeSettingsByVersionedAssets(localState = {}, cloudState = {}) {
+  const local = stateObject(localState);
+  const cloud = stateObject(cloudState);
+  const localSettings = stateObject(local.settings);
+  const cloudSettings = stateObject(cloud.settings);
+  const settings = { ...localSettings, ...cloudSettings };
+  ["customTasksUpdatedAt", "resourcesUpdatedAt"].forEach((key) => {
+    const localTime = timestampMs(localSettings[key]);
+    const cloudTime = timestampMs(cloudSettings[key]);
+    if (localTime || cloudTime) settings[key] = cloudTime > localTime ? cloudSettings[key] : localSettings[key];
+  });
+  return settings;
+}
+
+function mergeCustomTasks(localState = {}, cloudState = {}) {
+  const local = stateObject(localState);
+  const cloud = stateObject(cloudState);
+  const localTime = timestampMs(stateObject(local.settings).customTasksUpdatedAt);
+  const cloudTime = timestampMs(stateObject(cloud.settings).customTasksUpdatedAt);
+  if (localTime || cloudTime) return stateArray(cloudTime > localTime ? cloud.customTasks : local.customTasks).filter(isPlainStateObject);
+  return mergeArrayById(local.customTasks, cloud.customTasks);
+}
+
+function mergeTopicState(localState = {}, cloudState = {}, cloudCleanStarted = false) {
+  const local = stateObject(localState);
+  const cloud = stateObject(cloudState);
+  if (!cloudCleanStarted) {
+    return {
+      topics: { ...stateObject(local.topics) },
+      topicEvidence: { ...stateObject(local.topicEvidence) }
+    };
+  }
+  const localTopics = stateObject(local.topics);
+  const cloudTopics = stateObject(cloud.topics);
+  const localEvidence = stateObject(local.topicEvidence);
+  const cloudEvidence = stateObject(cloud.topicEvidence);
+  const ids = new Set([
+    ...Object.keys(localTopics),
+    ...Object.keys(cloudTopics),
+    ...Object.keys(localEvidence),
+    ...Object.keys(cloudEvidence)
+  ]);
+  const topics = {};
+  const topicEvidence = {};
+  ids.forEach((id) => {
+    const localTime = timestampMs(localEvidence[id]?.updatedAt);
+    const cloudTime = timestampMs(cloudEvidence[id]?.updatedAt);
+    const hasCloud = Object.prototype.hasOwnProperty.call(cloudTopics, id) || Object.prototype.hasOwnProperty.call(cloudEvidence, id);
+    const useCloud = localTime || cloudTime ? cloudTime > localTime : hasCloud;
+    const primaryTopics = useCloud ? cloudTopics : localTopics;
+    const fallbackTopics = useCloud ? localTopics : cloudTopics;
+    const primaryEvidence = useCloud ? cloudEvidence : localEvidence;
+    const fallbackEvidence = useCloud ? localEvidence : cloudEvidence;
+    if (Object.prototype.hasOwnProperty.call(primaryTopics, id)) topics[id] = primaryTopics[id];
+    else if (Object.prototype.hasOwnProperty.call(fallbackTopics, id)) topics[id] = fallbackTopics[id];
+    if (isPlainStateObject(primaryEvidence[id])) topicEvidence[id] = primaryEvidence[id];
+    else if (isPlainStateObject(fallbackEvidence[id])) topicEvidence[id] = fallbackEvidence[id];
+  });
+  return { topics, topicEvidence };
+}
+
+function mergeVersionedObject(localObject = {}, cloudObject = {}, localUpdatedAt = "", cloudUpdatedAt = "") {
+  const local = stateObject(localObject);
+  const cloud = stateObject(cloudObject);
+  const localTime = timestampMs(localUpdatedAt || local.updatedAt);
+  const cloudTime = timestampMs(cloudUpdatedAt || cloud.updatedAt);
+  if (localTime || cloudTime) return cloudTime > localTime ? { ...cloud } : { ...local };
+  return { ...local, ...cloud };
+}
+
 function mergeObjectsByUpdatedAt(localObject = {}, cloudObject = {}) {
-  const result = { ...localObject };
-  Object.entries(cloudObject || {}).forEach(([key, value]) => {
+  const result = { ...stateObject(localObject) };
+  Object.entries(stateObject(cloudObject)).forEach(([key, value]) => {
+    if (!safeStateKey(key) || !isPlainStateObject(value)) return;
     const existing = result[key];
-    if (!existing) {
+    if (!isPlainStateObject(existing)) {
       result[key] = value;
       return;
     }
-    const oldTime = Date.parse(existing.updatedAt || 0);
-    const newTime = Date.parse(value.updatedAt || 0);
+    const oldTime = timestampMs(existing.updatedAt);
+    const newTime = timestampMs(value.updatedAt);
     result[key] = newTime >= oldTime ? value : existing;
   });
   return result;
 }
 
 function mergeWeekPlans(localPlans = {}, cloudPlans = {}) {
-  const dates = new Set([...Object.keys(localPlans || {}), ...Object.keys(cloudPlans || {})]);
+  const local = stateObject(localPlans);
+  const cloud = stateObject(cloudPlans);
+  const dates = new Set([...Object.keys(local), ...Object.keys(cloud)]);
   const result = {};
   dates.forEach((date) => {
-    result[date] = mergeArrayById(localPlans[date] || [], cloudPlans[date] || []);
+    result[date] = mergeArrayById(local[date], cloud[date]);
   });
   return result;
 }
 
-function applyTombstones(nextState) {
-  const deleted = nextState.deleted || {};
-  (deleted.records || []).forEach((date) => delete nextState.entries[date]);
-  if (deleted.scores?.length) {
-    const ids = new Set(deleted.scores);
-    nextState.scores = (nextState.scores || []).filter((score) => !ids.has(score.id));
-  }
-  if (deleted.reviews?.length) {
-    const ids = new Set(deleted.reviews);
-    nextState.reviewItems = (nextState.reviewItems || []).filter((item) => !ids.has(item.id));
-  }
-  if (deleted.tasks?.length) {
-    const ids = new Set(deleted.tasks);
-    Object.keys(nextState.weekPlans || {}).forEach((date) => {
-      nextState.weekPlans[date] = (nextState.weekPlans[date] || []).filter((task) => !ids.has(task.id));
+function mergeDeletedTombstones(localDeleted = {}, cloudDeleted = {}) {
+  const mergeList = (type) => [...new Set([
+    ...(Array.isArray(cloudDeleted?.[type]) ? cloudDeleted[type] : []),
+    ...(Array.isArray(localDeleted?.[type]) ? localDeleted[type] : [])
+  ].map((item) => String(item)).filter(Boolean))];
+  return Object.fromEntries(DELETED_TYPES.map((type) => [type, mergeList(type)]));
+}
+
+function mergeDeletedTombstoneMeta(localMeta = {}, cloudMeta = {}, mergedDeleted = {}) {
+  return Object.fromEntries(DELETED_TYPES.map((type) => {
+    const ids = new Set(Array.isArray(mergedDeleted[type]) ? mergedDeleted[type].map((item) => String(item)) : []);
+    const rows = {};
+    ids.forEach((id) => {
+      const localTime = normalizeTimestamp(localMeta?.[type]?.[id]);
+      const cloudTime = normalizeTimestamp(cloudMeta?.[type]?.[id]);
+      const latest = timestampMs(cloudTime) > timestampMs(localTime) ? cloudTime : localTime;
+      if (latest) rows[id] = latest;
     });
-    ids.forEach((id) => delete nextState.tasks[id]);
+    return [type, rows];
+  }));
+}
+
+function shouldApplyTombstone(deletedMeta = {}, type, id, activeUpdatedAt = "") {
+  const deletedAt = timestampMs(stateObject(stateObject(deletedMeta)[type])[id]);
+  const activeAt = timestampMs(activeUpdatedAt);
+  return !(deletedAt && activeAt && activeAt > deletedAt);
+}
+
+function pruneTombstone(nextState, type, id) {
+  if (!Array.isArray(nextState.deleted?.[type])) return;
+  nextState.deleted[type] = nextState.deleted[type].filter((item) => item !== id);
+  if (isPlainStateObject(nextState.deletedMeta?.[type])) delete nextState.deletedMeta[type][id];
+}
+
+function applyTombstones(nextState) {
+  if (!isPlainStateObject(nextState)) nextState = {};
+  nextState.entries = stateObject(nextState.entries);
+  nextState.scores = stateArray(nextState.scores).filter(isPlainStateObject);
+  nextState.reviewItems = stateArray(nextState.reviewItems).filter(isPlainStateObject);
+  nextState.weekPlans = Object.fromEntries(Object.entries(stateObject(nextState.weekPlans)).map(([date, tasks]) => [date, stateArray(tasks).filter(isPlainStateObject)]));
+  nextState.tasks = stateObject(nextState.tasks);
+  const deletedSource = stateObject(nextState.deleted);
+  const deletedMetaSource = stateObject(nextState.deletedMeta);
+  nextState.deleted = Object.fromEntries(DELETED_TYPES.map((type) => [type, stateArray(deletedSource[type])]));
+  nextState.deletedMeta = Object.fromEntries(DELETED_TYPES.map((type) => [type, stateObject(deletedMetaSource[type])]));
+  const deleted = nextState.deleted;
+  const deletedMeta = nextState.deletedMeta;
+  stateArray(deleted.records).forEach((date) => {
+    const entry = nextState.entries?.[date];
+    if (entry && !shouldApplyTombstone(deletedMeta, "records", date, entry.updatedAt)) {
+      pruneTombstone(nextState, "records", date);
+      return;
+    }
+    delete nextState.entries[date];
+  });
+  if (stateArray(deleted.scores).length) {
+    const ids = new Set(stateArray(deleted.scores));
+    nextState.scores = nextState.scores.filter((score) => {
+      if (!ids.has(score.id)) return true;
+      if (shouldApplyTombstone(deletedMeta, "scores", score.id, score.updatedAt)) return false;
+      pruneTombstone(nextState, "scores", score.id);
+      return true;
+    });
+  }
+  if (stateArray(deleted.reviews).length) {
+    const ids = new Set(stateArray(deleted.reviews));
+    nextState.reviewItems = nextState.reviewItems.filter((item) => {
+      if (!ids.has(item.id)) return true;
+      if (shouldApplyTombstone(deletedMeta, "reviews", item.id, item.updatedAt || item.completedAt)) return false;
+      pruneTombstone(nextState, "reviews", item.id);
+      return true;
+    });
+  }
+  if (stateArray(deleted.tasks).length) {
+    const ids = new Set(stateArray(deleted.tasks));
+    Object.keys(nextState.weekPlans).forEach((date) => {
+      nextState.weekPlans[date] = nextState.weekPlans[date].filter((task) => {
+        if (!ids.has(task.id)) return true;
+        if (shouldApplyTombstone(deletedMeta, "tasks", task.id, task.updatedAt || task.completedAt)) return false;
+        pruneTombstone(nextState, "tasks", task.id);
+        return true;
+      });
+    });
+    const remainingIds = new Set(stateArray(nextState.deleted?.tasks));
+    remainingIds.forEach((id) => delete nextState.tasks[id]);
   }
   return nextState;
 }
 
 function markDeleted(type, id) {
-  state.deleted = state.deleted || { records: [], scores: [], tasks: [], reviews: [] };
-  state.deleted[type] = state.deleted[type] || [];
-  if (id && !state.deleted[type].includes(id)) state.deleted[type].push(id);
+  if (!DELETED_TYPES.includes(type) || !id) return;
+  const { deleted, deletedMeta } = ensureTombstoneContainers();
+  if (id && !deleted[type].includes(id)) deleted[type].push(id);
+  if (id) deletedMeta[type][id] = new Date().toISOString();
+}
+
+function unmarkDeleted(type, id) {
+  if (!DELETED_TYPES.includes(type) || !id) return;
+  const { deleted, deletedMeta } = ensureTombstoneContainers();
+  deleted[type] = deleted[type].filter((item) => item !== id);
+  delete deletedMeta[type][id];
 }
 
 function queueCloudSync() {
+  ensureSyncContainer();
   if (!currentUser || !supabaseConfigured) {
-    state.sync = { ...state.sync, status: currentUser ? "unconfigured" : "local", pending: false };
-    renderSyncStatus();
+    state.sync = {
+      ...state.sync,
+      status: state.sync?.cloudPaused ? "paused" : (currentUser ? "unconfigured" : "local"),
+      pending: false
+    };
+    saveState({ skipCloud: true });
     return;
   }
-  if (state.sync?.localImportPending || state.sync?.cloudPaused) {
+  if (state.sync?.localImportPending) {
     state.sync = { ...state.sync, status: "pending", pending: true };
-    renderSyncStatus();
+    saveState({ skipCloud: true });
+    return;
+  }
+  if (state.sync?.cloudPaused) {
+    state.sync = { ...state.sync, status: "paused", pending: false };
+    saveState({ skipCloud: true });
     return;
   }
   if (navigator && navigator.onLine === false) {
     state.sync = { ...state.sync, status: "offline", pending: true };
-    renderSyncStatus();
+    saveState({ skipCloud: true });
     return;
   }
   state.sync = { ...state.sync, status: "pending", pending: true };
-  renderSyncStatus();
+  saveState({ skipCloud: true });
   window.clearTimeout(syncTimer);
   syncTimer = window.setTimeout(syncNow, 650);
 }
 
 async function syncNow(options = {}) {
   if (!currentUser || !supabaseConfigured) {
+    const reason = currentUser && !supabaseConfigured ? "unconfigured" : "not-authenticated";
+    if (!currentUser) state.user = null;
+    state.sync = {
+      ...state.sync,
+      status: state.sync?.cloudPaused ? "paused" : (currentUser ? "unconfigured" : "local"),
+      pending: false,
+      lastError: reason
+    };
+    const localSaved = saveState({ skipCloud: true });
     renderSyncStatus();
-    return { ok: false, reason: "not-authenticated" };
+    renderAuthPanel();
+    return { ok: false, reason, localSaved };
   }
   if (state.sync?.localImportPending && !options.force) {
     state.sync = { ...state.sync, status: "pending", pending: true };
+    const localSaved = saveState({ skipCloud: true });
     renderSyncStatus();
     renderAuthPanel();
     showToast("检测到旧版本地数据。请在账号面板选择导入云端或保留本机。");
-    return { ok: false, reason: "local-import-pending" };
+    return { ok: false, reason: "local-import-pending", localSaved };
+  }
+  if (state.sync?.cloudPaused && !options.force) {
+    state.sync = { ...state.sync, status: "paused", pending: false };
+    const localSaved = saveState({ skipCloud: true });
+    renderSyncStatus();
+    renderAuthPanel();
+    showToast("云端同步已暂停。若要写入云端，请在账号面板点击“导入云端”。");
+    return { ok: false, reason: "cloud-paused", localSaved };
   }
   if (navigator && navigator.onLine === false) {
     state.sync = { ...state.sync, status: "offline", pending: true };
-    saveState({ skipCloud: true });
-    return { ok: false, reason: "offline" };
+    const localSaved = saveState({ skipCloud: true });
+    renderAuthPanel();
+    return { ok: false, reason: "offline", localSaved };
   }
   try {
     state = enforceCleanStartState(state);
     state.sync = { ...state.sync, status: "syncing", lastError: "" };
     renderSyncStatus();
-    const result = await saveCloudState(state);
-    state.deleted = { records: [], scores: [], tasks: [], reviews: [] };
+    const result = await saveCloudState(state, { force: Boolean(options.force) });
+    if (result?.skipped) {
+      const reason = result.reason || "sync-skipped";
+      if (reason === "not-authenticated") {
+        currentUser = null;
+        state.user = null;
+      }
+      state.sync = {
+        ...state.sync,
+        status: reason === "cloud-paused" ? "paused" : (reason === "local-import-pending" ? "pending" : "local"),
+        pending: reason === "local-import-pending",
+        lastError: reason
+      };
+      const localSaved = saveState({ skipCloud: true });
+      renderSyncStatus();
+      renderAuthPanel();
+      return { ok: false, reason, localSaved };
+    }
     state.sync = {
       status: "synced",
       lastSyncAt: result?.syncedAt || new Date().toISOString(),
@@ -1548,21 +2374,34 @@ async function syncNow(options = {}) {
       cloudPaused: false
     };
     legacyImportPending = false;
-    saveState({ skipCloud: true });
+    const localSaved = saveState({ skipCloud: true });
     renderSyncStatus();
-    return { ok: true, syncedAt: state.sync.lastSyncAt };
+    renderAuthPanel();
+    return { ok: true, syncedAt: state.sync.lastSyncAt, localSaved };
   } catch (error) {
-    const message = error.message || String(error);
+    const message = safeErrorMessage(error, "同步失败");
     state.sync = { ...state.sync, status: "error", lastError: message, pending: true };
-    saveState({ skipCloud: true });
-    setAuthResult("error", "同步失败", friendlySyncError(message));
+    const localSaved = saveState({ skipCloud: true });
+    const syncError = friendlySyncError(message);
+    setAuthResult("error", localSaved ? "同步失败" : "同步状态未写入本机缓存", localSaved
+      ? syncError
+      : `浏览器阻止写入本机缓存；同步错误状态未保存。原始错误：${syncError}`);
     renderSyncStatus();
-    return { ok: false, reason: "sync-error", error: message };
+    renderAuthPanel();
+    return { ok: false, reason: "sync-error", error: message, localSaved };
   }
 }
 
+function syncDisplayStatus(sync = state.sync) {
+  const status = sync?.status;
+  if (sync?.cloudPaused && !["pending", "syncing", "offline", "error"].includes(status)) return "paused";
+  return status;
+}
+
 function renderSyncStatus() {
+  ensureSyncContainer();
   const localLabel = supabaseConfigured ? "未登录" : "仅本机保存";
+  const status = syncDisplayStatus();
   const label = {
     local: localLabel,
     unconfigured: "未配置云端",
@@ -1570,23 +2409,24 @@ function renderSyncStatus() {
     syncing: "同步中",
     synced: "已同步",
     error: "同步失败",
-    offline: "离线草稿"
-  }[state.sync?.status] || localLabel;
+    offline: "离线草稿",
+    paused: "云端暂停"
+  }[status] || localLabel;
   const errorSuffix = state.sync?.status === "error" && state.sync?.lastError
     ? ` · ${shortSyncError(state.sync.lastError)}`
     : "";
   setText("syncStatusText", currentUser ? `${label}${errorSuffix} · ${currentUser.email || "已登录"}` : `${label}${errorSuffix}`);
   const pill = document.getElementById("syncPill");
-  if (pill) pill.dataset.status = state.sync?.status || "local";
+  if (pill) pill.dataset.status = status || "local";
   setText("sideDataSave", state.sync?.lastSyncAt ? `同步 ${state.sync.lastSyncAt.slice(5, 16).replace("T", " ")}` : label);
 }
 
 function shortSyncError(message) {
-  return String(message || "").split(":").slice(0, 2).join(":").slice(0, 42);
+  return safeScalarText(message, "", 200).split(":").slice(0, 2).join(":").slice(0, 42);
 }
 
 function friendlySyncError(message) {
-  const text = String(message || "未知错误");
+  const text = safeScalarText(message, "未知错误", 500);
   if (text.includes("duplicate key")) return `${text}。本地有重复记录，请导出备份后再点同步；系统已保留本机数据。`;
   if (text.includes("no unique or exclusion constraint") || text.includes("42P10")) return `${text}。数据库主键还没更新，请重新执行 supabase/schema.sql 后再同步。`;
   if (text.includes("violates row-level security")) return `${text}。当前账号没有权限写入这条数据，请退出后重新登录。`;
@@ -1616,7 +2456,8 @@ function uid(prefix = "id") {
 }
 
 function parseDate(value) {
-  return new Date(`${value}T00:00:00`);
+  const text = sanitizeDateKey(value) || PLAN_START_DATE;
+  return new Date(`${text}T00:00:00`);
 }
 
 function formatDateISO(date) {
@@ -1657,13 +2498,11 @@ function bindNavigation() {
   }, true);
 
   window.addEventListener("hashchange", () => {
-    const view = currentHashView();
-    if (view) switchView(view);
+    normalizeHashRoute({ moveFocus: true });
   });
 
   window.addEventListener("pageshow", () => {
-    const view = currentHashView() || activeViewId() || "dashboard";
-    switchView(isValidView(view) ? view : "dashboard");
+    normalizeHashRoute();
   });
 
   document.querySelectorAll("[data-jump]").forEach((button) => {
@@ -1676,12 +2515,13 @@ function bindNavigation() {
 }
 
 function bindDensityControls() {
-  document.querySelectorAll("[data-density]").forEach((button) => {
+  document.querySelectorAll(DENSITY_BUTTON_SELECTOR).forEach((button) => {
     button.addEventListener("click", () => {
+      ensureSettingsContainer();
       state.settings.density = button.dataset.density;
-      saveState();
+      const saved = saveState();
       applyDensityMode();
-      showToast(`信息密度已切换为：${densityLabel(state.settings.density)}。`);
+      setLocalSaveResult(saved, "信息密度已切换", `当前为：${densityLabel(state.settings.density)}。`, "信息密度未写入本机缓存");
     });
   });
   applyDensityMode();
@@ -1692,10 +2532,13 @@ function densityLabel(value) {
 }
 
 function applyDensityMode() {
+  ensureSettingsContainer();
   const density = state.settings.density || "balanced";
   document.body.dataset.density = density;
-  document.querySelectorAll("[data-density]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.density === density);
+  document.querySelectorAll(DENSITY_BUTTON_SELECTOR).forEach((button) => {
+    const active = button.dataset.density === density;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
   });
 
   document.querySelectorAll(".detail-section").forEach((section) => {
@@ -1716,14 +2559,12 @@ function applyDensityMode() {
 }
 
 function initRoute() {
-  const view = currentHashView();
-  switchView(isValidView(view) ? view : "dashboard");
-  scrollToTop();
+  normalizeHashRoute();
 }
 
 function setRoute(viewId) {
   if (!isValidView(viewId)) return false;
-  switchView(viewId);
+  switchView(viewId, { moveFocus: true });
   if (window.location.hash !== `#${viewId}`) {
     window.history.replaceState(null, "", `#${viewId}`);
   }
@@ -1743,6 +2584,17 @@ function currentHashView() {
   }
 }
 
+function normalizeHashRoute(options = {}) {
+  const view = currentHashView();
+  const nextView = isValidView(view) ? view : DEFAULT_VIEW_ID;
+  switchView(nextView, options);
+  if (window.location.hash !== `#${nextView}`) {
+    window.history.replaceState(null, "", `#${nextView}`);
+  }
+  scrollToTop();
+  return nextView;
+}
+
 function activeViewId() {
   return document.querySelector(".view.active")?.id || "";
 }
@@ -1751,30 +2603,36 @@ function bindForms() {
   document.getElementById("entryDate").addEventListener("change", loadEntryForm);
   document.getElementById("entryForm").addEventListener("submit", (event) => {
     event.preventDefault();
+    ensureLearningContainers();
     const date = document.getElementById("entryDate").value || planTodayISO();
+    const entry = readEntryFormValues();
+    if (!validateEntryForm(entry)) return;
+    unmarkDeleted("records", date);
     state.entries[date] = {
-      math: readNumber("mathMin"),
-      cs408: readNumber("csMin"),
-      english: readNumber("engMin"),
-      politics: readNumber("polMin"),
-      project: readNumber("projectMin"),
-      quality: Math.min(5, Math.max(1, readNumber("qualityScore") || 3)),
-      mathProblems: readNumber("mathProblems"),
-      csProblems: readNumber("csProblems"),
-      reading: readNumber("readingCount"),
-      newMistakes: readNumber("newMistakes"),
-      fixedMistakes: readNumber("fixedMistakes"),
+      math: entry.math,
+      cs408: entry.cs408,
+      english: entry.english,
+      politics: entry.politics,
+      project: entry.project,
+      quality: entry.quality,
+      mathProblems: entry.mathProblems,
+      csProblems: entry.csProblems,
+      reading: entry.reading,
+      newMistakes: entry.newMistakes,
+      fixedMistakes: entry.fixedMistakes,
       nextTask: document.getElementById("nextTask").value.trim(),
       note: document.getElementById("note").value.trim(),
       updatedAt: new Date().toISOString()
     };
-    saveState();
+    const saved = saveState();
+    clearEntryValidation();
     renderAll();
-    showToast("今日记录已保存，进度已更新。");
+    setLocalSaveResult(saved, "今日记录已保存", "进度已更新。", "今日记录未写入本机缓存");
   });
 
   document.getElementById("scoreForm").addEventListener("submit", (event) => {
     event.preventDefault();
+    const scores = scoreRows();
     const score = {
       id: window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : String(Date.now()),
       date: document.getElementById("scoreDate").value || planTodayISO(),
@@ -1786,36 +2644,159 @@ function bindForms() {
       note: document.getElementById("scoreNote")?.value.trim() || ""
     };
     score.total = score.politics + score.english + score.math + score.cs408;
+    if (!validateScoreForm(score)) return;
     const editingId = event.target.dataset.editingScore;
     if (editingId) {
       score.id = editingId;
       score.updatedAt = new Date().toISOString();
-      state.scores = state.scores.map((item) => item.id === editingId ? score : item);
+      unmarkDeleted("scores", editingId);
+      state.scores = scores.map((item) => item.id === editingId ? score : item);
       delete event.target.dataset.editingScore;
     } else {
       score.updatedAt = new Date().toISOString();
-      state.scores.push(score);
+      unmarkDeleted("scores", score.id);
+      scores.push(score);
     }
     state.scores.sort((a, b) => a.date.localeCompare(b.date));
-    saveState();
+    const saved = saveState();
     event.target.reset();
+    clearScoreValidation();
     document.getElementById("scoreDate").value = planTodayISO();
     renderAll();
-    showToast("模考成绩已保存。");
+    setLocalSaveResult(saved, "模考成绩已保存", "成绩曲线已更新。", "模考成绩未写入本机缓存");
   });
 
   document.getElementById("regenTasks").addEventListener("click", () => renderTasks());
   document.getElementById("generatePlanBtn")?.addEventListener("click", () => {
-    renderTasks(true);
-    showToast("今日计划已重新生成。");
+    const result = renderTasks(true);
+    setLocalSaveResult(result?.saved !== false, "今日计划已重新生成", "今日任务已保存到本机。", "今日计划未写入本机缓存");
+  });
+
+  document.querySelectorAll("#scorePol, #scoreEng, #scoreMath, #scoreCs").forEach((input) => {
+    input.addEventListener("input", clearScoreValidation);
+  });
+
+  document.querySelectorAll(entryFieldSelector()).forEach((input) => {
+    input.addEventListener("input", () => input.removeAttribute("aria-invalid"));
+  });
+}
+
+function readEntryFormValues() {
+  return {
+    math: readOptionalEntryNumber("mathMin", 0),
+    cs408: readOptionalEntryNumber("csMin", 0),
+    english: readOptionalEntryNumber("engMin", 0),
+    politics: readOptionalEntryNumber("polMin", 0),
+    project: readOptionalEntryNumber("projectMin", 0),
+    quality: readOptionalEntryNumber("qualityScore", 3),
+    mathProblems: readOptionalEntryNumber("mathProblems", 0),
+    csProblems: readOptionalEntryNumber("csProblems", 0),
+    reading: readOptionalEntryNumber("readingCount", 0),
+    newMistakes: readOptionalEntryNumber("newMistakes", 0),
+    fixedMistakes: readOptionalEntryNumber("fixedMistakes", 0)
+  };
+}
+
+function readOptionalEntryNumber(id, fallback) {
+  const raw = document.getElementById(id)?.value.trim() || "";
+  if (!raw) return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : Number.NaN;
+}
+
+function validateEntryForm(entry) {
+  const fields = entryFieldRules(entry).map((field) => ({
+    ...field,
+    input: document.getElementById(field.id),
+    valid: isValidEntryValue(field.value, field.min, field.max)
+  }));
+  const invalidField = fields.find((field) => !field.valid);
+  fields.forEach((field) => field.input?.setAttribute("aria-invalid", String(!field.valid)));
+  if (!invalidField) return true;
+  invalidField.input?.focus();
+  showToast("今日记录的时长、题量和错题数需填写为非负整数，质量评分为 1-5 的整数。");
+  return false;
+}
+
+function entryFieldRules(entry) {
+  return [
+    { id: "mathMin", value: entry.math, min: 0 },
+    { id: "csMin", value: entry.cs408, min: 0 },
+    { id: "engMin", value: entry.english, min: 0 },
+    { id: "polMin", value: entry.politics, min: 0 },
+    { id: "projectMin", value: entry.project, min: 0 },
+    { id: "qualityScore", value: entry.quality, min: 1, max: 5 },
+    { id: "mathProblems", value: entry.mathProblems, min: 0 },
+    { id: "csProblems", value: entry.csProblems, min: 0 },
+    { id: "readingCount", value: entry.reading, min: 0 },
+    { id: "newMistakes", value: entry.newMistakes, min: 0 },
+    { id: "fixedMistakes", value: entry.fixedMistakes, min: 0 }
+  ];
+}
+
+function isValidEntryValue(value, min, max = Infinity) {
+  return Number.isInteger(value) && value >= min && value <= max;
+}
+
+function entryFieldSelector() {
+  return "#mathMin, #csMin, #engMin, #polMin, #projectMin, #qualityScore, #mathProblems, #csProblems, #readingCount, #newMistakes, #fixedMistakes";
+}
+
+function clearEntryValidation() {
+  document.querySelectorAll(entryFieldSelector()).forEach((input) => {
+    input.removeAttribute("aria-invalid");
+  });
+}
+
+function validateScoreForm(score) {
+  const fields = scoreFieldRules(score).map((field) => ({
+    ...field,
+    input: document.getElementById(field.id),
+    valid: isValidScoreValue(field.value, field.max)
+  }));
+  const invalidField = fields.find((field) => !field.valid);
+  const hasScore = fields.some((field) => field.value > 0);
+  fields.forEach((field) => {
+    field.input?.setAttribute("aria-invalid", String(Boolean(invalidField) ? !field.valid : !hasScore));
+  });
+  if (!invalidField && hasScore) return true;
+  (invalidField?.input || fields[0]?.input)?.focus();
+  if (invalidField) {
+    showToast("模考分数需填写为整数：政治/英语 0-100，数学/408 0-150。");
+    return false;
+  }
+  showToast("请至少填写一科模考分数。");
+  return false;
+}
+
+function scoreFieldRules(score) {
+  return [
+    { id: "scorePol", value: score.politics, max: 100 },
+    { id: "scoreEng", value: score.english, max: 100 },
+    { id: "scoreMath", value: score.math, max: 150 },
+    { id: "scoreCs", value: score.cs408, max: 150 }
+  ];
+}
+
+function isValidScoreValue(value, max) {
+  return Number.isInteger(value) && value >= 0 && value <= max;
+}
+
+function clearScoreValidation() {
+  document.querySelectorAll("#scorePol, #scoreEng, #scoreMath, #scoreCs").forEach((input) => {
+    input.removeAttribute("aria-invalid");
   });
 }
 
 function bindSyllabusTabs() {
   document.querySelectorAll(".seg").forEach((button) => {
     button.addEventListener("click", () => {
-      document.querySelectorAll(".seg").forEach((item) => item.classList.remove("active"));
+      document.querySelectorAll(".seg").forEach((item) => {
+        item.classList.remove("active");
+        item.setAttribute("aria-pressed", "false");
+      });
       button.classList.add("active");
+      button.setAttribute("aria-pressed", "true");
       renderSyllabus(button.dataset.syllabus);
     });
   });
@@ -1826,50 +2807,267 @@ function bindSyllabusTabs() {
 
 function bindImportExport() {
   document.getElementById("exportBtn").addEventListener("click", () => {
-    state.settings.lastExportDate = todayISO();
-    saveState();
-    exportStateJson("dashboard");
-    renderStorageStatus();
+    downloadStateBackup("dashboard");
   });
 
   document.getElementById("importFile").addEventListener("change", (event) => {
-    const file = event.target.files[0];
+    const input = event.target;
+    const file = input.files?.[0];
     if (!file) return;
+    if (!isLikelyJsonImportFile(file)) {
+      input.value = "";
+      setAuthResult("error", "导入失败", "请选择 .json 备份文件。");
+      return;
+    }
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      input.value = "";
+      setAuthResult("error", "导入失败", "备份文件超过 10MB，请确认是否选错文件。");
+      return;
+    }
+    setImportBusy(true);
+    setAuthResult("pending", "正在导入备份", "正在读取并验证 JSON 备份。");
+    const finishImport = () => {
+      input.value = "";
+      setImportBusy(false);
+    };
     const reader = new FileReader();
     reader.onload = () => {
+      let imported;
       try {
-        const imported = JSON.parse(reader.result);
-        const snapshot = createLocalSnapshot("before-import");
-        state = migrateState(imported);
-        state.snapshots = [snapshot, ...(state.snapshots || [])].slice(0, 5);
-        saveState();
-        renderAll();
-        showToast("导入完成，已保留导入前快照。");
+        imported = JSON.parse(reader.result);
       } catch {
-        showToast("导入失败：不是有效的 JSON 数据。");
+        setAuthResult("error", "导入失败", "不是有效的 JSON 数据。");
+        finishImport();
+        return;
+      }
+      try {
+        const importPayload = extractImportStatePayload(imported);
+        if (!importPayload) {
+          setAuthResult("error", "导入失败", "请选择本应用导出的 JSON 备份。");
+          return;
+        }
+        const migratedState = migrateState(importPayload);
+        const nextState = protectImportedSession(migratedState);
+        if (!window.confirm(importConfirmationMessage(nextState))) {
+          setAuthResult("idle", "导入已取消", "当前数据未改变。");
+          return;
+        }
+        const snapshot = createLocalSnapshot("before-import");
+        state = nextState;
+        state.snapshots = [snapshot, ...snapshotRows(state.snapshots)].slice(0, 5);
+        const saved = saveState();
+        renderAll();
+        renderSnapshotPanel();
+        setLocalSaveResult(saved, "导入完成", "已保留导入前快照，可在账号面板恢复。", "导入未写入本机缓存");
+      } catch {
+        setAuthResult("error", "导入失败", "处理备份时出错，请导出当前数据后重试。");
+      } finally {
+        finishImport();
       }
     };
-    reader.readAsText(file);
+    reader.onerror = () => {
+      setAuthResult("error", "导入失败", "无法读取这个文件。");
+      finishImport();
+    };
+    try {
+      reader.readAsText(file);
+    } catch {
+      setAuthResult("error", "导入失败", "无法读取这个文件。");
+      finishImport();
+    }
   });
 }
 
+function setImportBusy(isBusy) {
+  const input = document.getElementById("importFile");
+  const label = input?.closest(".import-label");
+  if (input) {
+    input.disabled = isBusy;
+    input.setAttribute("aria-busy", String(isBusy));
+  }
+  label?.setAttribute("aria-busy", String(isBusy));
+  label?.setAttribute("aria-disabled", String(isBusy));
+}
+
+function isLikelyJsonImportFile(file) {
+  const name = String(file?.name || "").toLowerCase();
+  const type = String(file?.type || "").toLowerCase();
+  return name.endsWith(".json") || type === "application/json" || type === "text/json" || type.endsWith("+json");
+}
+
+function currentSessionUser(previousUser = null, user = currentUser) {
+  if (!isPlainStateObject(user)) return null;
+  const previous = stateObject(previousUser);
+  const id = sanitizeUserText(user.id, 160);
+  const email = sanitizeUserText(user.email, 254) || sanitizeUserText(previous.email, 254);
+  if (!id && !email) return null;
+  return {
+    id,
+    email
+  };
+}
+
+function syncStateAfterJsonImport(previousSync = {}, user = currentUser, cloudReady = supabaseConfigured) {
+  const cloudPaused = sanitizeBoolean(previousSync?.cloudPaused);
+  const canSync = Boolean(user && cloudReady && !cloudPaused);
+  return {
+    status: cloudPaused ? "paused" : (user && !cloudReady ? "unconfigured" : canSync ? "pending" : "local"),
+    lastSyncAt: "",
+    lastError: "",
+    pending: canSync,
+    localImportPending: false,
+    cloudPaused
+  };
+}
+
+function protectImportedSession(nextState, previousState = state, user = currentUser, cloudReady = supabaseConfigured) {
+  return {
+    ...nextState,
+    sync: syncStateAfterJsonImport(previousState?.sync, user, cloudReady),
+    user: currentSessionUser(previousState?.user, user)
+  };
+}
+
+function isPlainImportRecord(payload) {
+  return Boolean(payload && typeof payload === "object" && !Array.isArray(payload));
+}
+
+function hasImportStateKeys(payload) {
+  if (!isPlainImportRecord(payload)) return false;
+  const stateKeys = new Set([
+    "entries",
+    "scores",
+    "topics",
+    "topicEvidence",
+    "tasks",
+    "weekPlans",
+    "reviewItems",
+    "resources",
+    "project",
+    "settings",
+    "customTasks",
+    "deleted",
+    "deletedMeta",
+    "deleted_meta",
+    "cleanStartArchive",
+    "snapshots"
+  ]);
+  return Object.keys(payload).some((key) => stateKeys.has(key));
+}
+
+function extractImportStatePayload(payload) {
+  if (!isPlainImportRecord(payload)) return null;
+  if (hasImportStateKeys(payload)) return payload;
+  const nested = isPlainImportRecord(payload.payload) ? payload.payload : payload.state;
+  return hasImportStateKeys(nested) ? nested : null;
+}
+
+function isImportPayloadCandidate(payload) {
+  return Boolean(extractImportStatePayload(payload));
+}
+
+function importConfirmationMessage(nextState) {
+  const counts = importStateCounts(nextState);
+  return [
+    "确认导入这份备份？当前本机数据会先保存为快照。",
+    `记录 ${counts.entries} 天，模考 ${counts.scores} 条，周计划任务 ${counts.weekTasks} 项。`,
+    `复盘 ${counts.reviews} 项，自定义任务 ${counts.customTasks} 项，资料进度 ${counts.resources} 项。`
+  ].join("\n");
+}
+
+function importStateCounts(nextState) {
+  const source = stateObject(nextState);
+  const weekTasks = Object.values(stateObject(source.weekPlans)).reduce(
+    (sum, tasks) => sum + stateArray(tasks).filter(isPlainStateObject).length,
+    0
+  );
+  return {
+    entries: Object.keys(stateObject(source.entries)).length,
+    scores: stateArray(source.scores).filter(isPlainStateObject).length,
+    weekTasks,
+    reviews: stateArray(source.reviewItems).filter(isPlainStateObject).length,
+    customTasks: stateArray(source.customTasks).filter(isPlainStateObject).length,
+    resources: Object.keys(stateObject(source.resources)).length
+  };
+}
+
+function downloadStateBackup(label = "dashboard") {
+  try {
+    exportStateJson(label);
+  } catch (error) {
+    setAuthResult("error", "备份导出失败", `本次未更新备份状态。请检查浏览器下载权限后重试：${safeErrorMessage(error, "浏览器下载失败")}`);
+    return false;
+  }
+  ensureSettingsContainer();
+  state.settings.lastExportDate = todayISO();
+  const saved = saveState();
+  renderStorageStatus();
+  setLocalSaveResult(saved, "备份已导出", "JSON 备份已下载，备份状态已更新。", "备份状态未写入本机缓存");
+  return true;
+}
+
 function exportStateJson(label = "dashboard") {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(exportStatePayload(state), null, 2)], { type: "application/json" });
   const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
+  const href = URL.createObjectURL(blob);
+  link.href = href;
   link.download = `pku-swm-${label}-${todayISO()}.json`;
-  link.click();
-  URL.revokeObjectURL(link.href);
+  try {
+    link.click();
+  } finally {
+    URL.revokeObjectURL(href);
+  }
+}
+
+function snapshotStatePayload(sourceState = state) {
+  const source = stateObject(sourceState);
+  const payload = {
+    schemaVersion: source.schemaVersion,
+    entries: source.entries,
+    scores: source.scores,
+    topics: source.topics,
+    topicEvidence: source.topicEvidence,
+    tasks: source.tasks,
+    weekPlans: source.weekPlans,
+    project: source.project,
+    resources: source.resources,
+    settings: source.settings,
+    customTasks: source.customTasks,
+    reviewItems: source.reviewItems,
+    deleted: source.deleted,
+    deletedMeta: source.deletedMeta,
+    cleanStartArchive: source.cleanStartArchive
+  };
+  return cloneJson(payload);
+}
+
+function sanitizeExportPayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
+  return sanitizeSnapshotPayload(payload);
+}
+
+function sanitizeExportSnapshots(snapshots) {
+  return sanitizeSnapshots(snapshots).map((snapshot) => ({
+    ...snapshot,
+    payload: sanitizeExportPayload(snapshot.payload)
+  }));
+}
+
+function exportStatePayload(sourceState = state) {
+  const source = stateObject(sourceState);
+  const payload = sanitizeExportPayload(snapshotStatePayload(source));
+  payload.snapshots = sanitizeExportSnapshots(source.snapshots || []);
+  return payload;
 }
 
 function createLocalSnapshot(reason = "manual") {
   const snapshot = {
     reason,
     createdAt: new Date().toISOString(),
-    payload: JSON.parse(JSON.stringify(state))
+    payload: snapshotStatePayload(state)
   };
-  state.snapshots = [snapshot, ...(state.snapshots || [])].slice(0, 5);
-  if (currentUser && supabaseConfigured) {
+  state.snapshots = [snapshot, ...snapshotRows(state.snapshots)].slice(0, 5);
+  if (currentUser && supabaseConfigured && !state.sync?.cloudPaused && !state.sync?.localImportPending && !legacyImportPending) {
     saveCloudSnapshot(state, reason).catch(() => {});
   }
   return snapshot;
@@ -1879,6 +3077,7 @@ function bindQuickEntry() {
   document.querySelectorAll("[data-preset]").forEach((button) => {
     button.addEventListener("click", () => {
       applyPreset(button.dataset.preset);
+      clearEntryValidation();
     });
   });
 
@@ -1887,6 +3086,7 @@ function bindQuickEntry() {
       const [id, amount] = button.dataset.add.split(":");
       const current = Number(document.getElementById(id).value) || 0;
       document.getElementById(id).value = current + Number(amount);
+      document.getElementById(id)?.removeAttribute("aria-invalid");
     });
   });
 }
@@ -1907,37 +3107,149 @@ function bindRecords() {
 function bindSettings() {
   document.getElementById("settingsForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
-    state.settings.weekdayMinutes = readNumber("settingWeekdayMinutes") || defaultSettings.weekdayMinutes;
-    state.settings.weekendMinutes = readNumber("settingWeekendMinutes") || defaultSettings.weekendMinutes;
-    state.settings.taskCount = Math.min(4, Math.max(3, readNumber("settingTaskCount") || defaultSettings.taskCount));
-    state.settings.coreRatio = Math.min(85, Math.max(55, readNumber("settingCoreRatio") || defaultSettings.coreRatio));
-    state.settings.targetExamDate = document.getElementById("settingTargetExamDate")?.value || DEFAULT_EXAM_DATE;
-    state.settings.reviewDays = parseReviewDays(document.getElementById("settingReviewDays").value);
-    state.settings.planControls = normalizePlanControls({
-      planIntensity: document.getElementById("settingPlanIntensity")?.value,
-      focusSubject: document.getElementById("settingFocusSubject")?.value,
-      experienceTrack: document.getElementById("settingExperienceTrack")?.value,
-      maxNewTopics: readNumber("settingMaxNewTopics"),
-      reviewLoad: readNumber("settingReviewLoad"),
-      rollingWindowDays: readNumber("settingRollingWindowDays"),
-      enabledSubjects: Array.from(document.querySelectorAll("#settingEnabledSubjects input:checked")).map((input) => input.value),
-    });
-    saveState();
+    ensureSettingsContainer();
+    const numericSettings = readSettingsNumericValues();
+    if (!validateSettingsNumericForm(numericSettings)) return;
+    const reviewDays = parseReviewDays(document.getElementById("settingReviewDays").value);
+    if (!validateReviewDaysSetting(reviewDays)) return;
+    const nextSettings = {
+      ...state.settings,
+      weekdayMinutes: numericSettings.weekdayMinutes,
+      weekendMinutes: numericSettings.weekendMinutes,
+      taskCount: numericSettings.taskCount,
+      coreRatio: numericSettings.coreRatio,
+      targetExamDate: document.getElementById("settingTargetExamDate")?.value || DEFAULT_EXAM_DATE,
+      reviewDays,
+      planControls: normalizePlanControls({
+        planIntensity: document.getElementById("settingPlanIntensity")?.value,
+        focusSubject: document.getElementById("settingFocusSubject")?.value,
+        experienceTrack: document.getElementById("settingExperienceTrack")?.value,
+        maxNewTopics: numericSettings.maxNewTopics,
+        reviewLoad: numericSettings.reviewLoad,
+        rollingWindowDays: numericSettings.rollingWindowDays,
+        enabledSubjects: Array.from(document.querySelectorAll("#settingEnabledSubjects input:checked")).map((input) => input.value),
+      })
+    };
+    state.settings = nextSettings;
+    const saved = saveState();
     renderAll();
-    showToast("设置已保存。");
+    setLocalSaveResult(saved, "设置已保存", "新的计划参数已应用。", "设置未写入本机缓存");
   });
 
   document.getElementById("customTaskForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
+    ensureSettingsContainer();
     const subject = document.getElementById("customSubject").value.trim();
     const text = document.getElementById("customText").value.trim();
     const minutes = readNumber("customMinutes");
-    if (!subject || !text || !minutes) return;
-      state.customTasks.push({ id: String(Date.now()), subject, text, minutes });
-    saveState();
+    if (!validateCustomTaskForm({ subject, text, minutes })) return;
+    const updatedAt = new Date().toISOString();
+    customTaskRows().push({ id: String(Date.now()), subject, text, minutes, updatedAt });
+    state.settings.customTasksUpdatedAt = updatedAt;
+    const saved = saveState();
     event.target.reset();
+    clearCustomTaskValidation();
     renderSettings();
-    showToast("自定义任务已添加。");
+    setLocalSaveResult(saved, "自定义任务已添加", "任务模板已加入设置页列表。", "自定义任务未写入本机缓存");
+  });
+
+  document.querySelectorAll("#customSubject, #customText, #customMinutes").forEach((input) => {
+    input.addEventListener("input", () => input.removeAttribute("aria-invalid"));
+  });
+
+  document.querySelectorAll(settingsNumericFieldSelector()).forEach((input) => {
+    input.addEventListener("input", () => input.removeAttribute("aria-invalid"));
+  });
+
+  document.getElementById("settingReviewDays")?.addEventListener("input", () => {
+    document.getElementById("settingReviewDays")?.removeAttribute("aria-invalid");
+  });
+}
+
+function readSettingsNumericValues() {
+  return {
+    weekdayMinutes: readRequiredIntegerSetting("settingWeekdayMinutes"),
+    weekendMinutes: readRequiredIntegerSetting("settingWeekendMinutes"),
+    taskCount: readRequiredIntegerSetting("settingTaskCount"),
+    coreRatio: readRequiredIntegerSetting("settingCoreRatio"),
+    maxNewTopics: readRequiredIntegerSetting("settingMaxNewTopics"),
+    reviewLoad: readRequiredIntegerSetting("settingReviewLoad"),
+    rollingWindowDays: readRequiredIntegerSetting("settingRollingWindowDays")
+  };
+}
+
+function readRequiredIntegerSetting(id) {
+  const raw = document.getElementById(id)?.value.trim() || "";
+  if (!raw) return Number.NaN;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : Number.NaN;
+}
+
+function validateSettingsNumericForm(values) {
+  const fields = settingsNumericFieldRules(values).map((field) => ({
+    ...field,
+    input: document.getElementById(field.id),
+    valid: isValidSettingNumber(field.value, field.min, field.max)
+  }));
+  const invalidField = fields.find((field) => !field.valid);
+  fields.forEach((field) => field.input?.setAttribute("aria-invalid", String(!field.valid)));
+  if (!invalidField) return true;
+  invalidField.input?.focus();
+  showToast("设置数字需填写为整数，并保持在字段标注范围内。");
+  return false;
+}
+
+function settingsNumericFieldRules(values) {
+  return [
+    { id: "settingWeekdayMinutes", value: values.weekdayMinutes, min: 90, max: 600 },
+    { id: "settingWeekendMinutes", value: values.weekendMinutes, min: 120, max: 720 },
+    { id: "settingTaskCount", value: values.taskCount, min: 3, max: 4 },
+    { id: "settingCoreRatio", value: values.coreRatio, min: 55, max: 85 },
+    { id: "settingMaxNewTopics", value: values.maxNewTopics, min: 0, max: 4 },
+    { id: "settingReviewLoad", value: values.reviewLoad, min: 15, max: 60 },
+    { id: "settingRollingWindowDays", value: values.rollingWindowDays, min: 7, max: 60 }
+  ];
+}
+
+function isValidSettingNumber(value, min, max) {
+  return Number.isInteger(value) && value >= min && value <= max;
+}
+
+function settingsNumericFieldSelector() {
+  return "#settingWeekdayMinutes, #settingWeekendMinutes, #settingTaskCount, #settingCoreRatio, #settingMaxNewTopics, #settingReviewLoad, #settingRollingWindowDays";
+}
+
+function validateReviewDaysSetting(reviewDays) {
+  const input = document.getElementById("settingReviewDays");
+  const valid = Array.isArray(reviewDays) && reviewDays.length > 0;
+  input?.setAttribute("aria-invalid", String(!valid));
+  if (valid) return true;
+  input?.focus();
+  showToast("复盘间隔请填写 1-365 的整数，用英文逗号分隔。");
+  return false;
+}
+
+function validateCustomTaskForm({ subject, text, minutes }) {
+  const fields = [
+    [document.getElementById("customSubject"), Boolean(subject)],
+    [document.getElementById("customText"), Boolean(text)],
+    [document.getElementById("customMinutes"), isValidCustomTaskMinutes(minutes)]
+  ];
+  fields.forEach(([input, valid]) => input?.setAttribute("aria-invalid", String(!valid)));
+  const firstInvalid = fields.find(([, valid]) => !valid)?.[0];
+  if (!firstInvalid) return true;
+  firstInvalid.focus();
+  showToast("请补全自定义任务的科目、任务，并把分钟数填写为 10-240 的整数。");
+  return false;
+}
+
+function isValidCustomTaskMinutes(minutes) {
+  return Number.isInteger(minutes) && minutes >= 10 && minutes <= 240;
+}
+
+function clearCustomTaskValidation() {
+  document.querySelectorAll("#customSubject, #customText, #customMinutes").forEach((input) => {
+    input.removeAttribute("aria-invalid");
   });
 }
 
@@ -1947,64 +3259,123 @@ function bindAuth() {
     authAction("login");
   });
   document.getElementById("authOpenBtn")?.addEventListener("click", () => {
-    renderAuthPanel();
-    document.getElementById("authDialog")?.showModal();
+    openAuthDialog();
   });
   document.getElementById("authCloseBtn")?.addEventListener("click", () => {
-    document.getElementById("authDialog")?.close();
+    closeAuthDialog();
   });
   document.getElementById("signInBtn")?.addEventListener("click", () => authAction("login"));
   document.getElementById("signUpBtn")?.addEventListener("click", () => authAction("signup"));
-  document.getElementById("signOutBtn")?.addEventListener("click", async () => {
-    try {
-      await signOut();
-      currentUser = null;
-      state.user = null;
-      state.sync = { status: "local", lastSyncAt: "", lastError: "", pending: false };
-      saveState({ skipCloud: true });
-      renderAll();
-      showToast("已退出账号，当前数据保留在本机。");
-    } catch (error) {
-      showToast(`退出失败：${error.message || error}`);
-    }
-  });
-  document.getElementById("syncNowBtn")?.addEventListener("click", () => syncNow());
-  document.getElementById("downloadBackupBtn")?.addEventListener("click", () => exportStateJson("manual-backup"));
-  document.getElementById("pushLocalBtn")?.addEventListener("click", async () => {
-    createLocalSnapshot("before-cloud-import");
-    state.sync = { ...state.sync, localImportPending: false, cloudPaused: false };
-    legacyImportPending = false;
-    await syncNow({ force: true });
-    saveState({ skipCloud: true });
-    renderAuthPanel();
-    showToast("已尝试导入云端。");
-  });
-  document.getElementById("keepLocalBtn")?.addEventListener("click", () => {
-    state.sync = { ...state.sync, localImportPending: false, cloudPaused: true, status: "local", pending: false };
-    legacyImportPending = false;
-    saveState({ skipCloud: true });
-    renderAuthPanel();
-    document.getElementById("authDialog")?.close();
-  });
+  document.getElementById("signOutBtn")?.addEventListener("click", signOutAction);
+  document.getElementById("syncNowBtn")?.addEventListener("click", manualSyncNow);
+  document.getElementById("downloadBackupBtn")?.addEventListener("click", () => downloadStateBackup("manual-backup"));
+  document.getElementById("pushLocalBtn")?.addEventListener("click", pushLocalToCloud);
+  document.getElementById("keepLocalBtn")?.addEventListener("click", () => keepLocalOnly(document.getElementById("authDialog")));
   document.getElementById("resetLocalBtn")?.addEventListener("click", resetLocalData);
+  document.querySelectorAll("#authEmail, #authPassword").forEach((input) => {
+    input.addEventListener("input", clearAuthValidation);
+  });
   document.documentElement.dataset.authBound = "1";
 }
 
+function openAuthDialog(dialog = document.getElementById("authDialog")) {
+  renderAuthPanel();
+  dialog?.showModal();
+  document.getElementById("authEmail")?.focus();
+}
+
+function closeAuthDialog(dialog = document.getElementById("authDialog")) {
+  if (dialog?.open) dialog.close();
+  document.getElementById("authOpenBtn")?.focus();
+}
+
+async function signOutAction() {
+  try {
+    setAuthBusy(true);
+    setAuthResult("pending", "正在退出", "正在断开云端会话，本机数据会保留。");
+    await signOut();
+    const saved = clearLocalSessionState("");
+    renderAll();
+    setLocalSaveResult(saved, "已退出账号", "当前数据已保留在本机。", "退出状态未写入本机缓存");
+  } catch (error) {
+    setAuthResult("error", "退出失败", friendlyAuthError(error));
+  } finally {
+    setAuthBusy(false);
+    renderAuthPanel();
+  }
+}
+
+function clearLocalSessionState(lastError = "not-authenticated") {
+  currentUser = null;
+  state.user = null;
+  state.sync = {
+    status: "local",
+    lastSyncAt: "",
+    lastError,
+    pending: false,
+    localImportPending: false,
+    cloudPaused: false
+  };
+  legacyImportPending = false;
+  const saved = saveState({ skipCloud: true });
+  renderSyncStatus();
+  renderAuthPanel();
+  return saved;
+}
+
+async function manualSyncNow() {
+  try {
+    setAuthBusy(true);
+    setAuthResult("pending", "正在同步", "正在检查本机与云端状态。");
+    const result = await syncNow();
+    renderAuthPanel();
+    if (result?.ok) {
+      const syncedAt = state.sync?.lastSyncAt ? state.sync.lastSyncAt.slice(5, 16).replace("T", " ") : "刚刚";
+      setLocalSaveResult(result.localSaved !== false, "同步完成", `本机数据已写入云端。最近同步：${syncedAt}`, "同步状态未写入本机缓存");
+      return;
+    }
+    if (result?.localSaved === false && result?.reason !== "sync-error") {
+      setLocalSaveResult(false, "同步状态已保存", "同步状态已写入本机缓存。", "同步状态未写入本机缓存");
+      return;
+    }
+    if (result?.reason === "cloud-paused") {
+      setAuthResult("pending", "云端同步暂停", "当前保留本机数据。若要恢复云端同步，请点击“导入云端”。");
+      return;
+    }
+    if (result?.reason === "local-import-pending") {
+      setAuthResult("pending", "等待迁移选择", "检测到旧版本地数据。请先下载备份，再选择“导入云端”或“保留本机”。");
+      return;
+    }
+    if (result?.reason === "offline") {
+      setAuthResult("error", "当前离线", "网络恢复后会继续同步，本机数据已保留。");
+      return;
+    }
+    if (result?.reason === "unconfigured") {
+      setAuthResult("error", "云端未配置", "请先配置 Supabase URL 和 publishable key。");
+      return;
+    }
+    if (result?.reason === "not-authenticated") {
+      setAuthResult("error", "未登录", "请先登录账号，再同步到云端。");
+      return;
+    }
+    if (result?.reason !== "sync-error") {
+      setAuthResult("error", "同步未完成", friendlySyncError(result?.error || state.sync?.lastError || result?.reason || "未知错误"));
+    }
+  } finally {
+    setAuthBusy(false);
+    renderAuthPanel();
+  }
+}
+
 async function authAction(mode) {
-  const email = document.getElementById("authEmail")?.value.trim();
-  const password = document.getElementById("authPassword")?.value;
-  if (!email || !password) {
-    setAuthResult("error", "缺少邮箱或密码", "请先填写邮箱和至少 6 位密码。");
+  const email = document.getElementById("authEmail")?.value.trim() || "";
+  const password = document.getElementById("authPassword")?.value || "";
+  const authValidation = validateAuthForm({ email, password });
+  if (!authValidation.valid) {
+    setAuthResult("error", authValidation.title, authValidation.message);
     return;
   }
-  if (!isLikelyEmail(email)) {
-    setAuthResult("error", "邮箱格式不正确", "请填写真实可用邮箱。Supabase 会拒绝 example.com 等测试域名。");
-    return;
-  }
-  if (password.length < 6) {
-    setAuthResult("error", "密码太短", "Supabase 要求密码至少 6 位。建议使用字母、数字和符号组合。");
-    return;
-  }
+  clearAuthValidation();
   if (!supabaseConfigured) {
     setAuthResult("error", "云端未配置", "Vercel 还没有配置 Supabase URL 或 publishable key。");
     return;
@@ -2014,31 +3385,63 @@ async function authAction(mode) {
     setAuthResult("pending", mode === "signup" ? "正在注册" : "正在登录", "正在连接 Supabase Auth，请稍等。");
     const result = mode === "signup" ? await signUpWithEmail(email, password) : await signInWithEmail(email, password);
     if (mode === "signup" && result?.needsEmailConfirmation) {
-      currentUser = null;
-      state.user = null;
-      renderAuthPanel();
+      clearLocalSessionState("email-confirmation-required");
       setAuthResult("pending", "注册已提交，等待邮箱确认", "请打开确认邮件；确认后回到这里点击“登录并同步”。当前本机数据不会丢。");
       return;
     }
     currentUser = result?.user || result || null;
     if (currentUser) {
       state.user = { id: currentUser.id, email: currentUser.email || email };
-      await pullCloudState();
+      const pullResult = await pullCloudState();
+      if (!pullResult?.ok) {
+        renderAll();
+        renderAuthPanel();
+        if (pullResult?.reason === "cloud-paused") {
+          setAuthResult("pending", "已登录，云端同步暂停", "当前保留本机数据。若要恢复云端同步，请在账号面板点击“导入云端”。");
+          showToast("已登录，云端同步仍保持暂停。");
+          return;
+        }
+        if (pullResult?.reason === "local-import-pending") {
+          setAuthResult("pending", "已登录，等待迁移选择", "检测到旧版本地数据。请先下载备份，再选择“导入云端”或“保留本机”。");
+          showToast("已登录，请在账号面板选择本地数据迁移方式。");
+          return;
+        }
+        const pullMessage = pullResult?.error || state.sync?.lastError || "拉取云端失败";
+        setAuthResult("error", `${mode === "signup" ? "注册成功，但拉取云端失败" : "登录成功，但拉取云端失败"}`, friendlySyncError(pullMessage));
+        showToast("账号已登录，但本次未自动写入云端。请确认账号面板里的错误后再手动同步。");
+        return;
+      }
+      if (pullResult.localSaved === false) {
+        renderAll();
+        renderAuthPanel();
+        setLocalSaveResult(false, "云端拉取完成", "云端数据已写入本机缓存。", "云端拉取未写入本机缓存");
+        return;
+      }
       const syncResult = await syncNow();
       renderAll();
       renderAuthPanel();
       if (!syncResult?.ok) {
+        if (syncResult?.reason === "cloud-paused") {
+          setAuthResult("pending", "已登录，云端同步暂停", "当前保留本机数据。若要恢复云端同步，请在账号面板点击“导入云端”。");
+          showToast("已登录，云端同步仍保持暂停。");
+          return;
+        }
+        if (syncResult?.reason === "local-import-pending") {
+          setAuthResult("pending", "已登录，等待迁移选择", "检测到旧版本地数据。请先下载备份，再选择“导入云端”或“保留本机”。");
+          showToast("已登录，请在账号面板选择本地数据迁移方式。");
+          return;
+        }
         const message = syncResult?.error || state.sync?.lastError || "同步未完成";
         setAuthResult("error", `${mode === "signup" ? "注册成功，但同步失败" : "登录成功，但同步失败"}`, friendlySyncError(message));
         showToast("账号已登录，但云同步未完成。请查看账号面板里的错误详情。");
         return;
       }
-      setAuthResult("success", mode === "signup" ? "注册成功" : "登录成功", `当前账号：${currentUser.email || email}。数据已开启云同步。`);
-      showToast(mode === "signup" ? "注册成功，已登录并开启云同步。" : "登录成功，数据已同步。");
+      const localSaved = syncResult.localSaved !== false;
+      setLocalSaveResult(localSaved, mode === "signup" ? "注册成功" : "登录成功", `当前账号：${currentUser.email || email}。数据已开启云同步。`, "登录状态未写入本机缓存");
+      if (localSaved) showToast(mode === "signup" ? "注册成功，已登录并开启云同步。" : "登录成功，数据已同步。");
       return;
     }
-    state.user = null;
-    renderAuthPanel();
+    clearLocalSessionState(result?.needsEmailConfirmation ? "email-confirmation-required" : "not-authenticated");
     setAuthResult("pending", "注册已提交", result?.needsEmailConfirmation
       ? "请先打开邮箱确认链接，再回到这里登录。"
       : "如未自动登录，请检查邮箱确认后再登录。");
@@ -2049,7 +3452,40 @@ async function authAction(mode) {
   }
 }
 
+function validateAuthForm({ email, password }) {
+  const emailInput = document.getElementById("authEmail");
+  const passwordInput = document.getElementById("authPassword");
+  if (!email || !password) {
+    emailInput?.setAttribute("aria-invalid", String(!email));
+    passwordInput?.setAttribute("aria-invalid", String(!password));
+    (!email ? emailInput : passwordInput)?.focus();
+    return { valid: false, title: "缺少邮箱或密码", message: "请先填写邮箱和至少 6 位密码。" };
+  }
+  const emailValid = isLikelyEmail(email);
+  emailInput?.setAttribute("aria-invalid", String(!emailValid));
+  passwordInput?.removeAttribute("aria-invalid");
+  if (!emailValid) {
+    emailInput?.focus();
+    return { valid: false, title: "邮箱格式不正确", message: "请填写真实可用邮箱。Supabase 会拒绝 example.com 等测试域名。" };
+  }
+  const passwordValid = password.length >= 6;
+  passwordInput?.setAttribute("aria-invalid", String(!passwordValid));
+  emailInput?.removeAttribute("aria-invalid");
+  if (!passwordValid) {
+    passwordInput?.focus();
+    return { valid: false, title: "密码太短", message: "Supabase 要求密码至少 6 位。建议使用字母、数字和符号组合。" };
+  }
+  return { valid: true, title: "", message: "" };
+}
+
+function clearAuthValidation() {
+  document.querySelectorAll("#authEmail, #authPassword").forEach((input) => {
+    input.removeAttribute("aria-invalid");
+  });
+}
+
 function renderAuthPanel() {
+  ensureSyncContainer();
   const configured = supabaseConfigured ? "云端已配置" : "未配置 Supabase 环境变量";
   const storageText = storageAvailable ? "本机缓存正常" : "本机缓存不可用";
   const userText = currentUser
@@ -2060,9 +3496,144 @@ function renderAuthPanel() {
   renderAuthResult();
   const migrationBox = document.getElementById("migrationBox");
   if (migrationBox) {
-    const shouldShow = Boolean(state.sync?.localImportPending || legacyImportPending);
+    const shouldShow = Boolean(state.sync?.localImportPending || legacyImportPending || state.sync?.cloudPaused);
     migrationBox.hidden = !shouldShow;
+    setText("migrationText", state.sync?.cloudPaused
+      ? "已选择保留本机，云端同步暂停。要恢复同步，请先下载备份，再点击“导入云端”。"
+      : "检测到旧版本地数据时，先下载备份，再决定是否导入云端。");
   }
+  renderSnapshotPanel();
+}
+
+function renderSnapshotPanel() {
+  const list = document.getElementById("snapshotList");
+  if (!list) return;
+  const snapshots = snapshotRows(state.snapshots).slice(0, 5);
+  if (!snapshots.length) {
+    list.innerHTML = `<div class="empty-state">还没有可恢复快照。删除、导入或清理前会自动生成。</div>`;
+    return;
+  }
+  list.innerHTML = snapshots.map((snapshot, index) => {
+    const label = snapshotReasonLabel(snapshot.reason);
+    const summary = snapshotSummary(snapshot.payload);
+    return `
+      <div class="snapshot-item">
+        <div>
+          <strong>${escapeHtml(label)}</strong>
+          <span>${escapeHtml(snapshot.createdAt || "时间未知")} · ${escapeHtml(summary)}</span>
+        </div>
+        <button class="ghost-button" type="button" data-restore-snapshot="${index}" aria-label="恢复 ${escapeAttr(label)} 快照">恢复</button>
+      </div>
+    `;
+  }).join("");
+  list.querySelectorAll("[data-restore-snapshot]").forEach((button) => {
+    button.addEventListener("click", () => restoreSnapshot(Number(button.dataset.restoreSnapshot)));
+  });
+}
+
+function snapshotReasonLabel(reason = "manual") {
+  const labels = {
+    "before-import": "导入前",
+    "before-cloud-import": "导入云端前",
+    "before-restore-snapshot": "恢复前",
+    "before-delete-record": "删除记录前",
+    "before-delete-score": "删除模考前",
+    "before-delete-custom-task": "删除自定义任务前",
+    "before-clear-unlocked-week": "清理周任务前",
+    manual: "手动快照"
+  };
+  const key = safeScalarText(reason, "manual", 120).trim();
+  const safeKey = key && !["__proto__", "constructor", "prototype"].includes(key) ? key : "manual";
+  return Object.prototype.hasOwnProperty.call(labels, safeKey) ? labels[safeKey] : safeKey || "快照";
+}
+
+function snapshotSummary(payload = {}) {
+  const source = stateObject(payload);
+  const weekTasks = Object.values(stateObject(source.weekPlans)).reduce(
+    (sum, tasks) => sum + stateArray(tasks).filter(isPlainStateObject).length,
+    0
+  );
+  return [
+    `记录 ${Object.values(stateObject(source.entries)).filter(isPlainStateObject).length} 天`,
+    `模考 ${stateArray(source.scores).filter(isPlainStateObject).length} 条`,
+    `任务 ${weekTasks} 项`
+  ].join(" · ");
+}
+
+function restoreSnapshot(index) {
+  const snapshots = snapshotRows(state.snapshots);
+  const snapshot = snapshots[index];
+  if (!snapshot?.payload) {
+    setAuthResult("error", "快照不可恢复", "这个快照缺少可恢复的数据。");
+    return;
+  }
+  if (!window.confirm(`确认恢复“${snapshotReasonLabel(snapshot.reason)}”快照？当前状态会先保存为快照。`)) return;
+  const currentSync = state.sync;
+  const currentUserState = state.user;
+  const rollback = createLocalSnapshot("before-restore-snapshot");
+  const previousSnapshots = snapshotRows(state.snapshots);
+  const restored = migrateState(snapshot.payload);
+  state = {
+    ...restored,
+    snapshots: [rollback, snapshot, ...previousSnapshots.filter((item) => item !== rollback && item !== snapshot)].slice(0, 5),
+    sync: syncStateAfterJsonImport(currentSync, currentUser, supabaseConfigured),
+    user: currentSessionUser(currentUserState, currentUser)
+  };
+  const saved = saveState();
+  renderAll();
+  setLocalSaveResult(saved, "快照已恢复", "恢复前状态也已保存，可在最近快照中找回。", "快照恢复未写入本机缓存");
+  renderAuthPanel();
+}
+
+async function pushLocalToCloud() {
+  try {
+    setAuthBusy(true);
+    setAuthResult("pending", "正在导入云端", "正在把本机数据写入云端，请保持页面打开。");
+    createLocalSnapshot("before-cloud-import");
+    state.sync = { ...state.sync, status: "pending", pending: true, lastError: "" };
+    const result = await syncNow({ force: true });
+    if (result?.ok) legacyImportPending = false;
+    const saved = saveState({ skipCloud: true });
+    if (result?.ok) {
+      setLocalSaveResult(saved, "导入云端完成", "本机数据已导入云端，同步已恢复。", "导入云端状态未写入本机缓存");
+    } else {
+      const detail = cloudImportFailureMessage(result);
+      setAuthResult("error", saved ? "导入云端失败" : "导入云端状态未写入本机缓存", saved
+        ? `${detail} 本机迁移选择已保留。`
+        : `${detail} 浏览器阻止写入本机缓存；本机迁移选择只保留在当前页面。请立即导出备份。`);
+    }
+  } catch (error) {
+    const message = safeErrorMessage(error, "导入云端失败");
+    state.sync = { ...state.sync, status: "error", lastError: message, pending: false };
+    const saved = saveState({ skipCloud: true });
+    const detail = friendlySyncError(message);
+    setAuthResult("error", saved ? "导入云端失败" : "导入云端状态未写入本机缓存", saved
+      ? `${detail} 本机迁移选择已保留。`
+      : `${detail} 浏览器阻止写入本机缓存；本机迁移选择只保留在当前页面。请立即导出备份。`);
+  } finally {
+    setAuthBusy(false);
+    renderAuthPanel();
+  }
+}
+
+function cloudImportFailureMessage(result) {
+  if (result?.error) return friendlySyncError(result.error);
+  if (result?.reason === "offline") return "当前离线，网络恢复后再重试。";
+  if (result?.reason === "unconfigured") return "云端未配置，请先配置 Supabase URL 和 publishable key。";
+  if (result?.reason === "not-authenticated") return "当前未登录，请先登录账号。";
+  if (result?.reason === "cloud-paused") return "云端同步仍处于暂停状态，请确认后再重试。";
+  if (result?.reason === "local-import-pending") return "仍在等待本机迁移选择，请重新选择导入云端。";
+  return "请检查网络和 Supabase 配置后重试。";
+}
+
+function keepLocalOnly(dialog) {
+  state.sync = { ...state.sync, localImportPending: false, cloudPaused: true, status: "paused", pending: false };
+  legacyImportPending = false;
+  const saved = saveState({ skipCloud: true });
+  renderSyncStatus();
+  renderAuthPanel();
+  setLocalSaveResult(saved, "已保留本机数据", "云端同步已暂停。", "保留本机选择未写入本机缓存");
+  if (saved) closeAuthDialog(dialog);
 }
 
 function isLikelyEmail(email) {
@@ -2070,10 +3641,12 @@ function isLikelyEmail(email) {
 }
 
 function setAuthBusy(isBusy) {
-  ["signInBtn", "signUpBtn", "signOutBtn"].forEach((id) => {
+  ["signInBtn", "signUpBtn", "signOutBtn", "syncNowBtn", "downloadBackupBtn", "pushLocalBtn", "keepLocalBtn"].forEach((id) => {
     const button = document.getElementById(id);
     if (button) button.disabled = isBusy;
   });
+  document.getElementById("authForm")?.setAttribute("aria-busy", String(isBusy));
+  document.getElementById("migrationBox")?.setAttribute("aria-busy", String(isBusy));
 }
 
 function setAuthResult(status, title, message) {
@@ -2093,7 +3666,7 @@ function renderAuthResult() {
 }
 
 function friendlyAuthError(error) {
-  const text = String(error?.message || error || "未知错误");
+  const text = safeErrorMessage(error);
   const lower = text.toLowerCase();
   if (lower.includes("invalid login credentials")) return "邮箱或密码不正确。如果是刚注册，请确认是否已完成邮箱确认。";
   if (lower.includes("email not confirmed")) return "邮箱还没有确认。请打开确认邮件后再登录。";
@@ -2105,38 +3678,74 @@ function friendlyAuthError(error) {
 }
 
 function resetLocalData() {
-  if (!window.confirm("确认清理本浏览器里的学习数据和缓存？建议先导出备份。")) return;
-  clearAppLocalStorage();
+  if (!window.confirm("确认清理本浏览器里的学习数据和缓存？系统会先下载一份 JSON 备份。")) return;
+  try {
+    exportStateJson("before-reset");
+  } catch (error) {
+    setAuthResult("error", "备份下载失败", `未清理本机缓存。请先手动导出备份后再重试：${safeErrorMessage(error, "浏览器下载失败")}`);
+    return;
+  }
+  window.clearTimeout(syncTimer);
+  syncTimer = null;
+  const cacheCleared = clearAppLocalStorage();
+  currentUser = null;
   state = freshState();
   legacyImportPending = false;
-  saveState({ skipCloud: true });
+  lastAuthResult = {
+    status: "idle",
+    title: "本机缓存已清理",
+    message: "当前页面已断开账号同步。重新登录或刷新后可再次拉取云端数据。"
+  };
+  const saved = saveState({ skipCloud: true });
   renderAll();
   initRoute();
   renderAuthPanel();
-  showToast("已清理本机缓存。");
+  setLocalSaveResult(cacheCleared && saved, "本机缓存已清理", "已下载备份并断开云端会话。", "本机缓存未完全清理");
 }
 
 function bindNetworkStatus() {
-  window.addEventListener("online", () => {
-    if (state.sync?.status === "offline" && state.sync?.pending) syncNow();
+  window.addEventListener("online", async () => {
+    ensureSyncContainer();
+    if (state.sync?.status === "offline" && state.sync?.pending && !state.sync?.localImportPending && !state.sync?.cloudPaused) {
+      const result = await syncNow();
+      if (result?.localSaved === false && result?.reason !== "sync-error") {
+        setLocalSaveResult(false, "网络恢复状态已保存", "网络恢复后的同步状态已写入本机缓存。", "网络恢复同步状态未写入本机缓存");
+      }
+    }
     renderSyncStatus();
+    renderAuthPanel();
   });
   window.addEventListener("offline", () => {
-    state.sync = { ...state.sync, status: "offline", pending: true };
-    saveState({ skipCloud: true });
+    ensureSyncContainer();
+    if (state.sync?.cloudPaused) {
+      state.sync = { ...state.sync, status: "paused", pending: false };
+    } else if (state.sync?.localImportPending || legacyImportPending) {
+      state.sync = { ...state.sync, status: "pending", pending: true };
+    } else if (!currentUser || !supabaseConfigured) {
+      state.sync = { ...state.sync, status: currentUser ? "unconfigured" : "local", pending: false };
+    } else {
+      state.sync = { ...state.sync, status: "offline", pending: true };
+    }
+    const saved = saveState({ skipCloud: true });
+    renderAuthPanel();
+    if (!saved) {
+      setLocalSaveResult(false, "离线状态已保存", "离线状态已写入本机缓存。", "离线状态未写入本机缓存");
+    }
   });
 }
 
 function upgradeGeneratedPlans() {
-  if (state.settings.planLogicVersion === PLAN_LOGIC_VERSION) return;
-  Object.entries(state.weekPlans || {}).forEach(([date, tasks]) => {
-    state.weekPlans[date] = (tasks || []).filter((task) => {
+  state.settings = stateObject(state.settings);
+  const weekPlans = ensurePlanContainers();
+  if (state.settings.planLogicVersion === PLAN_LOGIC_VERSION) return true;
+  Object.keys(weekPlans).forEach((date) => {
+    weekPlans[date] = planTasksForDate(date).filter((task) => {
       if (date < PLAN_START_DATE) return task.locked || isTaskDone(task, state.tasks);
       return task.status === "shifted" || task.locked || isTaskDone(task, state.tasks);
     });
   });
-  Object.keys(state.weekPlans || {}).forEach((date) => {
-    if (date < PLAN_START_DATE && !(state.weekPlans[date] || []).length) delete state.weekPlans[date];
+  Object.keys(weekPlans).forEach((date) => {
+    if (date < PLAN_START_DATE && !planTasksForDate(date).length) delete weekPlans[date];
   });
   if (!state.settings.rampSettingsApplied) {
     state.settings.weekdayMinutes = defaultSettings.weekdayMinutes;
@@ -2144,28 +3753,58 @@ function upgradeGeneratedPlans() {
     state.settings.rampSettingsApplied = true;
   }
   state.settings.planLogicVersion = PLAN_LOGIC_VERSION;
-  saveState({ skipCloud: true });
+  return saveState({ skipCloud: true });
 }
 
 function bindWeekPlanner() {
   document.getElementById("generateWeekBtn")?.addEventListener("click", () => {
-    generateWeekPlan();
+    const saved = generateWeekPlan();
     renderAll();
-    showToast("已生成未来 7 天计划。");
+    setLocalSaveResult(saved, "周计划已生成", "未来 7 天计划已保存；已锁定任务会继续保留。", "周计划未写入本机缓存");
   });
   document.getElementById("clearUnlockedWeekBtn")?.addEventListener("click", () => {
-    nextSevenDates().forEach((date) => {
-      state.weekPlans[date] = (state.weekPlans[date] || []).filter((task) => task.locked);
-    });
-    saveState();
+    const cleared = clearUnlockedWeekTasks();
+    if (!cleared) return;
+    const saved = saveState();
     renderAll();
-    showToast("已清理未锁定任务。");
+    renderSnapshotPanel();
+    setLocalSaveResult(saved, "周任务已清理", `已清理 ${cleared} 项未锁定任务，并保留恢复快照。`, "周任务清理未写入本机缓存");
   });
 }
 
+function clearUnlockedWeekTasks(dates = nextSevenDates()) {
+  ensurePlanContainers();
+  const clearable = collectUnlockedWeekTasks(dates);
+  if (!clearable.length) {
+    setAuthResult("idle", "无需清理周任务", "未来 7 天没有可清理的未锁定任务。");
+    return 0;
+  }
+  if (!window.confirm(`确认清理未来 7 天的 ${clearable.length} 项未锁定任务？已锁定任务会保留。`)) {
+    setAuthResult("idle", "清理已取消", "周任务未改变。");
+    return 0;
+  }
+  createLocalSnapshot("before-clear-unlocked-week");
+  const ids = new Set(clearable.map((task) => task.id).filter(Boolean));
+  ids.forEach((id) => {
+    markDeleted("tasks", id);
+    delete state.tasks[id];
+  });
+  dates.forEach((date) => {
+    state.weekPlans[date] = planTasksForDate(date).filter((task) => task.locked);
+  });
+  return clearable.length;
+}
+
+function collectUnlockedWeekTasks(dates = nextSevenDates()) {
+  return dates.flatMap((date) => planTasksForDate(date).filter((task) => !task.locked));
+}
+
 function parseReviewDays(value) {
-  const days = value.split(",").map((item) => Number(item.trim())).filter((item) => Number.isFinite(item) && item > 0);
-  return days.length ? [...new Set(days)].sort((a, b) => a - b) : [...defaultSettings.reviewDays];
+  const tokens = String(value || "").split(",").map((item) => item.trim()).filter(Boolean);
+  if (!tokens.length) return [];
+  const days = tokens.map((item) => Number(item));
+  const valid = tokens.every((item, index) => /^\d+$/.test(item) && days[index] >= 1 && days[index] <= 365);
+  return valid ? [...new Set(days)].sort((a, b) => a - b) : [];
 }
 
 function applyPreset(type) {
@@ -2210,7 +3849,7 @@ function readNumber(id) {
 
 function loadEntryForm() {
   const date = document.getElementById("entryDate").value || planTodayISO();
-  const entry = state.entries[date] || {};
+  const entry = entryRow(date) || {};
   setValue("mathMin", entry.math);
   setValue("csMin", entry.cs408);
   setValue("engMin", entry.english);
@@ -2224,6 +3863,7 @@ function loadEntryForm() {
   setValue("fixedMistakes", entry.fixedMistakes);
   document.getElementById("nextTask").value = entry.nextTask || "";
   document.getElementById("note").value = entry.note || "";
+  clearEntryValidation();
 }
 
 function setValue(id, value) {
@@ -2236,6 +3876,7 @@ function setSelectValue(id, value) {
 }
 
 function renderAll() {
+  ensureRuntimeContainers();
   loadEntryForm();
   renderDashboard();
   renderTasks();
@@ -2261,8 +3902,12 @@ function getEntryTotals(entry) {
 }
 
 function entriesArray() {
+  ensureLearningContainers();
   return Object.entries(state.entries)
-    .map(([date, entry]) => ({ date, ...entry, ...getEntryTotals(entry) }))
+    .flatMap(([rawDate, entry]) => {
+      const date = sanitizeDateKey(rawDate);
+      return date && isPlainStateObject(entry) ? [{ date, ...entry, ...getEntryTotals(entry) }] : [];
+    })
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -2328,7 +3973,7 @@ function renderDashboard() {
     monthMinutes
   });
   renderSideNav(week, phase);
-  renderFocusBoard(buildDailyTasks());
+  renderFocusBoard(previewDailyTasks());
   renderTargetLane({ phase, week, totalMinutes, monthTarget, monthMinutes });
   renderWorkflowRail();
   renderStorageStatus();
@@ -2378,8 +4023,9 @@ function renderStrategyBoard({ phase, week, weekMinutes, coreMinutes }) {
   const controls = normalizePlanControls(state.settings.planControls);
   const strategy = getPhaseStrategy(phase.id, controls.experienceTrack);
   const today = planTodayISO();
-  const windows = buildRollingReviewWindows(state.reviewItems, today, { controls });
-  const signal = reviewLoadSignal(state.reviewItems, today, controls);
+  const reviews = reviewRows();
+  const windows = buildRollingReviewWindows(reviews, today, { controls });
+  const signal = reviewLoadSignal(reviews, today, controls);
   const newMistakes = sumMinutes(week, "newMistakes");
   const fixedMistakes = sumMinutes(week, "fixedMistakes");
   const metrics = {
@@ -2456,7 +4102,7 @@ function renderCurveMetric(phase = getCurrentPhase()) {
     const date = new Date(today);
     date.setDate(today.getDate() - index);
     const iso = formatDateISO(date);
-    const entry = state.entries[iso];
+    const entry = entryRow(iso);
     days.push({ date, iso, hours: entry ? getEntryTotals(entry).total / 60 : 0 });
   }
   const previousAvg = averageHours(days.slice(0, 7));
@@ -2494,10 +4140,10 @@ function renderSideNav(week, phase) {
   const weekHours = sumMinutes(week, "total") / 60;
   const totalMinutes = sumMinutes(week, "total");
   const corePercent = totalMinutes ? Math.round(sumMinutes(week, "core") / totalMinutes * 100) : 0;
-  const dueCount = state.reviewItems.filter((item) => !item.done && item.dueDate <= planTodayISO()).length;
+  const dueCount = reviewRows().filter((item) => isReviewDue(item)).length;
   const activeDays = entriesArray().filter((entry) => entry.total > 0).length;
   const avgSyllabus = Math.round(["math", "cs408", "english", "politics"].reduce((sum, subject) => sum + syllabusProgress(subject).percent, 0) / 4);
-  const last5 = [...state.scores].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+  const last5 = [...scoreRows()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   const scoreAvg = averageScores(last5).total;
   const risk = riskSnapshot(week, phase);
 
@@ -2520,18 +4166,18 @@ function examDateStatusText() {
 }
 
 function officialBasisText() {
-  return `资料核验 ${SOURCE_CHECK_DATE}：学习数据从 2026-06-08 从头开始；科目以北大软微 2026 已发布信息为备考基准；2027 年 12 月仍为推算窗口，官方日期待发布。`;
+  return `资料核验 ${SOURCE_CHECK_DATE}：学习数据从 2026-06-15 从头开始；科目以北大软微 2026 已发布信息为备考基准；2027 年 12 月仍为推算窗口，官方日期待发布。`;
 }
 
 function renderWorkflowRail() {
   const container = document.getElementById("workflowRail");
   if (!container) return;
-  const tasks = buildDailyTasks();
+  const tasks = previewDailyTasks();
   const doneTasks = tasks.filter((task) => isTaskDone(task, state.tasks)).length;
   const planDate = planTodayISO();
-  const todayEntry = state.entries[planDate];
-  const dueCount = state.reviewItems.filter((item) => !item.done && item.dueDate <= planDate).length;
-  const recentScores = state.scores.filter((score) => score.date >= formatDateISO(addDays(parseDate(planDate), -45))).length;
+  const todayEntry = entryRow(planDate);
+  const dueCount = reviewRows().filter((item) => isReviewDue(item, planDate)).length;
+  const recentScores = scoreRows().filter((score) => score.date >= formatDateISO(addDays(parseDate(planDate), -45))).length;
   const active14 = new Set(lastDaysEntries(14).filter((entry) => entry.total > 0).map((entry) => entry.date)).size;
   const avgSyllabus = Math.round(["math", "cs408", "english", "politics"].reduce((sum, subject) => sum + syllabusProgress(subject).percent, 0) / 4);
   const steps = [
@@ -2561,7 +4207,7 @@ function renderTargetLane({ phase, week, totalMinutes, monthTarget, monthMinutes
   const weekMinutes = sumMinutes(week, "total");
   const coreRatio = weekMinutes ? sumMinutes(week, "core") / weekMinutes : 0;
   const monthPercent = monthTarget ? (monthMinutes / 60 / monthTarget) * 100 : 0;
-  const last5 = [...state.scores].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+  const last5 = [...scoreRows()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   const scoreAvg = averageScores(last5).total;
 
     let title = `${month} 节点还差 ${remaining.toFixed(0)}h`;
@@ -2602,11 +4248,11 @@ function renderTargetLane({ phase, week, totalMinutes, monthTarget, monthMinutes
     }).join("");
   }
 
-  const tasks = buildDailyTasks();
+  const tasks = previewDailyTasks();
   const doneTasks = tasks.filter((task) => isTaskDone(task, state.tasks)).length;
   const planDate = planTodayISO();
-  const todayEntry = state.entries[planDate];
-  const dueCount = state.reviewItems.filter((item) => !item.done && item.dueDate <= planDate).length;
+  const todayEntry = entryRow(planDate);
+  const dueCount = reviewRows().filter((item) => isReviewDue(item, planDate)).length;
   const activeCore = weekMinutes ? Math.round(coreRatio * 100) : 0;
   const checks = [
     ["任务", doneTasks >= Math.min(2, tasks.length), `${doneTasks}/${tasks.length}`],
@@ -2629,26 +4275,27 @@ function renderTargetLane({ phase, week, totalMinutes, monthTarget, monthMinutes
 
 function renderStorageStatus() {
   const entries = entriesArray();
-  const touchedTopics = Object.keys(state.topics).length;
+  const touchedTopics = Object.keys(stateObject(state.topics)).length;
   const exportDate = state.settings.lastExportDate;
   const lastSavedAt = state.settings.lastSavedAt ? state.settings.lastSavedAt.slice(0, 10) : "";
   const exportAge = exportDate ? Math.max(0, Math.floor((parseDate(todayISO()) - parseDate(exportDate)) / 86400000)) : null;
   const healthScore =
     Math.min(40, entries.length * 2) +
     Math.min(20, touchedTopics) +
-    Math.min(20, state.reviewItems.length) +
+    Math.min(20, reviewRows().length) +
     (exportDate && exportAge <= 7 ? 20 : exportDate ? 10 : 0);
   const health = Math.min(100, healthScore);
   setText("sideDataCount", `${entries.length} 条记录`);
   setText("sideDataSave", lastSavedAt ? `最近保存 ${lastSavedAt}` : "尚未保存");
   setStyleWidth("sideDataFill", `${health}%`);
+  renderStorageHealthText();
 
   const container = document.getElementById("storageStatus");
   if (!container) return;
   const rows = [
     ["学习记录", `${entries.length} 天`, entries.length ? "记录已建立" : "今天先保存第一条记录"],
     ["考纲状态", `${touchedTopics} 项`, touchedTopics ? "已有考点标记" : "先标记当前数学和 408 小节"],
-    ["复盘队列", `${state.reviewItems.length} 项`, state.reviewItems.length ? "任务完成后自动生成" : "勾选任务后自动生成"],
+    ["复盘队列", `${reviewRows().length} 项`, reviewRows().length ? "任务完成后自动生成" : "勾选任务后自动生成"],
     ["备份", exportDate ? `${exportDate}` : "未导出", exportAge === null ? "建议现在导出一次 JSON" : exportAge > 7 ? `已 ${exportAge} 天未导出` : "备份节奏正常"]
   ];
   container.innerHTML = rows.map(([label, value, text]) => `
@@ -2658,6 +4305,10 @@ function renderStorageStatus() {
       <p>${text}</p>
     </div>
   `).join("");
+}
+
+function renderStorageHealthText() {
+  setText("storageHealthText", storageAvailable ? "本机缓存正常" : "本机缓存不可用，建议检查浏览器隐私/存储权限");
 }
 
 function addDays(date, days) {
@@ -2809,7 +4460,7 @@ function renderTrendChart(phase = getCurrentPhase()) {
     const date = new Date(today);
     date.setDate(today.getDate() - index);
     const iso = formatDateISO(date);
-    const entry = state.entries[iso];
+    const entry = entryRow(iso);
     const minutes = entry ? getEntryTotals(entry).total : 0;
     days.push({ date, iso, hours: minutes / 60 });
   }
@@ -2876,7 +4527,8 @@ function renderScoreTargets() {
 
 function renderTasks(force = false, date = planTodayISO()) {
   const phase = getCurrentPhase(date);
-  const tasks = buildDailyTasks(force, date);
+  const result = buildDailyTasks(force, date, { persist: force, withSaveResult: true });
+  const tasks = result.tasks;
 
   const fullHtml = tasks.map((task) => {
     const checked = isTaskDone(task, state.tasks) ? "checked" : "";
@@ -2935,8 +4587,13 @@ function renderTasks(force = false, date = planTodayISO()) {
         task.status = checkbox.checked ? "done" : "todo";
         task.completedAt = checkbox.checked ? new Date().toISOString() : "";
         if (checkbox.checked && !task.recordApplied) {
-          applyTaskToEntry(task);
+          const impact = applyTaskToEntry(task);
           task.recordApplied = true;
+          task.recordImpact = impact;
+        } else if (!checkbox.checked && task.recordApplied) {
+          revertTaskFromEntry(task);
+          task.recordApplied = false;
+          task.recordImpact = null;
         }
       }
       document.querySelectorAll("[data-task]").forEach((item) => {
@@ -2945,35 +4602,74 @@ function renderTasks(force = false, date = planTodayISO()) {
         item.closest(".plan-card")?.classList.toggle("done", checkbox.checked);
       });
       if (checkbox.checked && task?.reviewItemId) {
-        const item = state.reviewItems.find((review) => review.id === task.reviewItemId);
+        const item = reviewRows().find((review) => review.id === task.reviewItemId);
         if (item) item.done = true;
       } else if (checkbox.checked) {
         scheduleReviewForTask(checkbox.dataset.task, task);
       }
-      saveState();
+      const saved = saveState();
       renderDailyTaskProgress(tasks);
       renderReviewQueue();
       renderDashboard();
       renderFocusBoard(tasks);
       renderWeekPlanner();
+      if (!saved) {
+        setLocalSaveResult(false, "任务状态已保存", "任务状态已写入本机缓存。", checkbox.checked ? "任务完成状态未写入本机缓存" : "任务取消完成未写入本机缓存");
+      }
     });
   });
+  return result;
 }
 
 function applyTaskToEntry(task) {
   const date = task.date || planTodayISO();
-  const entry = state.entries[date] || {};
+  ensureLearningContainers();
+  const entry = entryRow(date) || {};
   const key = subjectToEntryKey(task.subject);
-  if (key) entry[key] = (entry[key] || 0) + (task.minutes || 0);
-  if (task.subject === "数学") entry.mathProblems = Math.max(entry.mathProblems || 0, 15);
-  if (task.subject === "408") entry.csProblems = Math.max(entry.csProblems || 0, 20);
-  if (task.subject === "英语") entry.reading = Math.max(entry.reading || 0, 1);
+  const changes = [];
+
+  const applyNumericChange = (field, nextValue) => {
+    const before = sanitizeNumber(entry[field]);
+    const after = sanitizeNumber(nextValue);
+    if (before === after) return;
+    changes.push({ field, before, after });
+    entry[field] = after;
+  };
+
+  if (key) applyNumericChange(key, sanitizeNumber(entry[key]) + (task.minutes || 0));
+  if (task.subject === "数学") applyNumericChange("mathProblems", Math.max(sanitizeNumber(entry.mathProblems), 15));
+  if (task.subject === "408") applyNumericChange("csProblems", Math.max(sanitizeNumber(entry.csProblems), 20));
+  if (task.subject === "英语") applyNumericChange("reading", Math.max(sanitizeNumber(entry.reading), 1));
   entry.quality = entry.quality || 3;
   entry.nextTask = entry.nextTask || "";
   entry.note = entry.note || "";
   entry.updatedAt = new Date().toISOString();
+  unmarkDeleted("records", date);
   state.entries[date] = entry;
   if (date === (document.getElementById("entryDate")?.value || planTodayISO())) loadEntryForm();
+  return normalizeTaskRecordImpact({ date, changes });
+}
+
+function revertTaskFromEntry(task) {
+  const impact = normalizeTaskRecordImpact(task.recordImpact);
+  if (!impact) return false;
+  const date = impact.date || task.date || planTodayISO();
+  const entry = entryRow(date);
+  if (!entry) return false;
+
+  let changed = false;
+  impact.changes.forEach((change) => {
+    if (sanitizeNumber(entry[change.field]) !== change.after) return;
+    entry[change.field] = change.before;
+    changed = true;
+  });
+
+  if (!changed) return false;
+  entry.updatedAt = new Date().toISOString();
+  unmarkDeleted("records", date);
+  state.entries[date] = entry;
+  if (date === (document.getElementById("entryDate")?.value || planTodayISO())) loadEntryForm();
+  return true;
 }
 
 function subjectToEntryKey(subject) {
@@ -2998,19 +4694,20 @@ function nextSevenDates(startDate = planTodayISO()) {
 }
 
 function generateWeekPlan() {
-  nextSevenDates().forEach((date) => buildDailyTasks(false, date));
-  saveState();
+  nextSevenDates().forEach((date) => buildDailyTasks(true, date, { persist: false }));
+  return saveState();
 }
 
 function renderWeekPlanner() {
   const container = document.getElementById("weekPlanner");
   if (!container) return;
+  const weekPlans = ensurePlanContainers();
   const dates = nextSevenDates();
   dates.forEach((date) => {
-    if (!state.weekPlans[date]?.length) buildDailyTasks(false, date);
+    if (!Object.prototype.hasOwnProperty.call(weekPlans, date)) buildDailyTasks(false, date);
   });
   container.innerHTML = dates.map((date) => {
-    const tasks = normalizeTaskList(state.weekPlans[date] || [], date);
+    const tasks = normalizeTaskList(planTasksForDate(date), date);
     const visibleTasks = tasks.filter((task) => task.status !== "shifted");
     const done = visibleTasks.filter((task) => isTaskDone(task, state.tasks)).length;
     const total = visibleTasks.reduce((sum, task) => sum + (task.minutes || 0), 0);
@@ -3071,19 +4768,25 @@ function renderWeekPlanner() {
 
   document.querySelectorAll("[data-regenerate-day]").forEach((button) => {
     button.addEventListener("click", () => {
-      buildDailyTasks(true, button.dataset.regenerateDay);
+      const result = buildDailyTasks(true, button.dataset.regenerateDay, { persist: true, withSaveResult: true });
       renderAll();
-      showToast("已重排该日未锁定任务。");
+      setLocalSaveResult(result.saved, "单日已重排", "该日未锁定任务已重排，已锁定任务会继续保留。", "单日重排未写入本机缓存");
     });
   });
   document.querySelectorAll("[data-lock-task]").forEach((button) => {
     button.addEventListener("click", () => {
       const task = findTask(button.dataset.lockTask);
-      if (!task) return;
+      if (!task) {
+        setAuthResult("error", "任务不可切换", "这个任务已不存在，请刷新周计划后再试。");
+        return;
+      }
       task.locked = !task.locked;
       task.updatedAt = new Date().toISOString();
-      saveState();
+      const saved = saveState();
       renderWeekPlanner();
+      setLocalSaveResult(saved, task.locked ? "任务已锁定" : "任务已解锁", task.locked
+        ? "后续重排会保留这个任务。"
+        : "后续重排可重新安排这个任务。", task.locked ? "任务锁定未写入本机缓存" : "任务解锁未写入本机缓存");
     });
   });
   document.querySelectorAll("[data-edit-task]").forEach((button) => {
@@ -3093,10 +4796,13 @@ function renderWeekPlanner() {
   });
   document.querySelectorAll("[data-shift-task]").forEach((button) => {
     button.addEventListener("click", () => {
-      shiftTaskToTomorrow(button.dataset.shiftTask);
-      saveState();
+      if (!shiftTaskToTomorrow(button.dataset.shiftTask)) {
+        setAuthResult("idle", "无需顺延任务", "任务已完成或已顺延，周计划未改变。");
+        return;
+      }
+      const saved = saveState();
       renderAll();
-      showToast("已顺延到下一天。");
+      setLocalSaveResult(saved, "任务已顺延", "已移动到下一天，并保留原任务的顺延标记。", "任务顺延未写入本机缓存");
     });
   });
 }
@@ -3107,7 +4813,7 @@ function weekDayLabel(date) {
 }
 
 function findTask(taskId) {
-  for (const tasks of Object.values(state.weekPlans || {})) {
+  for (const [, tasks] of weekPlanEntries()) {
     const task = tasks.find((item) => item.id === taskId);
     if (task) return task;
   }
@@ -3116,39 +4822,65 @@ function findTask(taskId) {
 
 function editTask(taskId) {
   const task = findTask(taskId);
-  if (!task) return;
+  if (!task) {
+    setAuthResult("error", "任务不可编辑", "这个任务已不存在，请刷新周计划后再试。");
+    return;
+  }
   const text = window.prompt("修改任务内容。要求写成可验收动作，例如：基础题 20 道 + 错因 3 条。", task.text);
-  if (!text || !text.trim()) return;
-  const minutes = Number(window.prompt("修改预计分钟数。建议 20-120 分钟，避免虚高。", task.minutes));
-  task.text = text.trim();
-  if (Number.isFinite(minutes) && minutes > 0) task.minutes = Math.min(180, Math.max(10, roundToFive(minutes)));
+  if (text === null) return;
+  const nextText = text.trim();
+  if (!isValidTaskEditText(nextText)) {
+    setAuthResult("error", "任务内容无效", "任务内容不能为空，请写成可验收动作。");
+    return;
+  }
+  const minutesInput = window.prompt("修改预计分钟数。请填写 10-180 的 5 分钟刻度。", task.minutes);
+  if (minutesInput === null) return;
+  const minutes = Number(String(minutesInput).trim());
+  if (!isValidTaskEditMinutes(minutes)) {
+    setAuthResult("error", "任务分钟无效", "任务分钟数请填写 10-180 的 5 分钟整数刻度。");
+    return;
+  }
+  task.text = nextText;
+  task.minutes = minutes;
   task.locked = true;
   task.source = "manual";
   task.updatedAt = new Date().toISOString();
-  saveState();
+  const saved = saveState();
   renderAll();
-  showToast("任务已修改并锁定。");
+  setLocalSaveResult(saved, "任务已修改", "已锁定为手动任务，后续重排会保留它。", "任务修改未写入本机缓存");
+}
+
+function isValidTaskEditText(text) {
+  return Boolean(text && text.trim());
+}
+
+function isValidTaskEditMinutes(minutes) {
+  return Number.isInteger(minutes) && minutes >= 10 && minutes <= 180 && minutes % 5 === 0;
 }
 
 function shiftTaskToTomorrow(taskId) {
-  const date = Object.keys(state.weekPlans || {}).find((day) => (state.weekPlans[day] || []).some((task) => task.id === taskId));
-  if (!date) return;
-  const task = state.weekPlans[date].find((item) => item.id === taskId);
+  const match = weekPlanEntries().find(([, tasks]) => tasks.some((task) => task.id === taskId));
+  const date = match?.[0];
+  if (!date) return false;
+  const task = match[1].find((item) => item.id === taskId);
+  if (!task || task.status === "shifted" || task.status === "done" || isTaskDone(task, state.tasks)) return false;
   const next = formatDateISO(addDays(parseDate(date), 1));
-  state.weekPlans[next] = state.weekPlans[next] || [];
+  const nextTasks = planTasksForDate(next);
   const shiftedId = `${task.id}-shift-${next}`;
+  if (nextTasks.some((item) => item.id === shiftedId || item.sourceTaskId === task.id)) return false;
   task.status = "shifted";
   task.shiftedTo = next;
   task.updatedAt = new Date().toISOString();
-  state.weekPlans[next].push({
+  nextTasks.push({
     ...task,
     id: shiftedId,
     date: next,
-    priority: state.weekPlans[next].length + 1,
+    priority: nextTasks.length + 1,
     locked: true,
     status: "todo",
     completedAt: "",
     recordApplied: false,
+    recordImpact: null,
     source: "carryover",
     sourceTaskId: task.id,
     carriedFrom: task.date || date,
@@ -3156,13 +4888,14 @@ function shiftTaskToTomorrow(taskId) {
   });
   state.tasks[taskId] = false;
   state.tasks[shiftedId] = false;
+  return true;
 }
 
 function renderFocusBoard(tasks) {
   const phase = getCurrentPhase();
   const week = lastDaysEntries(7);
   const weekHours = sumMinutes(week, "total") / 60;
-  const dueCount = state.reviewItems.filter((item) => !item.done && item.dueDate <= planTodayISO()).length;
+  const dueCount = reviewRows().filter((item) => isReviewDue(item)).length;
   const primary = tasks[0];
   const support = tasks.slice(1, 3);
   const weekPercent = phase.weeklyTarget ? Math.min(100, Math.round(weekHours / phase.weeklyTarget * 100)) : 0;
@@ -3187,8 +4920,12 @@ function renderFocusBoard(tasks) {
   }
 }
 
-function buildDailyTasks(force = false, date = planTodayISO()) {
-  const existing = state.weekPlans[date] || [];
+function buildDailyTasks(force = false, date = planTodayISO(), options = {}) {
+  const shouldPersist = options.persist === true;
+  ensurePlanContainers();
+  const hasPlannedDate = Object.prototype.hasOwnProperty.call(state.weekPlans, date);
+  const existing = planTasksForDate(date);
+  if (hasPlannedDate && !existing.length && !force) return taskBuildResult([], true, options);
   let carried = [];
   if (date === planTodayISO()) {
     const budget = dailyBudgetMinutes(date);
@@ -3209,7 +4946,7 @@ function buildDailyTasks(force = false, date = planTodayISO()) {
     state.weekPlans[date].forEach((task) => {
       if (typeof state.tasks[task.id] === "undefined") state.tasks[task.id] = task.status === "done";
     });
-    return activeExisting;
+    return taskBuildResult(activeExisting, true, options);
   }
   const locked = existing.filter((task) => task.locked);
   const lockedActive = [...locked, ...carried].filter((task) => task.status !== "shifted");
@@ -3229,11 +4966,38 @@ function buildDailyTasks(force = false, date = planTodayISO()) {
   const shiftedExisting = existing.filter((task) => task.status === "shifted");
   state.weekPlans[date] = normalizeTaskList([...shiftedExisting, ...nextTasks], date);
   state.weekPlans[date].forEach((task) => {
+    unmarkDeleted("tasks", task.id);
     if (task.status === "shifted") state.tasks[task.id] = false;
     else if (typeof state.tasks[task.id] === "undefined") state.tasks[task.id] = task.status === "done";
   });
-  saveState();
-  return state.weekPlans[date].filter((task) => task.status !== "shifted");
+  const saved = shouldPersist ? saveState() : true;
+  return taskBuildResult(state.weekPlans[date].filter((task) => task.status !== "shifted"), saved, options);
+}
+
+function taskBuildResult(tasks, saved = true, options = {}) {
+  return options.withSaveResult ? { tasks, saved } : tasks;
+}
+
+function previewDailyTasks(date = planTodayISO()) {
+  ensurePlanContainers();
+  const previous = {
+    weekPlans: clonePlainState(state.weekPlans),
+    tasks: clonePlainState(state.tasks),
+    deleted: clonePlainState(stateObject(state.deleted)),
+    deletedMeta: clonePlainState(stateObject(state.deletedMeta))
+  };
+  try {
+    return buildDailyTasks(false, date);
+  } finally {
+    state.weekPlans = previous.weekPlans;
+    state.tasks = previous.tasks;
+    state.deleted = previous.deleted;
+    state.deletedMeta = previous.deletedMeta;
+  }
+}
+
+function clonePlainState(value) {
+  return cloneJson(value);
 }
 
 function carryoverLimitForBudget(budget, taskCount) {
@@ -3243,6 +5007,7 @@ function carryoverLimitForBudget(budget, taskCount) {
 }
 
 function targetTaskCountForDate(date = planTodayISO()) {
+  ensureSettingsContainer();
   const controls = normalizePlanControls(state.settings.planControls);
   const base = Math.min(4, Math.max(3, state.settings.taskCount || 3));
   if (controls.planIntensity === "bottomline" || shouldUseMinimumDay(date)) return 2;
@@ -3251,6 +5016,7 @@ function targetTaskCountForDate(date = planTodayISO()) {
 }
 
 function createDailyTasks(date = planTodayISO()) {
+  ensureSettingsContainer();
   const phase = getCurrentPhase(date);
   const controls = normalizePlanControls(state.settings.planControls);
   const weights = subjectPlanWeights(phase.id, controls);
@@ -3339,7 +5105,7 @@ function createDailyTasks(date = planTodayISO()) {
     });
   }
 
-  state.customTasks.slice(0, 2).forEach((custom) => {
+  customTaskRows().slice(0, 2).forEach((custom) => {
     if (tasks.length < targetCount && controls.enabledSubjects.includes(subjectKey(custom.subject)) && !tasks.some((task) => task.text === custom.text)) {
       tasks.push({
         id: `${date}-custom-${custom.id}`,
@@ -3366,7 +5132,7 @@ function createDailyTasks(date = planTodayISO()) {
     date,
     priority: task.priority || index + 1,
     status: task.status === "shifted" ? "shifted" : isTaskDone(task, state.tasks) ? "done" : task.status || "todo",
-    locked: Boolean(task.locked),
+    locked: sanitizeBoolean(task.locked),
     source: task.source || "generated"
   }));
 }
@@ -3393,7 +5159,7 @@ function ensureEnglishDripTask(tasks, options) {
 }
 
 function normalizeTaskList(tasks, date) {
-  return tasks.map((task, index) => ({
+  return stateArray(tasks).filter(isPlainStateObject).map((task, index) => ({
     id: task.id || `${date}-${index}-${task.subject}`,
     date,
     subject: task.subject,
@@ -3402,14 +5168,15 @@ function normalizeTaskList(tasks, date) {
     minutes: task.minutes || 0,
     priority: task.priority || index + 1,
     status: task.status === "shifted" ? "shifted" : isTaskDone(task, state.tasks) ? "done" : task.status || "todo",
-    locked: Boolean(task.locked),
+    locked: sanitizeBoolean(task.locked),
     source: task.source || "generated",
     sourceTaskId: task.sourceTaskId || "",
     carriedFrom: task.carriedFrom || "",
     shiftedTo: task.shiftedTo || "",
     reviewItemId: task.reviewItemId || "",
     completedAt: task.completedAt || "",
-    recordApplied: Boolean(task.recordApplied)
+    recordApplied: sanitizeBoolean(task.recordApplied),
+    recordImpact: normalizeTaskRecordImpact(task.recordImpact)
   }))
     .sort((a, b) => {
       if (a.status === "shifted" && b.status !== "shifted") return 1;
@@ -3422,6 +5189,7 @@ function normalizeTaskList(tasks, date) {
 }
 
 function dailyBudgetMinutes(date = planTodayISO()) {
+  ensureSettingsContainer();
   const phase = getCurrentPhase(date);
   const controls = normalizePlanControls(state.settings.planControls);
   const day = parseDate(date).getDay();
@@ -3451,7 +5219,7 @@ function shouldUseMinimumDay(date = planTodayISO()) {
   for (let index = 1; index <= 3; index += 1) {
     const day = new Date(cursor);
     day.setDate(cursor.getDate() - index);
-    const entry = state.entries[formatDateISO(day)];
+    const entry = entryRow(formatDateISO(day));
     if (!entry) continue;
     const total = getEntryTotals(entry).total;
     if (total > 0 && total < 120) lowDays += 1;
@@ -3608,7 +5376,7 @@ function renderEnglishDrip(tasks, date = planTodayISO()) {
   if (!container) return;
   const englishTask = tasks.find((task) => task.subject === "英语");
   const topic = topicForDate("english", date);
-  const entry = state.entries[date] || {};
+  const entry = entryRow(date) || {};
   const minutes = sanitizeNumber(entry.english);
   const reading = sanitizeNumber(entry.reading);
   const streak = englishStreak(date);
@@ -3641,7 +5409,7 @@ function englishStreak(date = planTodayISO()) {
   const cursor = parseDate(date);
   while (true) {
     const iso = formatDateISO(cursor);
-    const entry = state.entries[iso];
+    const entry = entryRow(iso);
     if (!entry || sanitizeNumber(entry.english) < 15) break;
     streak += 1;
     cursor.setDate(cursor.getDate() - 1);
@@ -3710,7 +5478,9 @@ function topicTask(date, phase, subject, topic, minutes, fallback) {
 }
 
 function scheduleReviewForTask(taskId, task) {
-  if (!task || state.reviewItems.some((item) => item.sourceTaskId === taskId)) return;
+  ensureSettingsContainer();
+  const reviews = reviewRows();
+  if (!task || reviews.some((item) => item.sourceTaskId === taskId)) return;
   const base = parseDate(task.date || planTodayISO());
   const items = state.settings.reviewDays.map((days) => {
     const due = new Date(base);
@@ -3729,24 +5499,48 @@ function scheduleReviewForTask(taskId, task) {
       quality: 0
     };
   });
-  state.reviewItems.push(...items);
+  reviews.push(...items);
 }
 
 function dueReviewItems(date = planTodayISO()) {
-  return state.reviewItems
-    .filter((item) => !item.done && item.status !== "done" && item.dueDate <= date)
+  return reviewRows()
+    .filter((item) => isReviewDue(item, date))
     .sort((a, b) => {
-      const dateCompare = String(a.dueDate || "").localeCompare(String(b.dueDate || ""));
+      const dateCompare = (sanitizeDateKey(a.dueDate) || "9999-12-31").localeCompare(sanitizeDateKey(b.dueDate) || "9999-12-31");
       if (dateCompare) return dateCompare;
       return reviewRoundWeight(a.round) - reviewRoundWeight(b.round);
     });
 }
 
 function reviewRoundWeight(round = "") {
-  const text = String(round);
+  const text = sanitizeText(round, "", 40);
   if (text.includes("短")) return 0;
   const day = Number((text.match(/D\+(\d+)/) || [])[1]);
   return Number.isFinite(day) ? day : 99;
+}
+
+function isActiveReviewItem(item) {
+  return Boolean(item) && !item.done && !["done", "failed"].includes(item.status);
+}
+
+function isReviewDue(item, date = planTodayISO()) {
+  const dueDate = sanitizeDateKey(item?.dueDate);
+  const today = sanitizeDateKey(date) || planTodayISO();
+  return isActiveReviewItem(item) && Boolean(dueDate && dueDate <= today);
+}
+
+function isReviewUpcoming(item, date = planTodayISO()) {
+  const dueDate = sanitizeDateKey(item?.dueDate);
+  const today = sanitizeDateKey(date) || planTodayISO();
+  return isActiveReviewItem(item) && Boolean(dueDate && dueDate > today);
+}
+
+function stampReviewResult(item, result = "") {
+  const now = new Date().toISOString();
+  if (result) item.lastResult = result;
+  item.lastSubmittedDate = planTodayISO();
+  item.updatedAt = now;
+  return now;
 }
 
 function dueReviewTasks(date = planTodayISO(), limit = 1) {
@@ -3763,8 +5557,9 @@ function dueReviewTasks(date = planTodayISO(), limit = 1) {
 
 function renderReviewQueue() {
   const planDate = planTodayISO();
-  const due = state.reviewItems.filter((item) => !item.done && item.status !== "done" && item.dueDate <= planDate);
-  const upcoming = state.reviewItems.filter((item) => !item.done && item.status !== "done" && item.dueDate > planDate).slice(0, 8);
+  const reviews = reviewRows();
+  const due = reviews.filter((item) => isReviewDue(item, planDate));
+  const upcoming = reviews.filter((item) => isReviewUpcoming(item, planDate)).slice(0, 8);
   const todayHtml = due.length ? due.map(renderReviewItem).join("") : `<div class="empty-state">今天没有到期复盘。完成任务后会自动安排 D+1/D+3/D+7/D+14/D+30。</div>`;
   document.getElementById("reviewQueue").innerHTML = todayHtml;
   document.getElementById("spacedReviewList").innerHTML = [...due, ...upcoming].length ? [...due, ...upcoming].map(renderReviewItem).join("") : `<div class="empty-state">复盘队列为空。先完成今日任务，系统会自动生成复盘。</div>`;
@@ -3773,65 +5568,92 @@ function renderReviewQueue() {
 
   document.querySelectorAll("[data-review-done]").forEach((button) => {
     button.addEventListener("click", () => {
-      completeReview(button.dataset.reviewDone, 4);
-      saveState();
+      if (!completeReview(button.dataset.reviewDone, 4)) {
+        setAuthResult("idle", "无需处理复盘", "这条复盘已处理或不在到期队列。");
+        return;
+      }
+      const saved = saveState();
       renderReviewQueue();
       renderDashboard();
-      showToast("复盘已完成。");
+      setLocalSaveResult(saved, "复盘已完成", "已从到期队列移除，并记录完成时间。", "复盘完成未写入本机缓存");
     });
   });
   document.querySelectorAll("[data-review-delay]").forEach((button) => {
     button.addEventListener("click", () => {
-      delayReview(button.dataset.reviewDelay, Number(button.dataset.days) || 1);
-      saveState();
+      if (!delayReview(button.dataset.reviewDelay, Number(button.dataset.days) || 1)) {
+        setAuthResult("idle", "无需顺延复盘", "这条复盘已处理或不在到期队列。");
+        return;
+      }
+      const saved = saveState();
       renderReviewQueue();
-      showToast("已顺延复盘。");
+      setLocalSaveResult(saved, "复盘已顺延", "已更新到期日，后续会重新进入复盘队列。", "复盘顺延未写入本机缓存");
     });
   });
   document.querySelectorAll("[data-review-fail]").forEach((button) => {
     button.addEventListener("click", () => {
-      failReview(button.dataset.reviewFail);
-      saveState();
+      if (!failReview(button.dataset.reviewFail)) return;
+      const saved = saveState();
       renderReviewQueue();
-      showToast("已记录失败原因，并安排短复盘。");
+      setLocalSaveResult(saved, "失败已记录", "已安排短复盘，并保留失败原因。", "复盘失败记录未写入本机缓存");
     });
   });
 }
 
 function completeReview(id, quality = 4) {
-  const item = state.reviewItems.find((review) => review.id === id);
-  if (!item) return;
+  const item = reviewRows().find((review) => review.id === id);
+  if (!isReviewDue(item)) return false;
+  const timestamp = stampReviewResult(item, "pass");
   item.done = true;
   item.status = "done";
-  item.quality = quality;
-  item.completedAt = new Date().toISOString();
-  if (quality <= 2) cloneShortReview(item, "低质量复盘");
+  item.quality = sanitizeInteger(quality, 1, 5);
+  item.completedAt = timestamp;
+  if (item.quality <= 2) cloneShortReview(item, "低质量复盘");
+  return true;
 }
 
 function delayReview(id, days) {
-  const item = state.reviewItems.find((review) => review.id === id);
-  if (!item) return;
+  const item = reviewRows().find((review) => review.id === id);
+  if (!isReviewDue(item)) return false;
+  const delayDays = sanitizeInteger(days, 1, 30);
   const due = parseDate(item.dueDate);
-  due.setDate(due.getDate() + days);
+  due.setDate(due.getDate() + delayDays);
   item.dueDate = formatDateISO(due);
   item.delayCount = (item.delayCount || 0) + 1;
   item.status = "delayed";
+  stampReviewResult(item, "delay");
+  return true;
 }
 
 function failReview(id) {
-  const item = state.reviewItems.find((review) => review.id === id);
-  if (!item) return;
+  const item = reviewRows().find((review) => review.id === id);
+  if (!isReviewDue(item)) return false;
   const reasons = ["概念不清", "公式不熟", "题型识别失败", "计算错误", "表达不规范", "记忆遗忘"];
   const reason = window.prompt(`选择或填写失败原因：${reasons.join(" / ")}`, item.failureReason || "概念不清");
-  item.failureReason = reason || "未说明";
+  if (reason === null) return false;
+  const nextReason = reason.trim();
+  if (!isValidReviewFailureReason(nextReason)) {
+    setAuthResult("error", "失败原因无效", "请写明需要回炉的原因。");
+    return false;
+  }
+  const timestamp = stampReviewResult(item, "fail");
+  item.done = true;
+  item.failureReason = nextReason;
   item.status = "failed";
   item.quality = 1;
+  item.completedAt = timestamp;
+  item.failStreak = (item.failStreak || 0) + 1;
   cloneShortReview(item, item.failureReason);
+  return true;
+}
+
+function isValidReviewFailureReason(reason) {
+  return Boolean(reason && reason.trim());
 }
 
 function cloneShortReview(item, reason) {
   const due = addDays(parseDate(planTodayISO()), 1);
-  state.reviewItems.push({
+  const now = new Date().toISOString();
+  reviewRows().push({
     id: `${item.id}-retry-${Date.now()}`,
     sourceTaskId: item.sourceTaskId,
     subject: item.subject,
@@ -3842,7 +5664,8 @@ function cloneShortReview(item, reason) {
     done: false,
     delayCount: 0,
     failureReason: reason,
-    quality: 0
+    quality: 0,
+    updatedAt: now
   });
 }
 
@@ -3866,7 +5689,7 @@ function renderReviewPolicy(dueCount, upcomingCount) {
 }
 
 function renderReviewItem(item) {
-  const due = item.dueDate <= planTodayISO() ? "due" : "";
+  const due = isReviewDue(item) ? "due" : "";
   const guide = reviewRoundGuide(item.round);
   return `
     <article class="review-queue-item ${due}">
@@ -3934,7 +5757,7 @@ function nextTopics(subject, limit = 3) {
   data.groups.forEach(([group, groupTopics]) => {
     groupTopics.forEach((topic) => {
       const id = topicId(subject, group, topic);
-      const stateValue = state.topics[id] || 0;
+      const stateValue = topicStateValue(id);
       if (stateValue < 2) {
         topics.push({ id, group, topic, state: stateValue });
       }
@@ -4068,7 +5891,7 @@ function renderRecords() {
     button.addEventListener("click", () => {
       document.getElementById("entryDate").value = button.dataset.editRecord;
       loadEntryForm();
-      switchView("today");
+      setRoute("today");
       showToast("已载入该日记录，可修改后保存。");
     });
   });
@@ -4077,26 +5900,41 @@ function renderRecords() {
     button.addEventListener("click", () => {
       const date = button.dataset.deleteRecord;
       if (window.confirm(`确认删除 ${date} 的记录？`)) {
+        createLocalSnapshot("before-delete-record");
+        ensureLearningContainers();
         delete state.entries[date];
         markDeleted("records", date);
-        saveState();
+        const saved = saveState();
         renderAll();
-        showToast("记录已删除。");
+        renderSnapshotPanel();
+        setLocalSaveResult(saved, "记录已删除", "已保留删除前快照，可在账号面板恢复。", "记录删除未写入本机缓存");
       }
     });
   });
 }
 
-function switchView(viewId) {
+function switchView(viewId, options = {}) {
   if (!document.getElementById(viewId)) return;
   document.querySelectorAll(".nav-item").forEach((item) => {
-    item.classList.toggle("active", item.dataset.view === viewId);
+    const active = item.dataset.view === viewId;
+    item.classList.toggle("active", active);
+    if (active) {
+      item.setAttribute("aria-current", "page");
+    } else {
+      item.removeAttribute("aria-current");
+    }
   });
   document.querySelectorAll(".view").forEach((view) => {
-    view.classList.toggle("active", view.id === viewId);
+    const active = view.id === viewId;
+    view.classList.toggle("active", active);
+    view.hidden = !active;
+    view.setAttribute("aria-hidden", String(!active));
   });
-  const nav = document.querySelector(`[data-view="${viewId}"]`);
+  const nav = [...document.querySelectorAll(".nav-item[data-view]")].find((item) => item.dataset.view === viewId);
   document.getElementById("viewTitle").textContent = nav ? nav.dataset.title || nav.textContent.trim() : "";
+  if (options.moveFocus) {
+    document.getElementById("main-content")?.focus({ preventScroll: true });
+  }
   if (nav && window.matchMedia("(max-width: 760px)").matches) {
     window.requestAnimationFrame(() => {
       nav.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
@@ -4112,36 +5950,54 @@ function scrollToTop() {
 }
 
 function exportRecordsCsv() {
-  const headers = ["日期", "数学分钟", "408分钟", "英语分钟", "政治分钟", "项目分钟", "总分钟", "核心分钟", "数学题", "408题", "阅读篇", "新增错题", "回炉错题", "明日第一任务", "备注"];
-  const rows = entriesArray().map((entry) => [
-    entry.date,
-    entry.math || 0,
-    entry.cs408 || 0,
-    entry.english || 0,
-    entry.politics || 0,
-    entry.project || 0,
-    entry.total || 0,
-    entry.core || 0,
-    entry.mathProblems || 0,
-    entry.csProblems || 0,
-    entry.reading || 0,
-    entry.newMistakes || 0,
-    entry.fixedMistakes || 0,
-    entry.nextTask || "",
-    entry.note || ""
-  ]);
-  const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
-  const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = `pku-swm-records-${todayISO()}.csv`;
-  link.click();
-  URL.revokeObjectURL(link.href);
+  try {
+    const entries = entriesArray();
+    if (!entries.length) {
+      setAuthResult("idle", "暂无可导出记录", "先保存至少一条学习记录，再导出 CSV。");
+      return false;
+    }
+    const headers = ["日期", "数学分钟", "408分钟", "英语分钟", "政治分钟", "项目分钟", "总分钟", "核心分钟", "数学题", "408题", "阅读篇", "新增错题", "回炉错题", "明日第一任务", "备注"];
+    const rows = entries.map((entry) => [
+      entry.date,
+      entry.math || 0,
+      entry.cs408 || 0,
+      entry.english || 0,
+      entry.politics || 0,
+      entry.project || 0,
+      entry.total || 0,
+      entry.core || 0,
+      entry.mathProblems || 0,
+      entry.csProblems || 0,
+      entry.reading || 0,
+      entry.newMistakes || 0,
+      entry.fixedMistakes || 0,
+      entry.nextTask || "",
+      entry.note || ""
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+    const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" });
+    const link = document.createElement("a");
+    const href = URL.createObjectURL(blob);
+    link.href = href;
+    link.download = `pku-swm-records-${todayISO()}.csv`;
+    try {
+      link.click();
+    } finally {
+      URL.revokeObjectURL(href);
+    }
+    setAuthResult("success", "CSV 已导出", "学习记录 CSV 已下载。");
+    return true;
+  } catch (error) {
+    setAuthResult("error", "CSV 导出失败", `请检查浏览器下载权限后重试：${safeErrorMessage(error, "浏览器下载失败")}`);
+    return false;
+  }
 }
 
 function csvCell(value) {
-  const text = String(value).replaceAll('"', '""');
-  return `"${text}"`;
+  const type = typeof value;
+  const text = ["string", "number", "bigint"].includes(type) ? String(value) : "";
+  const safeText = /^[\s]*[=+\-@]/.test(text) || /^[\t\r]/.test(text) ? `'${text}` : text;
+  return `"${safeText.replaceAll('"', '""')}"`;
 }
 
 function renderRecordSummary() {
@@ -4240,18 +6096,27 @@ function renderSyllabus(selected = document.querySelector(".seg.active")?.datase
   document.querySelectorAll(".topic").forEach((button) => {
     button.addEventListener("click", () => {
       const id = button.dataset.topicId;
-      const current = state.topics[id] || 0;
+      ensureKnowledgeContainers();
+      const current = topicStateValue(id);
       let next = (current + 1) % 3;
+      let capturedEvidence = false;
       if (next === 2 && !hasTopicEvidence(id)) {
-        captureTopicEvidence(id);
+        capturedEvidence = captureTopicEvidence(id);
         next = hasTopicEvidence(id) ? 2 : 1;
-        if (next === 1) showToast("已先标为需复盘；补充题量、正确率或证据后再标已掌握。");
+        if (next === 1 && capturedEvidence) showToast("已先标为需复盘；补充题量、正确率或证据后再标已掌握。");
       }
+      const updatedAt = new Date().toISOString();
       state.topics[id] = next;
-      saveState();
+      state.topicEvidence[id] = { ...topicEvidenceRow(id), updatedAt };
+      const saved = saveState();
       renderSyllabus(selected);
       renderSyllabusMini();
       renderDashboard();
+      if (capturedEvidence) {
+        setLocalSaveResult(saved, "掌握证据已记录", "考点已标为掌握，证据已保存。", "掌握证据未写入本机缓存");
+      } else if (!saved) {
+        setLocalSaveResult(false, "考点状态已保存", "考点状态已写入本机缓存。", "考点状态未写入本机缓存");
+      }
     });
   });
 }
@@ -4270,21 +6135,43 @@ function topicMatchesQuery(subject, group, topic, query) {
 }
 
 function hasTopicEvidence(id) {
-  const evidence = state.topicEvidence[id] || {};
+  const evidence = topicEvidenceRow(id);
   return Boolean((evidence.problems || 0) > 0 || (evidence.accuracy || 0) > 0 || evidence.evidence);
 }
 
 function captureTopicEvidence(id) {
-  const existing = state.topicEvidence[id] || {};
+  const existing = topicEvidenceRow(id);
   const text = window.prompt("补充掌握证据：题量/正确率/可交付结果。例如：基础题 25 道，正确率 84%，能默写定义。", existing.evidence || "");
-  if (!text) return;
-  const problems = Number((text.match(/(\d+)\s*道/) || [])[1]) || existing.problems || 0;
-  const accuracy = Number((text.match(/(\d+)\s*%/) || [])[1]) || existing.accuracy || 0;
+  if (text === null) return false;
+  const evidenceText = text.trim();
+  if (!isValidTopicEvidenceText(evidenceText)) {
+    showToast("掌握证据不能为空，请补充题量、正确率或可交付结果。");
+    return false;
+  }
+  const metrics = parseTopicEvidenceMetrics(evidenceText, existing);
+  const updatedAt = new Date().toISOString();
+  ensureKnowledgeContainers();
   state.topicEvidence[id] = {
-    problems,
-    accuracy,
-    evidence: text.trim(),
-    lastReviewDate: planTodayISO()
+    problems: metrics.problems,
+    accuracy: metrics.accuracy,
+    evidence: evidenceText,
+    lastReviewDate: planTodayISO(),
+    lastReviewAt: updatedAt,
+    updatedAt
+  };
+  return true;
+}
+
+function isValidTopicEvidenceText(text) {
+  return Boolean(text && text.trim());
+}
+
+function parseTopicEvidenceMetrics(text, existing = {}) {
+  const problemsMatch = text.match(/(\d+)\s*道/);
+  const accuracyMatch = text.match(/(\d+)\s*%/);
+  return {
+    problems: problemsMatch ? sanitizeInteger(problemsMatch[1], 0, 999) : sanitizeInteger(existing.problems || 0, 0, 999),
+    accuracy: accuracyMatch ? sanitizeInteger(accuracyMatch[1], 0, 100) : sanitizeInteger(existing.accuracy || 0, 0, 100)
   };
 }
 
@@ -4349,11 +6236,11 @@ function syllabusGroupMeta(subject, group) {
 
 function renderTopic(subject, group, topic) {
   const id = topicId(subject, group, topic);
-  const value = state.topics[id] || 0;
+  const value = topicStateValue(id);
   const className = value === 2 ? "done" : value === 1 ? "review" : "";
   const label = value === 2 ? "已掌握" : value === 1 ? "需复盘" : "未开始";
   const guide = topicGuide(subject, group, topic);
-  const evidence = state.topicEvidence[id];
+  const evidence = topicEvidenceRow(id);
   return `
     <button class="topic ${className}" data-topic-id="${escapeAttr(id)}">
       <span class="topic-main">
@@ -4650,7 +6537,7 @@ function syllabusSubjectDetail(subject) {
     let groupDone = 0;
     let groupReview = 0;
     topics.forEach((topic) => {
-      const value = state.topics[topicId(subject, group, topic)] || 0;
+      const value = topicStateValue(topicId(subject, group, topic));
       total += 2;
       score += value;
       groupTotalScore += 2;
@@ -4702,7 +6589,7 @@ function renderReview() {
   const monthHours = sumMinutes(entriesArray().filter((entry) => entry.date.startsWith(planDate.slice(0, 7))), "total") / 60;
   const currentMonth = monthlyPlan.find((row) => planDate.startsWith(row[0]));
   const monthTarget = currentMonth ? currentMonth[1] : phase.weeklyTarget * 4;
-  const dueCount = state.reviewItems.filter((item) => !item.done && item.status !== "done" && item.dueDate <= planDate).length;
+  const dueCount = reviewRows().filter((item) => isReviewDue(item, planDate)).length;
   const avgSyllabus = Math.round(["math", "cs408", "english", "politics"].reduce((sum, subject) => sum + syllabusProgress(subject).percent, 0) / 4);
   const learningStatus = weekHours >= phase.weeklyTarget * 0.9 && coreRatio >= 0.65 && activeDays >= 6 ? "可小幅加难度" :
     weekHours < phase.weeklyTarget * 0.7 || activeDays <= 3 ? "先恢复底线日" :
@@ -4752,9 +6639,10 @@ function renderRollingWindowChart() {
   const container = document.getElementById("rollingWindowChart");
   if (!container) return;
   const controls = normalizePlanControls(state.settings.planControls);
-  const windows = buildRollingReviewWindows(state.reviewItems, planTodayISO(), { controls });
+  const reviews = reviewRows();
+  const windows = buildRollingReviewWindows(reviews, planTodayISO(), { controls });
   const maxMinutes = Math.max(1, ...windows.map((item) => item.minutes));
-  const signal = reviewLoadSignal(state.reviewItems, planTodayISO(), controls);
+  const signal = reviewLoadSignal(reviews, planTodayISO(), controls);
   container.innerHTML = `
     <article class="rolling-window-summary ${signal.level}">
       <span>滚动复盘负荷</span>
@@ -4829,7 +6717,7 @@ function renderHeatmap() {
     const date = new Date(today);
     date.setDate(today.getDate() - index);
     const iso = formatDateISO(date);
-    const entry = state.entries[iso];
+    const entry = entryRow(iso);
     const minutes = entry ? getEntryTotals(entry).total : 0;
     const level = minutes >= 300 ? 4 : minutes >= 180 ? 3 : minutes >= 90 ? 2 : minutes > 0 ? 1 : 0;
     cells.push(`<div class="heat-cell level-${level}" title="${iso} · ${Math.round(minutes / 60 * 10) / 10}h"><span>${date.getDate()}</span></div>`);
@@ -4842,7 +6730,7 @@ function currentStreak() {
   const cursor = parseDate(planTodayISO());
   while (true) {
     const iso = formatDateISO(cursor);
-    const entry = state.entries[iso];
+    const entry = entryRow(iso);
     if (!entry || getEntryTotals(entry).total <= 0) break;
     streak += 1;
     cursor.setDate(cursor.getDate() - 1);
@@ -4877,7 +6765,7 @@ function renderMilestone() {
 }
 
 function renderScores() {
-  const sorted = [...state.scores].sort((a, b) => b.date.localeCompare(a.date));
+  const sorted = [...scoreRows()].sort((a, b) => b.date.localeCompare(a.date));
   const last5 = sorted.slice(0, 5);
   const last10 = sorted.slice(0, 10);
   const avg = averageScores(last5);
@@ -4914,7 +6802,7 @@ function renderScores() {
 
   document.querySelectorAll("[data-edit-score]").forEach((button) => {
     button.addEventListener("click", () => {
-      const score = state.scores.find((item) => item.id === button.dataset.editScore);
+      const score = scoreRows().find((item) => item.id === button.dataset.editScore);
       if (!score) return;
       document.getElementById("scoreDate").value = score.date;
       document.getElementById("scoreName").value = score.name;
@@ -4924,18 +6812,21 @@ function renderScores() {
       document.getElementById("scoreCs").value = score.cs408;
       document.getElementById("scoreNote").value = score.note || "";
       document.getElementById("scoreForm").dataset.editingScore = score.id;
+      clearScoreValidation();
       showToast("已载入模考，可修改后保存。");
     });
   });
   document.querySelectorAll("[data-delete-score]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!window.confirm("确认删除这条模考记录？")) return;
+      createLocalSnapshot("before-delete-score");
       markDeleted("scores", button.dataset.deleteScore);
-      state.scores = state.scores.filter((item) => item.id !== button.dataset.deleteScore);
-      saveState();
+      state.scores = scoreRows().filter((item) => item.id !== button.dataset.deleteScore);
+      const saved = saveState();
       renderScores();
       renderDashboard();
-      showToast("模考记录已删除。");
+      renderSnapshotPanel();
+      setLocalSaveResult(saved, "模考记录已删除", "已保留删除前快照，可在账号面板恢复。", "模考删除未写入本机缓存");
     });
   });
 }
@@ -4986,6 +6877,7 @@ function averageScores(scores) {
 }
 
 function renderResources() {
+  const assets = ensureAssetContainers();
   const usageCard = `
     <article class="resource-card resource-rule-card">
       <h4>资料使用规则</h4>
@@ -5000,7 +6892,7 @@ function renderResources() {
   `).join("");
 
   document.getElementById("projectChecklist").innerHTML = projectItems.map((item) => {
-    const checked = state.project[item] ? "checked" : "";
+    const checked = assets.project[item] ? "checked" : "";
     return `
       <label class="check-row">
         <input type="checkbox" data-project="${escapeAttr(item)}" ${checked}>
@@ -5011,9 +6903,11 @@ function renderResources() {
 
   document.querySelectorAll("[data-project]").forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
+      ensureAssetContainers();
       state.project[checkbox.dataset.project] = checkbox.checked;
       state.project.updatedAt = new Date().toISOString();
-      saveState();
+      const saved = saveState();
+      setLocalSaveResult(saved, "项目清单已更新", "项目任务状态已保存。", "项目清单未写入本机缓存");
     });
   });
 
@@ -5021,8 +6915,9 @@ function renderResources() {
 }
 
 function renderResourceProgress() {
+  const resourcesState = ensureAssetContainers().resources;
   document.getElementById("resourceProgress").innerHTML = resourceProgressItems.map(([label, key]) => {
-    const value = sanitizeNumber(state.resources[key], 0, 100);
+    const value = normalizeResourceProgressValue(resourcesState[key]);
     return `
       <label class="resource-progress-row">
         <span>${label}</span>
@@ -5034,15 +6929,34 @@ function renderResourceProgress() {
 
   document.querySelectorAll("[data-resource-progress]").forEach((input) => {
     input.addEventListener("input", () => {
-      state.resources[input.dataset.resourceProgress] = Number(input.value);
-      const label = input.closest(".resource-progress-row")?.querySelector("strong");
-      if (label) label.textContent = `${Number(input.value) || 0}%`;
-      saveState();
+      updateResourceProgressInput(input);
+    });
+    input.addEventListener("change", () => {
+      const saved = updateResourceProgressInput(input);
+      setLocalSaveResult(saved, "资料进度已更新", `当前进度：${input.value}%。`, "资料进度未写入本机缓存");
     });
   });
 }
 
+function updateResourceProgressInput(input) {
+  ensureAssetContainers();
+  ensureSettingsContainer();
+  const value = normalizeResourceProgressValue(input.value);
+  const updatedAt = new Date().toISOString();
+  input.value = String(value);
+  state.resources[input.dataset.resourceProgress] = value;
+  state.settings.resourcesUpdatedAt = updatedAt;
+  const label = input.closest(".resource-progress-row")?.querySelector("strong");
+  if (label) label.textContent = `${value}%`;
+  return saveState();
+}
+
+function normalizeResourceProgressValue(value) {
+  return Math.round(sanitizeNumber(value, 0, 100) / 5) * 5;
+}
+
 function renderSettings() {
+  ensureSettingsContainer();
   document.getElementById("settingWeekdayMinutes").value = state.settings.weekdayMinutes;
   document.getElementById("settingWeekendMinutes").value = state.settings.weekendMinutes;
   document.getElementById("settingTaskCount").value = state.settings.taskCount;
@@ -5062,11 +6976,11 @@ function renderSettings() {
   });
   setText("settingsExamDateStatus", examDateStatusText());
   setText("appBuildText", APP_BUILD);
-  setText("storageHealthText", storageAvailable ? "本机缓存正常" : "本机缓存不可用，建议检查浏览器隐私/存储权限");
+  renderStorageHealthText();
 
   document.getElementById("standardsList").innerHTML = [
-    ["数据起点", "2026-06-08 从头开始；早于起点的记录、模考、周计划、复盘队列和考纲掌握证据只归档，不参与统计和排程。"],
-    ["渐进时长", "2026 年 6 月 8 日从工作日 90m、周末 150m 开始；7 月约 120/210m，8 月约 150/240m；9 月起进入第一轮主干强度。"],
+    ["数据起点", "2026-06-15 从头开始；早于起点的记录、模考、周计划、复盘队列和考纲掌握证据只归档，不参与统计和排程。"],
+    ["渐进时长", "2026 年 6 月 15 日从工作日 90m、周末 150m 开始；7 月约 120/210m，8 月约 150/240m；9 月起进入第一轮主干强度。"],
     ...highStandards
   ].map(([subject, standard]) => `
     <div class="standard-item">
@@ -5075,7 +6989,8 @@ function renderSettings() {
     </div>
   `).join("");
 
-  document.getElementById("customTaskList").innerHTML = state.customTasks.length ? state.customTasks.map((task) => `
+  const customTasks = customTaskRows();
+  document.getElementById("customTaskList").innerHTML = customTasks.length ? customTasks.map((task) => `
     <div class="custom-task-row">
       <span>${escapeHtml(task.subject)}</span>
       <strong>${escapeHtml(task.text)}</strong>
@@ -5086,9 +7001,16 @@ function renderSettings() {
 
   document.querySelectorAll("[data-delete-custom]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.customTasks = state.customTasks.filter((task) => task.id !== button.dataset.deleteCustom);
-      saveState();
+      const task = customTaskRows().find((item) => item.id === button.dataset.deleteCustom);
+      if (!task) return;
+      if (!window.confirm(`确认删除自定义任务“${task.text}”？`)) return;
+      createLocalSnapshot("before-delete-custom-task");
+      state.settings.customTasksUpdatedAt = new Date().toISOString();
+      state.customTasks = customTaskRows().filter((item) => item.id !== button.dataset.deleteCustom);
+      const saved = saveState();
       renderSettings();
+      renderSnapshotPanel();
+      setLocalSaveResult(saved, "自定义任务已删除", "已保留删除前快照，可在账号面板恢复。", "自定义任务删除未写入本机缓存");
     });
   });
 
@@ -5108,7 +7030,7 @@ function renderSourceRegistry() {
         <span>${escapeHtml(item.level)} · ${escapeHtml(item.checkedAt)}</span>
         <strong>${escapeHtml(item.title)}</strong>
         <p>${escapeHtml(item.claim)}</p>
-        <a href="${escapeAttr(url)}" target="_blank" rel="noreferrer">${escapeHtml(item.url)}</a>
+        <a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.url)}</a>
       </article>
     `;
   }).join("");
@@ -5165,7 +7087,7 @@ function sumMinutesForMonth(month) {
 function showToast(message) {
   const toast = document.getElementById("toast");
   if (!toast) return;
-  toast.textContent = message;
+  toast.textContent = safeScalarText(message, "", 1200);
   toast.classList.add("show");
   window.clearTimeout(showToast.timer);
   showToast.timer = window.setTimeout(() => {
@@ -5196,52 +7118,32 @@ function installRecoveryMode(error) {
   initRoute();
   setText("syncStatusText", "恢复模式");
   setText("sideDataSave", "恢复模式");
-  showToast(`页面已进入恢复模式：${error?.message || error || "初始化失败"}`);
+  showToast(`页面已进入恢复模式：${safeErrorMessage(error, "初始化失败")}`);
 }
 
 function bindRecoveryAuthControls() {
   const dialog = document.getElementById("authDialog");
+  document.getElementById("authForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    authAction("login");
+  });
   document.getElementById("authOpenBtn")?.addEventListener("click", () => {
-    renderAuthPanel();
-    dialog?.showModal();
+    openAuthDialog(dialog);
   });
   document.getElementById("authCloseBtn")?.addEventListener("click", () => {
-    dialog?.close();
+    closeAuthDialog(dialog);
   });
   document.getElementById("signInBtn")?.addEventListener("click", () => authAction("login"));
   document.getElementById("signUpBtn")?.addEventListener("click", () => authAction("signup"));
-  document.getElementById("signOutBtn")?.addEventListener("click", async () => {
-    try {
-      await signOut();
-      currentUser = null;
-      state.user = null;
-      state.sync = { status: "local", lastSyncAt: "", lastError: "", pending: false };
-      saveState({ skipCloud: true });
-      renderAll();
-      showToast("已退出账号，当前数据保留在本机。");
-    } catch (authError) {
-      showToast(`退出失败：${authError.message || authError}`);
-    }
-  });
-  document.getElementById("syncNowBtn")?.addEventListener("click", () => syncNow());
-  document.getElementById("downloadBackupBtn")?.addEventListener("click", () => exportStateJson("manual-backup"));
-  document.getElementById("pushLocalBtn")?.addEventListener("click", async () => {
-    createLocalSnapshot("before-cloud-import");
-    state.sync = { ...state.sync, localImportPending: false, cloudPaused: false };
-    legacyImportPending = false;
-    await syncNow({ force: true });
-    saveState({ skipCloud: true });
-    renderAuthPanel();
-    showToast("已尝试导入云端。");
-  });
-  document.getElementById("keepLocalBtn")?.addEventListener("click", () => {
-    state.sync = { ...state.sync, localImportPending: false, cloudPaused: true, status: "local", pending: false };
-    legacyImportPending = false;
-    saveState({ skipCloud: true });
-    renderAuthPanel();
-    dialog?.close();
-  });
+  document.getElementById("signOutBtn")?.addEventListener("click", signOutAction);
+  document.getElementById("syncNowBtn")?.addEventListener("click", manualSyncNow);
+  document.getElementById("downloadBackupBtn")?.addEventListener("click", () => downloadStateBackup("manual-backup"));
+  document.getElementById("pushLocalBtn")?.addEventListener("click", pushLocalToCloud);
+  document.getElementById("keepLocalBtn")?.addEventListener("click", () => keepLocalOnly(dialog));
   document.getElementById("resetLocalBtn")?.addEventListener("click", resetLocalData);
+  document.querySelectorAll("#authEmail, #authPassword").forEach((input) => {
+    input.addEventListener("input", clearAuthValidation);
+  });
   document.documentElement.dataset.authBound = "1";
 }
 
@@ -5249,10 +7151,7 @@ window.__rwDebug = {
   build: APP_BUILD,
   route: setRoute,
   view: activeViewId,
-  resetLocal: () => {
-    clearAppLocalStorage();
-    window.location.href = "/?reset=1";
-  },
+  resetLocal: resetLocalData,
   health: () => ({
     build: APP_BUILD,
     appStarted,

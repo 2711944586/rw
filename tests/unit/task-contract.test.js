@@ -63,6 +63,50 @@ describe('validateCompletion', () => {
     expect(result.valid).toBe(false);
     expect(result.errors[0]).toContain('代码或伪代码');
   });
+
+  it('ignores object artifacts instead of exposing object strings', () => {
+    const task = { required_artifacts: [{ bad: true }, '错因笔记', 101], required_problem_count: 0 };
+    const payload = { artifacts: [{ bad: true }, 101] };
+    const result = validateCompletion(task, payload);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(['Missing required artifact: 错因笔记']);
+    expect(result.errors.join(' ')).not.toContain('[object Object]');
+  });
+
+  it('accepts numeric strings from form-like payloads', () => {
+    const task = { required_artifacts: [], required_problem_count: '5' };
+    const payload = { problem_count: '5', correct_count: '4' };
+    const result = validateCompletion(task, payload);
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects malformed or impossible numeric evidence', () => {
+    expect(validateCompletion({}, { problem_count: Number.POSITIVE_INFINITY }).valid).toBe(false);
+    expect(validateCompletion({}, { problem_count: -1 }).valid).toBe(false);
+    expect(validateCompletion({}, { problem_count: 3, correct_count: Number.NaN }).valid).toBe(false);
+    const tooManyCorrect = validateCompletion({}, { problem_count: 3, correct_count: 4 });
+    expect(tooManyCorrect.valid).toBe(false);
+    expect(tooManyCorrect.errors).toContain('correct_count cannot exceed problem_count');
+  });
+
+  it('rejects object-coerced numeric evidence', () => {
+    const result = validateCompletion(
+      { required_artifacts: [], required_problem_count: { valueOf: () => 5 } },
+      { problem_count: { valueOf: () => 5 }, correct_count: { valueOf: () => 4 } }
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('problem_count must be a non-negative number');
+    expect(result.errors).toContain('correct_count must be a non-negative number');
+    expect(result.errors.join(' ')).not.toContain('[object Object]');
+  });
+
+  it('handles missing task and payload objects', () => {
+    const result = validateCompletion();
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
 });
 
 describe('validateMasteryPromotion', () => {
@@ -133,6 +177,59 @@ describe('validateMasteryPromotion', () => {
     expect(result.canPromote).toBe(false);
     expect(result.unmetCriteria.length).toBe(3);
   });
+
+  it('accepts numeric strings for persisted progress values', () => {
+    const progress = {
+      total_problems: '35',
+      recent_14d_accuracy: '0.85',
+      last_review: '2027-06-12'
+    };
+    const result = validateMasteryPromotion(progress, today);
+    expect(result.canPromote).toBe(true);
+  });
+
+  it('blocks invalid review dates instead of promoting', () => {
+    const progress = {
+      total_problems: 35,
+      recent_14d_accuracy: 0.85,
+      last_review: 'not-a-date'
+    };
+    const result = validateMasteryPromotion(progress, today);
+    expect(result.canPromote).toBe(false);
+    expect(result.unmetCriteria).toContain('last_review is invalid');
+  });
+
+  it('blocks future review dates and invalid reference dates', () => {
+    const futureReview = validateMasteryPromotion({
+      total_problems: 35,
+      recent_14d_accuracy: 0.85,
+      last_review: '2027-06-16'
+    }, today);
+    expect(futureReview.canPromote).toBe(false);
+    expect(futureReview.unmetCriteria).toContain('last_review cannot be in the future');
+
+    const invalidToday = validateMasteryPromotion({
+      total_problems: 35,
+      recent_14d_accuracy: 0.85,
+      last_review: '2027-06-12'
+    }, 'bad-date');
+    expect(invalidToday.canPromote).toBe(false);
+    expect(invalidToday.unmetCriteria).toContain('today is invalid');
+  });
+
+  it('rejects object-coerced mastery promotion evidence and dates', () => {
+    const result = validateMasteryPromotion({
+      total_problems: { valueOf: () => 35 },
+      recent_14d_accuracy: { valueOf: () => 0.85 },
+      last_review: { toString: () => '2027-06-12' }
+    }, today);
+
+    expect(result.canPromote).toBe(false);
+    expect(result.unmetCriteria).toContain('total_problems (0) must be >= 30');
+    expect(result.unmetCriteria).toContain('recent_14d_accuracy (0) must be >= 0.80');
+    expect(result.unmetCriteria).toContain('last_review is invalid');
+    expect(result.unmetCriteria.join(' ')).not.toContain('[object Object]');
+  });
 });
 
 describe('checkMasteryDemotion', () => {
@@ -166,5 +263,12 @@ describe('checkMasteryDemotion', () => {
     const result = checkMasteryDemotion(topic, reviewResult);
     expect(result.shouldDemote).toBe(false);
     expect(result.newStatus).toBe('needs_review');
+  });
+
+  it('handles missing review data and malformed accuracy', () => {
+    expect(checkMasteryDemotion().shouldDemote).toBe(false);
+    expect(checkMasteryDemotion({ mastery_status: 'mastered' }, { accuracy: Number.NaN }).shouldDemote).toBe(false);
+    expect(checkMasteryDemotion({ mastery_status: 'mastered' }, { accuracy: -0.1 }).shouldDemote).toBe(true);
+    expect(checkMasteryDemotion({ mastery_status: 'mastered' }, { accuracy: { valueOf: () => 0.1 } }).shouldDemote).toBe(false);
   });
 });

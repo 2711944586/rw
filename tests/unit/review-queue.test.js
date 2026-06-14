@@ -56,6 +56,17 @@ describe('review-queue', () => {
       const result = advanceOnPass(item, '2025-01-10');
       expect(result.failStreak).toBe(0);
     });
+
+    it('sanitizes malformed interval indexes and dates', () => {
+      const result = advanceOnPass({ ...baseItem, intervalIndex: Number.POSITIVE_INFINITY }, 'bad-date');
+      expect(result.intervalIndex).toBe(1);
+      expect(result.nextDueAt).toBe('1970-01-04');
+      expect(result.lastSubmittedDate).toBe('1970-01-01');
+
+      const invalidCalendarResult = advanceOnPass(baseItem, '2026-02-31');
+      expect(invalidCalendarResult.nextDueAt).toBe('1970-01-04');
+      expect(invalidCalendarResult.lastSubmittedDate).toBe('1970-01-01');
+    });
   });
 
   describe('resetOnFail', () => {
@@ -72,6 +83,12 @@ describe('review-queue', () => {
       const result = resetOnFail(item, '2025-01-10');
       expect(result.failStreak).toBe(3);
     });
+
+    it('sanitizes malformed fail streaks and dates', () => {
+      const result = resetOnFail({ ...baseItem, failStreak: Number.NaN }, 'not-a-date');
+      expect(result.failStreak).toBe(1);
+      expect(result.nextDueAt).toBe('1970-01-02');
+    });
   });
 
   describe('isHighPriorityRecovery', () => {
@@ -83,6 +100,12 @@ describe('review-queue', () => {
     it('should return false when failStreak < 3', () => {
       expect(isHighPriorityRecovery({ ...baseItem, failStreak: 0 })).toBe(false);
       expect(isHighPriorityRecovery({ ...baseItem, failStreak: 2 })).toBe(false);
+    });
+
+    it('handles malformed fail streak values', () => {
+      expect(isHighPriorityRecovery({ ...baseItem, failStreak: '3' })).toBe(true);
+      expect(isHighPriorityRecovery({ ...baseItem, failStreak: Number.POSITIVE_INFINITY })).toBe(false);
+      expect(isHighPriorityRecovery(null)).toBe(false);
     });
   });
 
@@ -142,6 +165,21 @@ describe('review-queue', () => {
       sortDueItems(items);
       expect(items).toEqual(original);
     });
+
+    it('returns an empty list for non-array input', () => {
+      expect(sortDueItems(null)).toEqual([]);
+      expect(sortDueItems({ bad: 'shape' })).toEqual([]);
+    });
+
+    it('pushes invalid due dates after valid dates when priority ties', () => {
+      const items = [
+        { ...baseItem, topicId: 'invalid', failStreak: '1', nextDueAt: 'bad-date', intervalIndex: Number.NaN },
+        { ...baseItem, topicId: 'invalid-calendar', failStreak: 1, nextDueAt: '2025-02-31', intervalIndex: 1 },
+        { ...baseItem, topicId: 'valid', failStreak: 1, nextDueAt: '2025-01-09', intervalIndex: 4 },
+      ];
+      const sorted = sortDueItems(items);
+      expect(sorted.map(item => item.topicId)).toEqual(['valid', 'invalid', 'invalid-calendar']);
+    });
   });
 
   describe('trimToCapacity', () => {
@@ -177,6 +215,22 @@ describe('review-queue', () => {
       expect(result.kept).toHaveLength(2);
       expect(result.deferred).toHaveLength(0);
     });
+
+    it('defers all items when capacity is malformed or negative', () => {
+      const items = [
+        { ...baseItem, topicId: 'a', nextDueAt: '2025-01-10' },
+        { ...baseItem, topicId: 'b', nextDueAt: 'bad-date' },
+      ];
+      const result = trimToCapacity(items, Number.NEGATIVE_INFINITY, 10);
+      expect(result.kept).toHaveLength(0);
+      expect(result.deferred).toHaveLength(2);
+      expect(result.deferred[0].nextDueAt).toBe('2025-01-11');
+      expect(result.deferred[1].nextDueAt).toBe('1970-01-02');
+    });
+
+    it('returns empty groups for non-array input', () => {
+      expect(trimToCapacity(null, 30, 10)).toEqual({ kept: [], deferred: [] });
+    });
   });
 
   describe('checkStaleness', () => {
@@ -206,6 +260,17 @@ describe('review-queue', () => {
       const result = checkStaleness(item, '2025-02-01');
       expect(result.isStale).toBe(true);
       expect(result.daysSinceDue).toBe(31);
+    });
+
+    it('treats malformed dates as not stale instead of returning NaN', () => {
+      const result = checkStaleness({ ...baseItem, nextDueAt: 'bad-date' }, 'also-bad');
+      expect(result.isStale).toBe(false);
+      expect(result.daysSinceDue).toBe(0);
+      expect(Number.isFinite(result.daysSinceDue)).toBe(true);
+
+      const invalidCalendarResult = checkStaleness({ ...baseItem, nextDueAt: '2025-02-31' }, '2025-03-10');
+      expect(invalidCalendarResult.isStale).toBe(false);
+      expect(invalidCalendarResult.daysSinceDue).toBe(0);
     });
   });
 });

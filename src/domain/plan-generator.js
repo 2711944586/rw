@@ -10,6 +10,8 @@
 
 /** Core subjects for ratio computation */
 const CORE_SUBJECTS = new Set(['math', '408']);
+const DEFAULT_TASK_MINUTES = 30;
+const DEFAULT_PRIORITY = 99;
 
 /** Priority tiers (lower number = higher priority) */
 const PRIORITY_TIERS = {
@@ -21,6 +23,79 @@ const PRIORITY_TIERS = {
   project: 6,
 };
 
+function isNumericScalar(value) {
+  return ['string', 'number', 'bigint'].includes(typeof value);
+}
+
+function finiteNumber(value, fallback = 0) {
+  const numeric = isNumericScalar(value) ? Number(value) : Number.NaN;
+  const fallbackNumeric = isNumericScalar(fallback) ? Number(fallback) : Number.NaN;
+  if (Number.isFinite(numeric)) return numeric;
+  return Number.isFinite(fallbackNumeric) ? fallbackNumeric : 0;
+}
+
+function nonNegativeNumber(value, fallback = 0) {
+  const fallbackNumeric = finiteNumber(fallback, 0);
+  const numeric = isNumericScalar(value) ? Number(value) : Number.NaN;
+  if (Number.isFinite(numeric) && numeric >= 0) return numeric;
+  return fallbackNumeric >= 0 ? fallbackNumeric : 0;
+}
+
+function positiveNumber(value, fallback = DEFAULT_TASK_MINUTES) {
+  const fallbackNumeric = finiteNumber(fallback, 0);
+  const numeric = isNumericScalar(value) ? Number(value) : Number.NaN;
+  if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  return fallbackNumeric > 0 ? fallbackNumeric : 0;
+}
+
+function priorityValue(value, fallback = DEFAULT_PRIORITY) {
+  const numeric = isNumericScalar(value) ? Number(value) : Number.NaN;
+  if (Number.isFinite(numeric) && numeric > 0) return Math.round(numeric);
+  return fallback;
+}
+
+function safeText(value, fallback = '') {
+  const type = typeof value;
+  if (!['string', 'number', 'bigint'].includes(type)) return fallback;
+  const text = String(value);
+  return text || fallback;
+}
+
+function arrayValue(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function taskObjects(value) {
+  return arrayValue(value).filter(task => task && typeof task === 'object' && !Array.isArray(task));
+}
+
+function normalizePlanTask(task, overrides = {}) {
+  const normalized = {
+    ...task,
+    topicId: safeText(task?.topicId),
+    subject: safeText(task?.subject),
+    phase: safeText(task?.phase),
+    category: safeText(task?.category),
+    ...overrides,
+  };
+  if ('isCore' in task) normalized.isCore = task.isCore === true;
+  return normalized;
+}
+
+function historyEntry(topicId, topicHistory) {
+  if (!topicHistory || typeof topicHistory.get !== 'function') return null;
+  try {
+    return topicHistory.get(topicId) || null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveEstimatedMinutes(task, topicHistory) {
+  const explicit = positiveNumber(task?.estimatedMinutes, 0);
+  return explicit || estimateTaskMinutes(safeText(task?.topicId), topicHistory);
+}
+
 /**
  * Determine if today should be a recovery day.
  * Recovery is triggered when consecutiveMissedDays >= 2.
@@ -31,7 +106,7 @@ const PRIORITY_TIERS = {
  * Validates: Requirements 2.5
  */
 export function isRecoveryDay(consecutiveMissedDays) {
-  return consecutiveMissedDays >= 2;
+  return nonNegativeNumber(consecutiveMissedDays) >= 2;
 }
 
 /**
@@ -45,12 +120,14 @@ export function isRecoveryDay(consecutiveMissedDays) {
  * Validates: Requirements 2.8
  */
 export function estimateTaskMinutes(topicId, topicHistory) {
-  const entry = topicHistory.get(topicId);
-  if (!entry) return 30; // fallback default
+  const entry = historyEntry(topicId, topicHistory);
+  if (!entry) return DEFAULT_TASK_MINUTES; // fallback default
 
-  const records = entry.records || [];
+  const records = arrayValue(entry.records)
+    .map((record) => positiveNumber(record?.minutes, 0))
+    .filter((minutes) => minutes > 0);
   if (records.length >= 3) {
-    const sorted = records.map(r => r.minutes).sort((a, b) => a - b);
+    const sorted = records.sort((a, b) => a - b);
     const mid = Math.floor(sorted.length / 2);
     if (sorted.length % 2 === 0) {
       return (sorted[mid - 1] + sorted[mid]) / 2;
@@ -58,7 +135,7 @@ export function estimateTaskMinutes(topicId, topicHistory) {
     return sorted[mid];
   }
 
-  return entry.baseline || 30;
+  return positiveNumber(entry.baseline, DEFAULT_TASK_MINUTES) || DEFAULT_TASK_MINUTES;
 }
 
 /**
@@ -71,21 +148,22 @@ export function estimateTaskMinutes(topicId, topicHistory) {
  * Validates: Requirements 2.2
  */
 export function computeCoreRatio(tasks) {
-  if (!tasks || tasks.length === 0) return 1;
+  const safeTasks = taskObjects(tasks);
+  if (safeTasks.length === 0) return 1;
 
   let totalMinutes = 0;
   let coreMinutes = 0;
 
-  for (const task of tasks) {
-    const mins = task.estimatedMinutes || 0;
+  for (const task of safeTasks) {
+    const mins = nonNegativeNumber(task?.estimatedMinutes);
     totalMinutes += mins;
-    if (CORE_SUBJECTS.has(task.subject)) {
+    if (CORE_SUBJECTS.has(task?.subject)) {
       coreMinutes += mins;
     }
   }
 
-  if (totalMinutes === 0) return 1;
-  return coreMinutes / totalMinutes;
+  if (totalMinutes <= 0) return 1;
+  return Math.min(1, Math.max(0, coreMinutes / totalMinutes));
 }
 
 /**
@@ -105,13 +183,15 @@ function getCoreRatioThreshold(phase) {
  * @returns {number} Priority tier (lower = higher priority)
  */
 function assignPriority(candidate) {
-  if (candidate.priority !== undefined) return candidate.priority;
+  const explicit = priorityValue(candidate?.priority, 0);
+  if (explicit > 0) return explicit;
 
-  if (candidate.category === 'review') return PRIORITY_TIERS.review;
-  if (candidate.category === 'phaseCore') return PRIORITY_TIERS.phaseCore;
-  if (candidate.category === 'mistakes') return PRIORITY_TIERS.mistakes;
+  const category = safeText(candidate?.category);
+  if (category === 'review') return PRIORITY_TIERS.review;
+  if (category === 'phaseCore') return PRIORITY_TIERS.phaseCore;
+  if (category === 'mistakes') return PRIORITY_TIERS.mistakes;
 
-  const subj = (candidate.subject || '').toLowerCase();
+  const subj = safeText(candidate?.subject).toLowerCase();
   if (subj === 'english') return PRIORITY_TIERS.english;
   if (subj === 'politics') return PRIORITY_TIERS.politics;
   if (subj === 'project') return PRIORITY_TIERS.project;
@@ -132,10 +212,10 @@ function assignPriority(candidate) {
  */
 function enforceCoreRatio(tasks, phase) {
   const threshold = getCoreRatioThreshold(phase);
-  let result = [...tasks];
+  let result = taskObjects(tasks);
 
   // If there are no core tasks at all, we can't enforce the ratio — return as-is
-  const hasCoreTask = result.some(t => CORE_SUBJECTS.has(t.subject));
+  const hasCoreTask = result.some(t => CORE_SUBJECTS.has(t?.subject));
   if (!hasCoreTask) return result;
 
   let ratio = computeCoreRatio(result);
@@ -143,8 +223,8 @@ function enforceCoreRatio(tasks, phase) {
 
   // Collect non-core tasks sorted by priority descending (lowest priority = highest number removed first)
   const nonCoreTasks = result
-    .filter(t => !CORE_SUBJECTS.has(t.subject))
-    .sort((a, b) => (b.priority || 99) - (a.priority || 99));
+    .filter(t => !CORE_SUBJECTS.has(t?.subject))
+    .sort((a, b) => priorityValue(b?.priority) - priorityValue(a?.priority));
 
   for (const taskToRemove of nonCoreTasks) {
     result = result.filter(t => t !== taskToRemove);
@@ -165,16 +245,18 @@ function enforceCoreRatio(tasks, phase) {
  * @returns {Array}
  */
 function prioritizeAndTrimStrict(tasks, budget) {
-  if (!tasks || tasks.length === 0) return [];
-  if (budget <= 0) return [];
+  const safeTasks = taskObjects(tasks);
+  const safeBudget = nonNegativeNumber(budget);
+  if (safeTasks.length === 0) return [];
+  if (safeBudget <= 0) return [];
 
-  const sorted = [...tasks].sort((a, b) => (a.priority || 99) - (b.priority || 99));
+  const sorted = [...safeTasks].sort((a, b) => priorityValue(a?.priority) - priorityValue(b?.priority));
   const result = [];
   let accumulated = 0;
 
   for (const task of sorted) {
-    const mins = task.estimatedMinutes || 0;
-    if (accumulated + mins <= budget) {
+    const mins = positiveNumber(task?.estimatedMinutes, DEFAULT_TASK_MINUTES);
+    if (accumulated + mins <= safeBudget) {
       result.push(task);
       accumulated += mins;
     }
@@ -197,17 +279,19 @@ function prioritizeAndTrimStrict(tasks, budget) {
  * Validates: Requirements 2.7
  */
 export function prioritizeAndTrim(tasks, budget) {
-  if (!tasks || tasks.length === 0) return [];
-  if (budget <= 0) return [];
+  const safeTasks = taskObjects(tasks);
+  const safeBudget = nonNegativeNumber(budget);
+  if (safeTasks.length === 0) return [];
+  if (safeBudget <= 0) return [];
 
-  const sorted = [...tasks].sort((a, b) => (a.priority || 99) - (b.priority || 99));
+  const sorted = [...safeTasks].sort((a, b) => priorityValue(a?.priority) - priorityValue(b?.priority));
 
   const result = [];
   let accumulated = 0;
 
   for (const task of sorted) {
-    const mins = task.estimatedMinutes || 0;
-    if (accumulated + mins <= budget) {
+    const mins = positiveNumber(task?.estimatedMinutes, DEFAULT_TASK_MINUTES);
+    if (accumulated + mins <= safeBudget) {
       result.push(task);
       accumulated += mins;
     }
@@ -230,7 +314,8 @@ export function prioritizeAndTrim(tasks, budget) {
  * @returns {Array} Recovery plan tasks
  */
 function generateRecoveryPlan(input) {
-  const medianMinutes = (input.historyMedian && input.historyMedian.minutes) || input.availableMinutes;
+  const availableMinutes = nonNegativeNumber(input.availableMinutes);
+  const medianMinutes = positiveNumber(input.historyMedian?.minutes, availableMinutes);
   const recoveryBudget = Math.floor(medianMinutes * 0.6);
 
   // Only include core-subject tasks from due reviews and candidates
@@ -238,28 +323,26 @@ function generateRecoveryPlan(input) {
 
   // Add due reviews that are core subjects
   if (input.dueReviews) {
-    for (const review of input.dueReviews) {
-      if (CORE_SUBJECTS.has(review.subject)) {
-        candidates.push({
-          ...review,
+    for (const review of taskObjects(input.dueReviews)) {
+      if (CORE_SUBJECTS.has(review?.subject)) {
+        candidates.push(normalizePlanTask(review, {
           priority: PRIORITY_TIERS.review,
           isRecovery: true,
-          estimatedMinutes: review.estimatedMinutes || estimateTaskMinutes(review.topicId, input.topicHistory || new Map()),
-        });
+          estimatedMinutes: resolveEstimatedMinutes(review, input.topicHistory),
+        }));
       }
     }
   }
 
   // Add core candidate topics
   if (input.candidateTopics) {
-    for (const topic of input.candidateTopics) {
-      if (CORE_SUBJECTS.has(topic.subject) && topic.isCore) {
-        candidates.push({
-          ...topic,
-          priority: topic.priority || PRIORITY_TIERS.phaseCore,
+    for (const topic of taskObjects(input.candidateTopics)) {
+      if (CORE_SUBJECTS.has(topic?.subject) && topic?.isCore === true) {
+        candidates.push(normalizePlanTask(topic, {
+          priority: priorityValue(topic.priority, PRIORITY_TIERS.phaseCore),
           isRecovery: true,
-          estimatedMinutes: topic.estimatedMinutes || estimateTaskMinutes(topic.topicId, input.topicHistory || new Map()),
-        });
+          estimatedMinutes: resolveEstimatedMinutes(topic, input.topicHistory),
+        }));
       }
     }
   }
@@ -294,61 +377,66 @@ function generateRecoveryPlan(input) {
  *
  * Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8
  */
-export function generateDailyPlan(input) {
+export function generateDailyPlan(input = {}) {
   // Step 1: Recovery day check
-  if (isRecoveryDay(input.consecutiveMissedDays || 0)) {
+  if (isRecoveryDay(input.consecutiveMissedDays)) {
     return generateRecoveryPlan(input);
   }
 
-  const topicHistory = input.topicHistory || new Map();
-  const blockedSet = new Set((input.blockedTopics || []).map(t => typeof t === 'string' ? t : t.topicId));
+  const topicHistory = input.topicHistory;
+  const blockedSet = new Set(
+    arrayValue(input.blockedTopics)
+      .map(t => typeof t === 'string' || typeof t === 'number' || typeof t === 'bigint' ? safeText(t) : safeText(t?.topicId))
+      .filter(Boolean)
+  );
   const candidates = [];
 
   // Step 2a: Due reviews (highest priority)
   if (input.dueReviews) {
-    for (const review of input.dueReviews) {
-      candidates.push({
-        ...review,
+    for (const review of taskObjects(input.dueReviews)) {
+      candidates.push(normalizePlanTask(review, {
         priority: PRIORITY_TIERS.review,
         category: 'review',
-        estimatedMinutes: review.estimatedMinutes || estimateTaskMinutes(review.topicId, topicHistory),
+        estimatedMinutes: resolveEstimatedMinutes(review, topicHistory),
         isRecovery: false,
-      });
+      }));
     }
   }
 
   // Step 2b: Candidate topics (filter out blocked prerequisites)
   if (input.candidateTopics) {
-    for (const topic of input.candidateTopics) {
+    for (const topic of taskObjects(input.candidateTopics)) {
+      const topicId = safeText(topic?.topicId);
+      const phase = safeText(topic?.phase);
       // Prerequisite gating: skip blocked topics for reinforcement/pastExam tasks
-      if (blockedSet.has(topic.topicId) && (topic.phase === 'reinforcement' || topic.phase === 'pastExam')) {
+      if (blockedSet.has(topicId) && (phase === 'reinforcement' || phase === 'pastExam')) {
         continue;
       }
 
-      const priority = topic.priority || assignPriority(topic);
-      candidates.push({
-        ...topic,
+      const priority = assignPriority(topic);
+      candidates.push(normalizePlanTask(topic, {
         priority,
-        estimatedMinutes: topic.estimatedMinutes || estimateTaskMinutes(topic.topicId, topicHistory),
+        estimatedMinutes: resolveEstimatedMinutes(topic, topicHistory),
         isRecovery: false,
-      });
+      }));
     }
   }
 
   // Step 3: Core ratio enforcement (first pass)
-  const phase = input.phase || 'foundation';
+  const phase = safeText(input.phase, 'foundation');
   let plan = enforceCoreRatio(candidates, phase);
 
   // Step 4: Trim to budget
-  const budget = input.availableMinutes || 0;
+  const budget = nonNegativeNumber(input.availableMinutes);
   plan = prioritizeAndTrim(plan, budget);
 
   // Step 4b: Re-enforce core ratio after trimming (trimming may have altered the ratio)
   plan = enforceCoreRatio(plan, phase);
 
   // Step 5: Volume cap — task count <= ceil(7dayMedianTaskCount * 1.15)
-  if (input.historyMedian && input.historyMedian.taskCount > 0) {
-    const maxTasks = Math.ceil(input.historyMedian.taskCount * 1.15);
+  const historyTaskCount = nonNegativeNumber(input.historyMedian?.taskCount);
+  if (historyTaskCount > 0) {
+    const maxTasks = Math.ceil(historyTaskCount * 1.15);
     if (plan.length > maxTasks) {
       plan = plan.slice(0, maxTasks);
     }

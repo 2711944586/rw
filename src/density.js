@@ -8,10 +8,13 @@
  */
 
 import { StateManager } from './core/state-manager.js';
-import { EventBus, EVENTS } from './core/event-bus.js';
 
 const VALID_MODES = ['focus', 'balanced', 'detail'];
 const DEFAULT_MODE = 'focus';
+
+function normalizeDensityMode(mode, fallback = DEFAULT_MODE) {
+  return VALID_MODES.includes(mode) ? mode : fallback;
+}
 
 /**
  * Get the current density mode from profile state.
@@ -19,20 +22,19 @@ const DEFAULT_MODE = 'focus';
  */
 export function getDensityMode() {
   const mode = StateManager.getState('profile.density_mode');
-  return VALID_MODES.includes(mode) ? mode : DEFAULT_MODE;
+  return normalizeDensityMode(mode);
 }
 
 /**
  * Set the density mode, persist to profile, and apply to DOM.
  * @param {'focus'|'balanced'|'detail'} mode
+ * @returns {boolean} Whether the mode was persisted locally
  */
 export function setDensityMode(mode) {
-  if (!VALID_MODES.includes(mode)) {
-    mode = DEFAULT_MODE;
-  }
-  StateManager.setState('profile.density_mode', mode);
+  mode = normalizeDensityMode(mode);
+  const saved = StateManager.setState('profile.density_mode', mode);
   applyDensityMode(mode);
-  EventBus.emit(EVENTS.STATE_CHANGED, { path: 'profile.density_mode', value: mode });
+  return saved;
 }
 
 /**
@@ -43,12 +45,16 @@ export function setDensityMode(mode) {
 export function applyDensityMode(mode) {
   if (!mode) {
     mode = getDensityMode();
+  } else {
+    mode = normalizeDensityMode(mode, getDensityMode());
   }
   document.body.setAttribute('data-density', mode);
 
   // Update toggle button active states
   document.querySelectorAll('.density-toggle [data-density]').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.density === mode);
+    const active = btn.dataset.density === mode;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', String(active));
   });
 }
 
@@ -64,6 +70,8 @@ export function initDensityMode() {
 
   // Bind density toggle buttons (in top-actions area)
   document.querySelectorAll('.density-toggle [data-density]').forEach((btn) => {
+    if (btn.dataset.densityBound === '1') return;
+    btn.dataset.densityBound = '1';
     btn.addEventListener('click', () => {
       setDensityMode(btn.dataset.density);
     });
