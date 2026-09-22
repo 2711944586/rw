@@ -1,475 +1,274 @@
 # 软微 420 学习台
 
-面向 2028 入学备考周期的学习执行工具。它负责把长期计划落到每日任务、学习记录、间隔复盘、考点证据、模考统计、资料版本和备份同步。
+面向北大软微备考周期的本地优先学习执行工具。系统把长期规划落到每日任务、学习记录、间隔复盘、考点证据、模考统计、资料版本和可选云同步。
 
-当前倒计时使用 `2027-12-25` 作为推算排程日，非官方初试日期。正式初试日期、招生简章、专业目录和考试科目必须以当年官方公告为准。420 分只作为内部校准线和风险控制线，不代表录取承诺。
+当前倒计时使用 `2027-12-25` 作为推算排程日，并非官方初试日期。招生简章、专业目录、考试科目和正式日期始终以当年官方公告为准；420 分仅作为内部校准线，不代表录取承诺。
 
-## 技术栈
+当前计划从 `2026-08-31` 开始，以 `2200h` 有效学习作为过程校准量。专注、平衡、详尽分别对应行动、执行和诊断三个信息层级；完整计划和经验样本边界见 [docs/STUDY_PLAN.md](docs/STUDY_PLAN.md)。
 
-- 前端：Vite + 原生 HTML/CSS/JS
-- 数据同步：Supabase Auth + Postgres + RLS
-- 推荐部署：Vercel 静态前端
-- 本地缓存：浏览器 `localStorage`
-- Node 要求：Vite 7 需要 Node `^20.19.0` 或 `>=22.12.0`；CI 当前使用 Node 22
+## 快速开始
 
-## 本地启动
-
-先安装 Node.js LTS，然后在项目目录运行：
+环境要求：Node.js `^20.19.0` 或 `>=22.12.0`，推荐 Node 22。
 
 ```powershell
 npm install
 npm run start:local
 ```
 
-也可以双击 `start-local.bat`。脚本会从 5173 开始寻找可用端口，最终访问地址以终端输出的 `Ready: http://127.0.0.1:端口/` 为准。
+也可以双击根目录的 `start-local.bat`。启动脚本会寻找空闲端口并打开浏览器，实际地址以终端中的 `Ready: http://127.0.0.1:端口/` 为准。
 
-不要直接双击 `index.html`。项目使用 Vite 模块和 Supabase SDK，直接打开文件会导致模块加载失败。
+不要直接双击 `index.html`。项目依赖 Vite 模块加载和 Supabase SDK，必须通过开发或预览服务运行。
 
 ## 常用命令
 
-```powershell
-npm run start:local
-npm run check
-npm test
-npm run build
-npm run preview
-npm run quality
-```
-
-- `start:local`：日常本机使用，自动找端口并打开网页。
-- `check`：检查 JavaScript 语法。
-- `test`：运行 Vitest 单元测试和性质测试。
-- `build`：生成 `dist` 产物。
-- `preview`：预览生产构建。
-- `quality`：依次执行 check、test、build、audit。
+| 命令 | 用途 |
+| --- | --- |
+| `npm run start:local` | 安装缺失依赖、寻找端口并打开本地页面 |
+| `npm run dev` | 启动固定开发服务（`127.0.0.1:5173`） |
+| `npm run clean` | 删除构建、截图、测试报告等可再生文件（不含 coverage/） |
+| `npm run check` | 运行 ESLint 静态检查，包括未使用代码和未定义变量 |
+| `npm run typecheck` | 按 `jsconfig.json` 对 config、core、data、domain、infrastructure、utils 执行 `tsc --noEmit` |
+| `npm test` | 运行 Vitest 单元测试与性质测试 |
+| `npm run test:props` | 只运行 `tests/properties/` 下的性质测试 |
+| `npm run test:watch` | 以监听模式运行 Vitest |
+| `npm run test:coverage` | 运行测试并生成覆盖率报告，低于 `vitest.config.js` 阈值即失败（不在 `quality` 链中） |
+| `npm run test:palette` | 配色门禁：`src/styles/` 不得重新引入已淘汰的绿色系 |
+| `npm run test:browser` | 使用真实 Chromium 验证关键页面和响应式布局 |
+| `npm run test:study-plan-ui` | 学习计划页面的结构与交互门禁 |
+| `npm run test:budget` | 校验 `dist/assets` 各 chunk 的 gzip 体积预算（需先 `npm run build`） |
+| `npm run test:csp` | 用 `vercel.json` 的真实响应头托管 `dist/`，遍历全部路由断言零 CSP 违规（需先 `npm run build`） |
+| `npm run test:boundaries` | 校验 `src/main.js` 的模块可达性与 `PENDING_MIGRATION` 清单一致 |
+| `npm run test:css-debt` | `!important` 棘轮：逐文件比对上限，只降不升 |
+| `npm run build` | 生成 `dist/` 生产产物 |
+| `npm run preview` | 本地预览生产产物（`127.0.0.1:4173`） |
+| `npm run quality` | 执行静态检查、类型检查、调色板、测试、浏览器门禁、构建、体积预算和依赖审计全套门禁 |
+| `npm run verify:production` | 对已部署地址执行生产验证，需传入 URL |
+| `npm run deploy:all` | 部署到 Vercel Preview |
+| `npm run deploy:prod` | 部署到 Vercel Production |
 
 ## 项目结构
 
 ```text
 .
-├─ index.html                # 页面骨架和静态入口
-├─ styles.css                # 视觉系统、工作台布局、响应式样式
+├─ index.html                       # 页面语义骨架与 Vite HTML 入口
 ├─ src/
-│  ├─ main.js                # Vite 入口
-│  ├─ app.js                 # 主界面渲染和交互编排
-│  ├─ referenceData.js       # 官方来源、设计参考、执行边界
-│  ├─ core/                  # 可拆分架构的路由、事件总线、状态适配层
-│  ├─ domain/                # 计划、顺延、复盘、校准、来源等可测试领域逻辑
-│  ├─ infrastructure/        # 可拆分架构的 Supabase 客户端和离线缓存
-│  ├─ utils/                 # HTML 转义等通用工具
-│  └─ views/                 # 可拆分页面视图，当前生产入口仍由 app.js 编排
+│  ├─ main.js                       # 启动入口与故障恢复壳
+│  ├─ app.js                        # 当前生产应用编排入口
+│  ├─ config/
+│  │  └─ app-config.js              # 倒计时日期、计划起点等应用常量
+│  ├─ core/                         # 状态、事件、路由与共享契约
+│  │  ├─ event-bus.js
+│  │  ├─ state-manager.js
+│  │  ├─ router.js                  # 渐进迁移层路由，暂未接管生产
+│  │  ├─ route-contract.js          # 路由 ID 与移动端主入口的权威定义
+│  │  └─ storage-contract.js        # 存储键的权威定义
+│  ├─ data/
+│  │  ├─ reference-data.js          # 来源、设计参考和执行边界静态数据
+│  │  ├─ study-content.js           # 阶段、月计划、考纲、验收和任务蓝图
+│  │  ├─ detailed-study-plan.js     # 逐月逐周细化计划
+│  │  └─ study-plan-governance.js   # 阶段门、资料治理与偏差校正规则
+│  ├─ domain/                       # 无 UI 的计划、复盘、校准和任务规则
+│  ├─ infrastructure/
+│  │  ├─ supabase-sync.js           # 当前生产同步实现
+│  │  ├─ supabase-client.js         # 客户端单例
+│  │  ├─ sync-service.js            # 渐进迁移层同步实现，暂未接管生产
+│  │  ├─ offline-cache.js           # 本地缓存与待同步队列
+│  │  ├─ browser-storage.js         # localStorage 容错封装
+│  │  └─ sync-contract.js           # 同步表与冲突键的权威定义
+│  ├─ ui/                           # 工作台、密度、图标和模板控制器
+│  ├─ views/                        # 渐进模块化页面实现
+│  ├─ styles/
+│  │  ├─ base.css                   # 既有组件与兼容样式层
+│  │  ├─ workspace.css              # v5 工作台视觉、材质和响应式覆盖层
+│  │  ├─ study-plan.css             # 学习计划页样式
+│  │  └─ components/                # toolbar.css 与 auth.css
+│  └─ utils/                        # HTML 和数值等无状态工具
 ├─ tests/
-│  ├─ unit/                  # 单元测试
-│  └─ properties/            # fast-check 性质测试
+│  ├─ unit/                         # 单元、源码契约与集成测试
+│  ├─ support/                      # 集成测试脚手架（挂载真实 index.html 并跑 bootstrap）
+│  └─ properties/                   # fast-check 性质测试
 ├─ supabase/
-│  ├─ schema.sql             # 数据库表、RLS 和策略
-│  └─ migrations/            # 增量迁移
-├─ scripts/check-js.mjs      # JS 语法检查脚本
-├─ pku_swm_420_plan.md       # 备考总控文档
-├─ start-local.ps1           # Windows 本地启动脚本
-├─ start-local.bat           # 双击启动入口
+│  ├─ schema.sql                    # 新项目完整数据库结构与 RLS
+│  └─ migrations/                   # 旧项目顺序增量迁移
+├─ scripts/
+│  ├─ clean.mjs                     # 可再生文件安全清理
+│  ├─ capture-ui-screenshots.mjs    # 3 视口 × 10 路由截图（设计评审用）
+│  ├─ diag-css-cascade.mjs          # 打印某元素实际胜出的 CSS 规则
+│  ├─ verify-budget.mjs             # 产物各 chunk 的 gzip 体积预算
+│  ├─ verify-csp.mjs                # 用生产响应头托管 dist/ 并断言零 CSP 违规
+│  ├─ verify-module-boundaries.mjs  # 生产可达模块与 PENDING_MIGRATION 清单比对
+│  ├─ verify-css-debt.mjs           # !important 棘轮，逐文件上限只降不升
+│  ├─ verify-local.mjs              # 本地五档宽度 Chromium 门禁
+│  ├─ verify-no-green.mjs           # 配色门禁（扫描 CSS 与 JS）
+│  ├─ verify-study-plan-ui.mjs      # 学习计划页面门禁
+│  ├─ verify-production.mjs         # 生产地址验证（含安全响应头与 CSP 违规）
+│  └─ deploy-*.ps1                  # 自动部署脚本
+├─ docs/
+│  ├─ STUDY_PLAN.md                 # 长期备考总控文档
+│  ├─ PROJECT_AUDIT.md              # 可维护性、前端体验与迁移建议
+│  ├─ TECH_AUDIT_2026-09-15.md      # 技术栈与门禁现状审计
+│  ├─ REMEDIATION_2026-09-15.md     # 门禁回绿的收尾与交接记录
+│  ├─ AUDIT_2026-09-22.md           # 独立复核审计与 CSP 修复结果
+│  ├─ DESIGN_REVIEW_2026-09-22.md   # 内容/功能/界面/排版/质感评审与界面缺陷修复
+│  ├─ AUTO_DEPLOY.md                # 自动部署步骤
+│  └─ API_KEYS_CHECKLIST.md         # 密钥获取与填写清单
+├─ .github/workflows/quality.yml    # CI：npm ci 后执行 npm run quality
+├─ start-local.ps1                  # Windows 本地启动实现
+├─ start-local.bat                  # Windows 双击入口
+├─ eslint.config.js                 # ESLint flat config
+├─ jsconfig.json                    # 类型检查范围与宽松度设置
+├─ vercel.json                      # Vercel 构建配置与安全响应头
+├─ vite.config.js
+├─ vitest.config.js
 ├─ package.json
-└─ vite.config.js
+├─ CHANGELOG.md
+├─ LICENSE
+├─ .editorconfig
+└─ .gitattributes
 ```
 
-生成目录不需要提交：`node_modules/`、`dist/`、`test-results/`、`playwright-report/`、`output/playwright/` 中的截图和日志。
+## 运行链路
 
-## 部署总览
-
-推荐零基础先看：
-
-- API 密钥获取和填写清单：[docs/API_KEYS_CHECKLIST.md](docs/API_KEYS_CHECKLIST.md)
-- 全自动部署流程：[docs/AUTO_DEPLOY.md](docs/AUTO_DEPLOY.md)
-
-已经准备好的自动化命令：
-
-```powershell
-npm run deploy:all   # 部署 Preview，默认安全入口
-npm run deploy:prod  # 部署 Production
-```
-
-自动化脚本会读取本机 `.env.deploy`，执行质量检查、Supabase schema、GitHub push、Vercel 环境变量和部署，并做上线健康检查。先复制 `.env.deploy.example`：
-
-```powershell
-Copy-Item .env.deploy.example .env.deploy
-notepad .env.deploy
-```
-
-`.env.deploy` 只放在本机，不要提交。生产部署后仍需在 Supabase `Authentication -> URL Configuration` 中核对生产域名。
-
-推荐顺序：
-
-1. 本地安装依赖并通过质量检查。
-2. 创建 Supabase 项目，执行数据库 schema。
-3. 配置 Supabase Auth。
-4. 准备 GitHub 仓库。
-5. 在 Vercel 导入项目并配置环境变量。
-6. 部署后把生产域名写回 Supabase Auth URL 设置。
-7. 做上线验收：页面、登录、同步、备份、移动端。
-
-## 1. 上线前本地检查
-
-确认 Node 版本满足 Vite 7 要求：
-
-```powershell
-node --version
-npm --version
-```
-
-安装依赖并执行完整检查：
-
-```powershell
-npm install
-npm run quality
-```
-
-`npm run quality` 必须全部通过。它会执行：
+当前生产链路只有一条：
 
 ```text
-npm run check
-npm test
-npm run build
-npm audit --audit-level=moderate
+index.html
+  -> src/main.js
+  -> src/app.js
+     -> data / domain / infrastructure / ui
 ```
 
-本地预览生产构建：
+`src/app.js` 和 `src/infrastructure/supabase-sync.js` 是当前生产实现。`src/core/router.js`、`src/views/` 与 `src/infrastructure/sync-service.js` 属于已测试的渐进模块化层，但尚未由生产入口整体接管。不要同时启动两套状态或同步实现，否则会造成重复事件绑定和并发写入。
+
+哪些模块在包内、哪些在包外，权威定义在 `scripts/verify-module-boundaries.mjs` 的 `PENDING_MIGRATION`；`npm run test:boundaries` 会从 `src/main.js` 重算可达性并双向比对，因此这份边界不会静默漂移。
+
+## 模块边界
+
+维护代码时遵循以下依赖方向：
+
+```text
+data ───────────────┐
+utils -> domain ────┼─> app
+core  -> infrastructure ┤
+core  -> ui ─────────┘
+```
+
+- `domain/` 不读取 DOM、`localStorage` 或 Supabase，只接收参数并返回结果。
+- `infrastructure/` 负责外部数据和持久化，不渲染页面。
+- `ui/` 负责 DOM 交互，可以使用 `core/` 契约，但不直接实现业务规则。
+- `data/` 只放静态事实、来源和展示元数据。
+- `app.js` 只应承担装配和跨模块工作流；新增独立规则优先放入 `domain/`。
+- 路由 ID 与移动端主入口统一定义在 `src/core/route-contract.js`，不要在视图或事件处理器中另建路由列表。
+- 存储键统一定义在 `src/core/storage-contract.js`。
+- 同步表与冲突键统一定义在 `src/infrastructure/sync-contract.js`。
+- 样式加载顺序固定为 `base.css` 后 `workspace.css`，不要再新增根目录 CSS 覆盖层。
+
+当前主要技术债是 `src/app.js` 与 `src/styles/base.css` 体积较大。后续重构应按一个用户流程逐步迁移到 `views/`、`ui/` 和 `domain/`，每次迁移都必须保留测试并避免一次性重写。
+
+## 路由与响应式契约
+
+- 桌面端保留完整侧栏导航；宽度不超过 `900px` 时切换为固定的五项底栏：总览、今日、周计划、记录、更多。
+- “更多”复用命令面板承载低频页面和操作；当前页面属于隐藏路由时，“更多”必须保持选中状态并提供可读的当前页面标签。
+- 移动端由 `main` 承担垂直滚动，内容视口结束于固定底栏上方；不要改回整页滚动，否则会重新产生表单和按钮遮挡。
+- 浏览器门禁固定检查 `320 / 390 / 768 / 1024 / 1440` 五种宽度，包括底栏标签、隐藏路由状态、弹层层级、横向溢出和桌面侧栏行为。
+
+## 本地数据与环境变量
+
+未登录时，数据保存在当前浏览器 `localStorage`。登录后页面先更新本机状态，再异步同步至 Supabase；离线或同步失败不会丢弃本机草稿。
+
+本地 Supabase 配置：
 
 ```powershell
-npm run build
-npm run preview
+Copy-Item .env.example .env
+notepad .env
 ```
-
-默认预览地址是 `http://127.0.0.1:4173/`。如果终端输出了其他端口，以终端为准。
-
-## 2. 创建 Supabase 项目
-
-1. 打开 Supabase Dashboard。
-2. 选择组织，点击 `New project`。
-3. 填写项目名、数据库密码和区域。
-4. 等待项目初始化完成。
-
-区域建议选择离主要使用地更近的区域。数据库密码要单独保存，不要写入仓库。
-
-## 3. 执行数据库 Schema
-
-1. 进入 Supabase 项目。
-2. 打开左侧 `SQL Editor`。
-3. 新建 Query。
-4. 打开本项目的 `supabase/schema.sql`。
-5. 复制全部 SQL 并执行。
-
-执行后应创建这些核心表：
-
-```text
-profiles
-daily_records
-study_tasks
-review_items
-topic_progress
-mock_scores
-resources
-snapshots
-conflicts
-calibration_snapshots
-project_showcase_items
-```
-
-所有用户数据表都应启用 RLS。策略必须保证用户只能访问自己的 `user_id = auth.uid()` 数据。
-
-如果是旧 Supabase 项目，先确认已经按顺序执行 `supabase/migrations/` 中的迁移，至少包含 `010_profile_plan_defaults.sql`。新项目直接执行完整 `supabase/schema.sql` 即可。
-
-## 4. 配置 Supabase Auth
-
-打开 Supabase 项目中的 `Authentication`。
-
-在 `Providers` 中确认 `Email` 已启用。本项目使用邮箱密码登录：
-
-```text
-supabase.auth.signUp({ email, password })
-supabase.auth.signInWithPassword({ email, password })
-```
-
-开发阶段可以按需要关闭邮箱确认；正式长期使用建议开启邮箱确认。
-
-在 `URL Configuration` 中先配置本地地址：
-
-```text
-Site URL: http://127.0.0.1:5173
-Redirect URLs:
-http://127.0.0.1:5173/**
-http://localhost:5173/**
-```
-
-如果本地脚本启动在其他端口，例如 5174，也把对应地址加入 Redirect URLs。上线后还要把 Vercel 生产域名加入这里，见第 9 节。
-
-## 5. 获取 Supabase 环境变量
-
-在 Supabase 项目中打开 `Project Settings` -> `API`，复制：
-
-```text
-Project URL
-Publishable key
-```
-
-本地新建 `.env`：
 
 ```env
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
 ```
 
-注意：
+前端只能使用 publishable key。不要把 `service_role` key、数据库密码、JWT secret 或部署 token 写入源码、README 或可提交文件。
 
-- 变量名必须以 `VITE_` 开头，否则 Vite 不会暴露给浏览器端代码。
-- 这里只能使用 Supabase publishable key。
-- 不要把 `service_role` key、数据库密码、JWT secret 放进前端项目。
-- `.env` 已被 `.gitignore` 忽略，不要提交。
+## 生成文件与清理
 
-配置后重启本地 Vite：
-
-```powershell
-npm run start:local
-```
-
-打开网页，点击右上角“账号”，用邮箱密码注册或登录，确认没有出现“Supabase is not configured.”。
-
-## 6. 准备 GitHub 仓库
-
-确认工作区中不包含生成物和密钥：
-
-```powershell
-git status
-```
-
-不要提交这些内容：
+以下目录均可重新生成，不应提交：
 
 ```text
-.env
 node_modules/
 dist/
+output/
+coverage/
 test-results/
 playwright-report/
-output/playwright/*.png
-output/playwright/*.log
+.playwright-cli/
+.playwright-mcp/
+.workbuddy/
 ```
 
-提交前再次执行：
+执行安全清理：
+
+```powershell
+npm run clean
+```
+
+清理脚本只删除构建与浏览器产物（`dist/`、`output/`、`test-results/`、`playwright-report/`、`.playwright-cli/`、`.playwright-mcp/`），不会删除 `node_modules/`、`coverage/`、`.workbuddy/`、`.env`、`.env.deploy`、`.vercel/` 或 `.vscode/`。
+
+## 质量门禁
+
+提交前运行：
 
 ```powershell
 npm run quality
 git status
 ```
 
-提交并推送：
+`quality` 必须依次通过以下步骤：
+
+```text
+ESLint static analysis
+tsc --noEmit type check (jsconfig.json 覆盖 config/core/data/domain/infrastructure/utils)
+Palette gate (src/**/*.{css,js} 不得重新引入已淘汰的绿色系)
+Module boundary gate (src/main.js 的可达性必须与 PENDING_MIGRATION 清单一致)
+CSS debt ratchet (!important 逐文件上限，只降不升)
+716 Vitest tests across 41 files
+Chromium 门禁：全部路由与 320/390/768/1024/1440 五档宽度
+Vite production build
+Bundle budget：app / index.css / vendor-supabase / infra / domain / vendor-icons 的 gzip 体积上限
+CSP 门禁：用 vercel.json 的真实响应头托管 dist/，遍历全部路由断言零 CSP 违规
+npm audit --audit-level=moderate
+```
+
+当前产物体积（`npm run build` 后实测，gzip）：`app` 110.26 KB、`index.css` 75.18 KB、`vendor-supabase` 54.70 KB，均在 `scripts/verify-budget.mjs` 的预算内。
+
+## 数据库与部署
+
+新 Supabase 项目直接执行 `supabase/schema.sql`。旧项目按文件名顺序执行 `supabase/migrations/`，不要删除或改写已经应用过的迁移。
+
+详细文档：
+
+- [自动部署流程](docs/AUTO_DEPLOY.md)
+- [API 密钥清单](docs/API_KEYS_CHECKLIST.md)
+- [备考总控文档](docs/STUDY_PLAN.md)
+- [项目审计与改进建议](docs/PROJECT_AUDIT.md)
+
+部署脚本：
 
 ```powershell
-git add .
-git commit -m "prepare production deployment"
-git push origin main
+npm run deploy:all   # Vercel Preview
+npm run deploy:prod  # Vercel Production
 ```
 
-如果仓库主分支叫 `master`，把上面的 `main` 换成 `master`。
-
-## 7. Vercel Dashboard 部署
-
-1. 打开 Vercel Dashboard。
-2. 点击 `Add New...` -> `Project`。
-3. 选择 GitHub 仓库。
-4. Framework Preset 选择 `Vite`。
-5. Root Directory 保持项目根目录。如果仓库根目录不是本项目，请改成 `rw`。
-6. Build and Output Settings 使用：
-
-```text
-Install Command: npm install
-Build Command: npm run build
-Output Directory: dist
-```
-
-如果 Vercel 自动使用 `npm install`，可以保持默认。不要把 Output Directory 写成 `public` 或项目根目录。
-
-## 8. 配置 Vercel 环境变量
-
-在导入项目页面或项目创建后的 `Settings` -> `Environment Variables` 中添加：
-
-```text
-VITE_SUPABASE_URL
-VITE_SUPABASE_PUBLISHABLE_KEY
-```
-
-值与本地 `.env` 一致。
-
-建议同时勾选这些环境：
-
-```text
-Production
-Preview
-Development
-```
-
-保存环境变量后触发部署。如果是部署后才添加变量，需要进入 `Deployments`，对最新部署执行 `Redeploy`。Vite 会在构建时读取环境变量；不重新部署，线上包不会带上新变量。
-
-## 9. 配置 Supabase 生产回调地址
-
-Vercel 部署成功后会得到生产域名，例如：
-
-```text
-https://your-project.vercel.app
-```
-
-回到 Supabase：
-
-1. 打开 `Authentication` -> `URL Configuration`。
-2. `Site URL` 填生产域名：
-
-```text
-https://your-project.vercel.app
-```
-
-3. `Redirect URLs` 加入：
-
-```text
-https://your-project.vercel.app/**
-```
-
-如果配置了自定义域名，也加入：
-
-```text
-https://your-domain.com/**
-```
-
-保存后等待几十秒再测试登录。
-
-## 10. 上线验收清单
-
-打开生产域名，按顺序检查：
-
-1. 页面能正常打开，不是空白页。
-2. 顶部“账号”可以打开登录弹窗。
-3. 新邮箱可以注册，已有邮箱可以登录。
-4. 保存一条今日记录，刷新页面后记录仍在。
-5. 点击“同步”没有报错。
-6. 在 Supabase Table Editor 中能看到当前用户对应的数据行。
-7. 退出登录后，本机草稿仍能使用。
-8. 手机端打开页面，没有横向滚动；底部导航可切换到记录、复盘、资料、设置。
-9. 资料页、考纲页能看到“非官方指定资料”“官方范围映射 / 预备能力 / 备考补充”等边界说明。
-
-浏览器控制台不应有红色错误。如果有错误，优先检查第 8、9 节的环境变量和 Auth URL。
-
-## 11. 可选：Vercel CLI 部署
-
-如果使用命令行部署，先安装并登录：
-
-```powershell
-npm install -g vercel
-vercel login
-```
-
-首次关联项目：
-
-```powershell
-vercel
-```
-
-按提示选择当前目录、团队和项目。然后添加环境变量：
-
-```powershell
-vercel env add VITE_SUPABASE_URL production
-vercel env add VITE_SUPABASE_PUBLISHABLE_KEY production
-vercel env add VITE_SUPABASE_URL preview
-vercel env add VITE_SUPABASE_PUBLISHABLE_KEY preview
-```
-
-生产部署：
-
-```powershell
-vercel --prod
-```
-
-CLI 部署完成后，同样要把最终生产域名加入 Supabase Auth URL Configuration。
-
-## 12. 常见问题
-
-### 页面空白
-
-先确认没有直接打开 `index.html`。本地必须使用：
-
-```powershell
-npm run start:local
-```
-
-线上检查 Vercel 的 Build Log，确认 `npm run build` 成功，Output Directory 是 `dist`。
-
-### 线上提示 Supabase 未配置
-
-检查 Vercel 环境变量是否存在且拼写完全一致：
-
-```text
-VITE_SUPABASE_URL
-VITE_SUPABASE_PUBLISHABLE_KEY
-```
-
-添加或修改环境变量后必须 Redeploy。
-
-### 登录后跳转或确认邮件链接异常
-
-检查 Supabase `Authentication` -> `URL Configuration`：
-
-```text
-Site URL
-Redirect URLs
-```
-
-生产域名、本地端口、自定义域名都要加入。域名必须带协议：`https://` 或 `http://`。
-
-### 登录成功但读写失败
-
-检查：
-
-- 是否执行了完整 `supabase/schema.sql`。
-- 表是否启用 RLS。
-- 当前用户是否已登录。
-- 表中的 `user_id` 是否等于当前 `auth.uid()`。
-
-### 本地有数据，登录后怕覆盖
-
-首次发现旧本地数据时，先导出 JSON 备份，再选择是否导入云端。不要在没有备份的情况下反复导入。
-
-## 数据规则
-
-未登录时，数据保存在当前浏览器 `localStorage`。登录后，页面先即时更新，再异步同步到 Supabase。断网或同步失败时继续保留本机草稿，恢复网络后可点击顶部“同步”。
-
-建议每周导出一次 JSON；月复盘后、大量修改考点状态前，额外导出一次。
+默认生产结构是 Vite 静态前端 + Supabase Auth/Postgres/RLS。Vercel 构建命令为 `npm run build`，输出目录为 `dist`。
 
 ## 学习系统边界
 
-- 每日任务默认 3 项，最多 4 项；顺延或底线日可降到 2 项。
+- 新计划起点固定为 `2026-08-31`；更早数据只归档，不进入新计划统计。
+- 每日任务默认 3 项、最多 4 项；顺延或底线日允许降到 2 项。
 - 数学一和 408 默认占核心时间 65%。
-- 未完成任务自动顺延，并减少当天新增任务；顺延或底线日可降到 2 项，避免补偿式超载。
 - 到期复盘每天最多压入 1 项必做，其余保留在复盘队列。
-- 考点没有题量、正确率或交付证据，不能直接标为已掌握。
+- 考点没有题量、正确率或交付证据时，不能直接标记为已掌握。
+- 每科只保留一条主线资料，完成 70% 以上再考虑新增。
 - 2027 年 9-10 月必须重新核验招生说明、专业目录、考试科目、招生人数、报名要求和初试日期。
 
-## 执行与复盘口径
-
-- 每日任务分为“最低 / 标准 / 高质量”三档：先保证最低可完成，再追求标准完成，状态好时再做高质量补充。
-- 每天收口 5-8 分钟：记录有效分钟、题量、错题、新修复错题和明天第一任务。
-- 每周复盘 20-30 分钟：看 7 天有效小时、数学 + 408 占比、错题回炉率、学习天数和到期复盘，不用单日表现判断好坏。
-- 每月复盘 45-60 分钟：核对累计小时、考纲证据、资料完成率和阶段验收，只调整一个主要弱项。
-- 学习曲线看 14 天：近 7 天均值、前后 7 天变化、7 天学习天数一起看；连续低完成先降到底线日，稳定后再加难度。
-- 复盘通过标准：闭卷能做、能讲清错因、能挂回考点。不会第一步、同类错因重复或看答案才懂，都按失败处理并生成短复盘。
-- 资料使用规则：每科只保留一条主线资料，完成 70% 以上再考虑新增；资料进度不能替代题量、正确率和错题证据。
-
-## 官方基准
-
-当前考试科目信息只以北大软微 2026 年已发布说明为备考基准：085400 电子信息专业计划招生 583 名、拟接收推荐免试生 255 名；01-04 方向考 101、201、301、408，并统一划线排名，04 方向含未来技术学院代招说明。2026 复试线总分 378 只作历史参考，不用于预测 2028。
-
-考纲页采用“官方范围映射 / 预备能力 / 备考补充”分层展示；条目是备考拆解，不等同官方逐字大纲。资料页中的王道、天勤、李林、肖八、肖四等均按非官方指定资料处理，未来年份资料以当年最新版出版后确认。
-
-## 参考官方文档
-
-- Vite 环境变量：`https://vite.dev/guide/env-and-mode`
-- Vercel Vite 部署：`https://vercel.com/docs/frameworks/vite`
-- Vercel 环境变量：`https://vercel.com/docs/environment-variables`
-- Supabase JavaScript 初始化：`https://supabase.com/docs/reference/javascript/initializing`
-- Supabase Auth Redirect URLs：`https://supabase.com/docs/guides/auth/redirect-urls`
-- Supabase RLS：`https://supabase.com/docs/guides/database/postgres/row-level-security`
+更完整的阶段计划、复盘口径和官方基准见 [docs/STUDY_PLAN.md](docs/STUDY_PLAN.md)。

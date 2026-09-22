@@ -1,35 +1,27 @@
 # API 密钥获取和填写清单
 
-项目根目录：
-
-```text
-D:\TRAEDATA\rw
-```
+以下命令均在项目根目录执行，不依赖仓库位于哪个磁盘或文件夹。
 
 你最终只需要手动填写这个文件：
 
-```text
-D:\TRAEDATA\rw\.env.deploy
-```
+`.env.deploy`
 
 创建方式：
 
 ```powershell
-Copy-Item D:\TRAEDATA\rw\.env.deploy.example D:\TRAEDATA\rw\.env.deploy
-notepad D:\TRAEDATA\rw\.env.deploy
+Copy-Item .env.deploy.example .env.deploy
+notepad .env.deploy
 ```
 
 本地开发只需要 Supabase 前端变量时，填写这个文件：
 
-```text
-D:\TRAEDATA\rw\.env
-```
+`.env`
 
 创建方式：
 
 ```powershell
-Copy-Item D:\TRAEDATA\rw\.env.example D:\TRAEDATA\rw\.env
-notepad D:\TRAEDATA\rw\.env
+Copy-Item .env.example .env
+notepad .env
 ```
 
 ## 1. GitHub
@@ -344,14 +336,12 @@ PRODUCTION_URL=
 Preview：
 
 ```powershell
-cd D:\TRAEDATA\rw
 npm run deploy:all
 ```
 
 Production：
 
 ```powershell
-cd D:\TRAEDATA\rw
 npm run deploy:prod
 ```
 
