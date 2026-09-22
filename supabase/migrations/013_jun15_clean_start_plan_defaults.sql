@@ -1,4 +1,2 @@
--- Migration: align profile defaults with the 2026-06-15 clean-start plan boundary.
-
-alter table public.profiles
-  alter column plan_version set default '3.7-jun15-clean-start-2026-06-15';
+-- Compatibility marker retained to preserve the published migration sequence.
+-- Migration 012 already applies the 2026-06-15 clean-start profile default.
