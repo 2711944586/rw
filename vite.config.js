@@ -10,6 +10,13 @@ export default defineConfig({
     port: 4173
   },
   build: {
+    // Vite inlines assets below 4 KB as base64 data URIs. The @fontsource
+    // woff2 subsets are the only assets small enough to hit that path, and the
+    // production CSP declares `font-src 'self'` — which refuses `data:` — so
+    // those characters silently fell back to a system font in production.
+    // Emitting them as real files keeps the strict CSP intact and lets each
+    // subset be cached on its own.
+    assetsInlineLimit: 0,
     rollupOptions: {
       output: {
         manualChunks(id) {

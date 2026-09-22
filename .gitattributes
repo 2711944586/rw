@@ -1,3 +1,26 @@
+# Normalize line endings so a Windows checkout and the Ubuntu CI runner produce
+# identical diffs. Without this, Git rewrites CRLF on every touch and each commit
+# carries phantom whole-file changes.
 * text=auto eol=lf
 
+# Windows-native launchers keep CRLF: cmd.exe is unreliable with LF-only batch
+# files, and PowerShell treats CRLF as the conventional form.
 *.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Explicitly binary so Git never attempts text conversion on font/icon payloads.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+
+# Lockfile is generated; treating it as binary avoids unreviewable diffs.
+package-lock.json -diff
+# Build output is reproducible from source and is never reviewed by diff.
+dist/** -diff

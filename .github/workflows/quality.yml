@@ -21,5 +21,8 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
       - name: Check, test, build, audit
         run: npm run quality

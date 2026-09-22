@@ -1,0 +1,59 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "types": ["vite/client"],
+
+    // Deliberately lenient. The goal is to catch real mistakes — property access
+    // on the wrong shape, passing undefined where a value is required — without
+    // demanding annotations across an 18k-line untyped codebase. Tighten these
+    // incrementally rather than turning them all on at once.
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "forceConsistentCasingInFileNames": true
+  },
+
+  // Scope: the layers whose modules are small, do not touch the DOM, and already
+  // carry JSDoc. These are the ones where a type error is almost always a real
+  // defect rather than noise.
+  "include": [
+    "src/config/**/*.js",
+    "src/core/**/*.js",
+    "src/data/**/*.js",
+    "src/domain/**/*.js",
+    "src/infrastructure/**/*.js",
+    "src/utils/**/*.js"
+  ],
+
+  // Excluded for now, with the reason each one is out:
+  //  - src/app.js and src/main.js: the 7k-line production orchestrator mixes DOM
+  //    wiring with state rules. Not type-clean today and would drown the signal.
+  //    Its pure half is exported and covered by tests/unit/state-rules.test.js.
+  //    Shrink it page by page (see docs/PROJECT_AUDIT.md) before adding it here.
+  //  - src/ui/** and src/views/**: DOM-heavy. `querySelector` returns `Element`,
+  //    so `.value` / `.style` access needs narrowing at ~80 call sites. Add these
+  //    once the view layer is wired into production (it is currently not).
+  //  - src/core/router.js: the route -> view registry, which dynamic-imports every
+  //    view and therefore drags the whole view layer into the program.
+  "exclude": [
+    "src/app.js",
+    "src/main.js",
+    "src/core/router.js",
+    "src/ui/**",
+    "src/views/**",
+    "node_modules",
+    "dist",
+    "output"
+  ]
+}
