@@ -78,7 +78,7 @@ function diffDays(laterDate, earlierDate) {
   const a = parseISODate(laterDate);
   const b = parseISODate(earlierDate);
   if (!a || !b) return 0;
-  return Math.round((a - b) / MS_PER_DAY);
+  return Math.round((a.getTime() - b.getTime()) / MS_PER_DAY);
 }
 
 /**

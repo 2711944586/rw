@@ -1,30 +1,60 @@
 import {
-  BarChart3,
-  BookOpenCheck,
-  CalendarDays,
-  CircleGauge,
-  ClipboardList,
-  createIcons,
-  Download,
-  LayoutDashboard,
-  Library,
-  ListChecks,
-  Map as MapIcon,
-  RefreshCw,
-  RotateCcw,
-  Settings,
-  Upload,
-  UserRound
-} from "lucide";
-
-import {
   designReferences,
   executionBoundaries,
   sourceRegistry
-} from "./referenceData.js";
+} from "./data/reference-data.js";
+import {
+  auditCadenceRules,
+  foundationDailySequence,
+  foundationPlan,
+  highStandards,
+  learningPath,
+  liveFactChecks,
+  memoryCurveRules,
+  methodEvidence,
+  monthlyPlan,
+  phases,
+  projectItems,
+  rampBudgets,
+  resourceProgressItems,
+  reviewOutcomeRules,
+  scoreTargets,
+  studyMetricRules,
+  subjectAcceptanceRules,
+  subjectMethods,
+  syllabus,
+  syllabusGroupTypeMeta,
+  syllabusGroupTypes,
+  systemRules,
+  taskBlueprints
+} from "./data/study-content.js";
+import {
+  adaptiveAdjustmentRules,
+  dailyLoadTemplates,
+  dailyOperatingSchedule,
+  dailyStudyProtocols,
+  detailedPhasePlans,
+  learningScienceRules,
+  phasePlanById,
+  phaseSubjectPlan,
+  planChain,
+  startup28DayPlan,
+  subjectResourceStacks,
+  weeklyCycleForDate,
+  weeklyStudyCycle
+} from "./data/detailed-study-plan.js";
+import {
+  oversightFeatureRoadmap,
+  resourceGovernanceRules,
+  resourceStageControl,
+  resourceSubjectGovernance,
+  studyCapacityPolicy,
+  studyPlanCorrections
+} from "./data/study-plan-governance.js";
 
 import {
-  getCurrentUser,
+  getCurrentSession,
+  hasPersistedCloudSession,
   loadCloudState,
   onAuthChange,
   saveCloudSnapshot,
@@ -33,13 +63,50 @@ import {
   signOut,
   signUpWithEmail,
   supabaseConfigured
-} from "./supabaseSync.js";
+} from "./infrastructure/supabase-sync.js";
 
 import {
   escapeAttr,
   escapeHTML as escapeHtml,
   safeExternalUrl
 } from "./utils/html.js";
+
+import { STORAGE_KEYS } from "./core/storage-contract.js";
+import { DEFAULT_VIEW_ID, isKnownViewId } from "./core/route-contract.js";
+import { createBrowserStorage } from "./infrastructure/browser-storage.js";
+import {
+  APP_BUILD,
+  CLEAN_START_VERSION,
+  DEFAULT_EXAM_DATE,
+  DEFAULT_EXAM_DATE_STATUS,
+  DELETED_TYPES,
+  DENSITY_BUTTON_SELECTOR,
+  MAX_IMPORT_FILE_BYTES,
+  PLAN_LOGIC_VERSION,
+  PLAN_START_DATE,
+  SCHEMA_VERSION,
+  SOURCE_CHECK_DATE,
+  STORAGE_FAILURE_NOTICE_INTERVAL_MS,
+  TARGET_TOTAL_HOURS
+} from "./config/app-config.js";
+import { hydrateIcons } from "./ui/icon-registry.js";
+import { createViewRenderCoordinator } from "./ui/view-render-coordinator.js";
+import { initWorkspaceController } from "./ui/workspace-controller.js";
+import {
+  bindPasswordVisibility,
+  focusAuthPanel,
+  renderAuthPanelState,
+  setAuthPanelBusy
+} from "./ui/auth-panel.js";
+import {
+  renderResourceDossierTemplate,
+  renderStartupCalendarTemplate
+} from "./ui/study-plan-templates.js";
+import {
+  applyDensityMode as applyDensityModeToDocument,
+  densityModeMeta,
+  normalizeDensityMode
+} from "./ui/density-controller.js";
 
 import {
   collectCarryoverTasks,
@@ -62,52 +129,23 @@ import {
   subjectPlanWeights
 } from "./domain/study-strategy.js";
 
-const STORAGE_KEY = "pku_swm_420_dashboard_v3";
-const LEGACY_STORAGE_KEY = "pku_swm_420_dashboard_v1";
-const STATE_MANAGER_STORAGE_KEY = "pku_swm_420_state";
-const STATE_MANAGER_DIRTY_KEY = "pku_swm_420_dirty";
-const OFFLINE_DIRTY_QUEUE_KEY = "pku_swm_420_dirty_queue";
-const LEGACY_DIRTY_MAP_KEY = "pku_swm_dirty_map";
-const LEGACY_OFFLINE_CACHE_KEY = "pku_swm_offline_cache";
-const LEGACY_DIRTY_QUEUE_KEY = "pku_swm_dirty_queue";
-const SCHEMA_VERSION = 3;
-const PLAN_LOGIC_VERSION = "3.7-jun15-clean-start-2026-06-15";
-const APP_BUILD = "2026-06-15-420-clean-start";
-const DEFAULT_EXAM_DATE = "2027-12-25";
-const DEFAULT_EXAM_DATE_STATUS = "推算排程日，非官方初试日期";
-const DEFAULT_VIEW_ID = "dashboard";
-const DENSITY_BUTTON_SELECTOR = ".density-toggle button[data-density]";
-const PLAN_START_DATE = "2026-06-15";
-const CLEAN_START_VERSION = "2026-06-15-from-zero-v1";
-const TARGET_TOTAL_HOURS = 2648;
-const SOURCE_CHECK_DATE = "2026-06-15";
-const DELETED_TYPES = ["records", "scores", "tasks", "reviews"];
-const STORAGE_FAILURE_NOTICE_INTERVAL_MS = 30000;
-const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
+const {
+  APP_STATE: STORAGE_KEY,
+  LEGACY_APP_STATE: LEGACY_STORAGE_KEY,
+  LEGACY_MODULAR_STATE: STATE_MANAGER_STORAGE_KEY,
+  STATE_DIRTY_MAP: STATE_MANAGER_DIRTY_KEY,
+  OFFLINE_DIRTY_QUEUE: OFFLINE_DIRTY_QUEUE_KEY,
+  LEGACY_DIRTY_MAP: LEGACY_DIRTY_MAP_KEY,
+  LEGACY_OFFLINE_CACHE: LEGACY_OFFLINE_CACHE_KEY,
+  LEGACY_OFFLINE_DIRTY_QUEUE: LEGACY_DIRTY_QUEUE_KEY
+} = STORAGE_KEYS;
 if ("scrollRestoration" in window.history) {
   window.history.scrollRestoration = "manual";
 }
-const appIcons = {
-  BarChart3,
-  BookOpenCheck,
-  CalendarDays,
-  CircleGauge,
-  ClipboardList,
-  Download,
-  LayoutDashboard,
-  Library,
-  ListChecks,
-  Map: MapIcon,
-  RefreshCw,
-  RotateCcw,
-  Settings,
-  Upload,
-  UserRound
-};
 
 const defaultSettings = {
-  weekdayMinutes: 120,
-  weekendMinutes: 210,
+  weekdayMinutes: 180,
+  weekendMinutes: 300,
   taskCount: 3,
   coreRatio: 65,
   density: "focus",
@@ -117,41 +155,11 @@ const defaultSettings = {
   planControls: { ...DEFAULT_PLAN_CONTROLS }
 };
 
-let storageAvailable = true;
-
-function readStorage(key) {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    storageAvailable = false;
-    return null;
-  }
-}
-
-function writeStorage(key, value) {
-  try {
-    window.localStorage.setItem(key, value);
-    storageAvailable = true;
-    return true;
-  } catch {
-    storageAvailable = false;
-    return false;
-  }
-}
-
-function removeStorage(key) {
-  try {
-    window.localStorage.removeItem(key);
-    storageAvailable = true;
-    return true;
-  } catch {
-    storageAvailable = false;
-    return false;
-  }
-}
+const browserStorage = createBrowserStorage(window.localStorage);
+const { read: readStorage, write: writeStorage } = browserStorage;
 
 function clearAppLocalStorage() {
-  const removed = [
+  return browserStorage.removeMany([
     STORAGE_KEY,
     LEGACY_STORAGE_KEY,
     STATE_MANAGER_STORAGE_KEY,
@@ -159,10 +167,9 @@ function clearAppLocalStorage() {
     OFFLINE_DIRTY_QUEUE_KEY,
     LEGACY_DIRTY_MAP_KEY,
     LEGACY_OFFLINE_CACHE_KEY,
-    LEGACY_DIRTY_QUEUE_KEY
-  ].map(removeStorage).every(Boolean);
-  storageAvailable = removed;
-  return removed;
+    LEGACY_DIRTY_QUEUE_KEY,
+    STORAGE_KEYS.UI_PREFERENCES
+  ]);
 }
 
 function consumeResetRequest() {
@@ -184,689 +191,30 @@ function consumeResetRequest() {
   }
 }
 
-const rampBudgets = [
-  { start: PLAN_START_DATE, end: "2026-06-30", weekday: 90, weekend: 150, note: "6 月 15 日从头开始，先恢复连续记录和底线任务" },
-  { start: "2026-07-01", end: "2026-07-31", weekday: 120, weekend: 210, note: "暑假前段稳步加量" },
-  { start: "2026-08-01", end: "2026-08-31", weekday: 150, weekend: 240, note: "暑假后段稳定加量" },
-  { start: "2026-09-01", end: "2026-12-31", weekday: 270, weekend: 390, note: "9 月起第一轮主干加压" },
-  { start: "2027-01-01", end: "2027-02-28", weekday: 330, weekend: 450, note: "寒假第一轮收口" },
-  { start: "2027-03-01", end: "2027-06-30", weekday: 240, weekend: 360, note: "强化期稳定推进" },
-  { start: "2027-07-01", end: "2027-08-31", weekday: 360, weekend: 480, note: "第二暑假套卷期" },
-  { start: "2027-09-01", end: "2027-10-31", weekday: 270, weekend: 390, note: "报名与套卷期" },
-  { start: "2027-11-01", end: DEFAULT_EXAM_DATE, weekday: 240, weekend: 360, note: "考前收束期" }
-];
-
 const resetRequest = consumeResetRequest();
 let state = loadState();
 let currentUser = null;
 let syncTimer = null;
 let appStarted = false;
+let workspaceRenderer = null;
+let stopCloudAuthListener = null;
+let authRequestInFlight = false;
 let legacyImportPending = Boolean(readStorage(LEGACY_STORAGE_KEY) && !readStorage(STORAGE_KEY));
 let lastStorageFailureNoticeAt = 0;
+let selectedResourceSubject = "math";
+let selectedStartupWeek = 0;
 let lastAuthResult = {
   status: "idle",
   title: "账号状态",
   message: "填写邮箱和密码后，可以注册新账号或登录同步。"
 };
 
-const phases = [
-  {
-    id: "A",
-    name: "启动期",
-    start: PLAN_START_DATE,
-    end: "2026-06-30",
-    weeklyTarget: 12,
-    cumulativeTarget: 28,
-    quotas: { math: 5, cs408: 5, english: 2, politics: 0, project: 0 },
-    focus: "上课期低强度启动，建立记录系统，高数预备、C 语言和英语单词不断档。",
-    tasks: [
-      ["数学", "函数、极限预备和基础题", 45],
-      ["408", "C 语言变量、循环、数组入门", 45],
-      ["英语", "单词 20 分钟或长难句 1 组", 20],
-      ["复盘", "记录错题原因，写明天第一任务", 10]
-    ]
-  },
-  {
-    id: "B",
-    name: "第一暑假奠基期",
-    start: "2026-07-01",
-    end: "2026-08-31",
-    weeklyTarget: 22,
-    cumulativeTarget: 218,
-    quotas: { math: 9, cs408: 9, english: 4, politics: 0, project: 0 },
-    focus: "暑假逐步拉长学习时间，高数基础、数据结构第一轮和英语阅读精读同步推进。",
-    tasks: [
-      ["数学", "高数基础题与定义整理", 75],
-      ["408", "C 语言/数据结构章节题与代码", 75],
-      ["英语", "单词 + 长难句或阅读精读", 35],
-      ["复盘", "错题回炉，更新考纲状态", 20]
-    ]
-  },
-  {
-    id: "C",
-    name: "第一轮主干期",
-    start: "2026-09-01",
-    end: "2026-12-31",
-    weeklyTarget: 35,
-    cumulativeTarget: 818,
-    quotas: { math: 14, cs408: 15, english: 5, politics: 0, project: 1 },
-    focus: "9 月起进入加压期，数学一第一轮主干、408 数据结构二轮、计组和 OS 启动。",
-    tasks: [
-      ["数学", "高数/线代/概率一轮推进 + 章节题", 110],
-      ["408", "计组或 OS 章节学习 + 题目", 110],
-      ["英语", "真题阅读精读或长难句", 40],
-      ["复盘", "本章错题按知识点归档", 15]
-    ]
-  },
-  {
-    id: "D",
-    name: "寒假收口期",
-    start: "2027-01-01",
-    end: "2027-02-28",
-    weeklyTarget: 42,
-    cumulativeTarget: 1168,
-    quotas: { math: 16, cs408: 18, english: 5, politics: 0, project: 3 },
-    focus: "数学一和 408 四门第一轮闭合，形成知识框架。",
-    tasks: [
-      ["数学", "概率闭合或三大模块框架复盘", 150],
-      ["408", "OS/计网闭合，画四门知识图", 150],
-      ["英语", "阅读真题 + 翻译小练", 60],
-      ["项目", "复试项目最小版本推进", 45]
-    ]
-  },
-  {
-    id: "E",
-    name: "强化期",
-    start: "2027-03-01",
-    end: "2027-06-30",
-    weeklyTarget: 31,
-    cumulativeTarget: 1708,
-    quotas: { math: 12, cs408: 13, english: 5, politics: 0, project: 1 },
-    focus: "强化题型、真题分章节、项目能运行。",
-    tasks: [
-      ["数学", "二轮强化题型 + 限时训练", 120],
-      ["408", "四门专题强化 + 真题分章节", 120],
-      ["英语", "阅读二刷，翻译/新题型加入", 45],
-      ["项目", "项目 README、数据库或核心算法完善", 30]
-    ]
-  },
-  {
-    id: "F",
-    name: "第二暑假套卷期",
-    start: "2027-07-01",
-    end: "2027-08-31",
-    weeklyTarget: 44,
-    cumulativeTarget: 2088,
-    quotas: { math: 15, cs408: 17, english: 5, politics: 5, project: 2 },
-    focus: "真题套卷、全科成型，政治启动。",
-    tasks: [
-      ["数学", "真题套卷或专项补弱", 160],
-      ["408", "真题套卷 + 高频大题专题", 170],
-      ["英语", "阅读保持 + 作文模板启动", 60],
-      ["政治", "基础框架 + 选择题", 60]
-    ]
-  },
-  {
-    id: "G",
-    name: "报名与套卷期",
-    start: "2027-09-01",
-    end: "2027-10-31",
-    weeklyTarget: 37,
-    cumulativeTarget: 2408,
-    quotas: { math: 13, cs408: 13, english: 4, politics: 7, project: 0 },
-    focus: "核验招生信息，完成报名确认，近 5 套全科均分稳定在 405+ 区间。",
-    tasks: [
-      ["数学", "套卷限时 + 48 小时错题回炉", 120],
-      ["408", "套卷限时 + 四门错题归档", 120],
-      ["英语", "作文定稿 + 阅读手感", 45],
-      ["政治", "选择题强化 + 背诵手册", 50]
-    ]
-  },
-  {
-    id: "H",
-    name: "考前收束期",
-    start: "2027-11-01",
-    end: "2027-12-25",
-    weeklyTarget: 31,
-    cumulativeTarget: TARGET_TOTAL_HOURS,
-    quotas: { math: 10, cs408: 10, english: 4, politics: 7, project: 0 },
-    focus: "模拟、错题、背诵和手感维持，近 10 套均分稳定在 415+ 区间。",
-    tasks: [
-      ["数学", "模拟卷错题回炉 + 公式定理默写", 110],
-      ["408", "真题错题重做 + 大题表达规范", 110],
-      ["英语", "作文默写 + 阅读保持", 45],
-      ["政治", "当年版预测资料、时政、主观题背诵", 70]
-    ]
-  }
-];
-
-const monthlyPlan = [
-  ["2026-06", 28, 28, "函数、极限预备", "C 语言入门", "单词、长难句", "连续记录"],
-  ["2026-07", 90, 118, "极限、导数启动", "C 语言、线性表", "阅读入门", "不测"],
-  ["2026-08", 100, 218, "高数基础、线代预热", "数据结构第一轮", "阅读精读", "不测"],
-  ["2026-09", 150, 368, "高数推进", "数据结构二轮、计组", "阅读真题", "章节小测"],
-  ["2026-10", 150, 518, "线代推进", "计组", "阅读真题", "章节小测"],
-  ["2026-11", 150, 668, "概率启动", "计组、OS", "翻译小练", "章节小测"],
-  ["2026-12", 150, 818, "第一轮收口", "OS 推进", "阅读复盘", "章节测"],
-  ["2027-01", 180, 998, "概率闭合", "OS、计网", "阅读", "基础综合"],
-  ["2027-02", 170, 1168, "二轮启动", "四门闭合", "阅读", "数学90-105，408 85-100"],
-  ["2027-03", 130, 1298, "强化", "四门强化", "阅读二刷", "小综合"],
-  ["2027-04", 135, 1433, "强化", "专题强化", "翻译新题型", "小综合"],
-  ["2027-05", 135, 1568, "真题分章节", "真题分章节", "作文预热", "小综合"],
-  ["2027-06", 140, 1708, "强化验收", "强化验收", "英语70+", "全科约360"],
-  ["2027-07", 190, 1898, "真题套卷", "真题套卷", "政治启动", "全科375+"],
-  ["2027-08", 190, 2088, "套卷补弱", "套卷补弱", "政治选择题", "全科390+"],
-  ["2027-09", 160, 2248, "套卷", "套卷", "作文定稿、政治", "全科400+"],
-  ["2027-10", 160, 2408, "套卷稳定", "套卷稳定", "政治强化", "近 5 套 405+"],
-  ["2027-11", 150, 2558, "模拟错题", "模拟错题", "背诵", "近10套415+"],
-  ["2027-12", 90, TARGET_TOTAL_HOURS, "保持手感", "保持手感", "背诵收束", "目标420"]
-];
-
-const scoreTargets = [
-  ["政治", 75, "后期稳定拿分"],
-  ["英语一", 80, "长期积累，不拖后腿"],
-  ["数学一", 130, "决定上限的第一核心"],
-  ["408", 135, "跨考最需要稳定的第二核心"]
-];
-
-const liveFactChecks = [
-  {
-    label: "招生科目",
-    status: "已核验",
-    value: "101 / 201 / 301 / 408",
-    detail: "北大软微 2026 电子信息 01-04 方向统考科目一致；2028 入学当年仍需复核。",
-    source: "北京大学软件与微电子学院"
-  },
-  {
-    label: "历史复试线",
-    status: "历史参考",
-    value: "2026：378",
-    detail: "电子信息 01-04 方向政治 55、外语 55、业务课 90/90、总分 378；不作为未来预测。",
-    source: "北大软微复试通知"
-  },
-  {
-    label: "考试日期",
-    status: "待发布",
-    value: "2027-12-25 推算",
-    detail: "正式日期以教育部和研招网当年公告为准，系统会把该项保持为待复核。",
-    source: "教育部 / 研招网"
-  },
-  {
-    label: "学习方法",
-    status: "有研究依据",
-    value: "主动回忆 + 分散复盘",
-    detail: "计划只使用练习测试、提取练习、间隔复习等有证据支持的学习动作。",
-    source: "Dunlosky 2013 / Karpicke 2008"
-  }
-];
-
-const firstMonthActions = [
-  {
-    week: "6/15-6/21",
-    tasks: ["6 月 15 日从头建档", "确定数学主线资料", "确定 408 主线资料", "确定英语单词工具", "函数图像与常用初等函数", "C 语言变量、分支、循环", "英语每天单词"],
-    pass: "9-11h；连续记录 7 天；能写循环程序；数学预备题有错因记录。"
-  },
-  {
-    week: "6/22-6/28",
-    tasks: ["数列和函数极限预备", "C 语言数组和函数", "顺序表概念预习", "英语长难句 2 组"],
-    pass: "12-14h；能写数组遍历和函数；极限预备题正确率有记录。"
-  },
-  {
-    week: "6/29-6/30",
-    tasks: ["极限与连续入门", "C 语言指针入门", "顺序表插入删除", "英语阅读 1 篇精读"],
-    pass: "3-4h；能说清 7 月第一周要学的数学和 408 主题。"
-  },
-  {
-    week: "月底复盘",
-    tasks: ["整理 6 月错题", "写出 7 月第一周计划", "确认资料只保留一套主线", "把未完成任务顺延到 7 月"],
-    pass: "6 月 15 日起累计 28h 左右；数学和 408 占比 60%+；写出 7-8 月暑假加量表。"
-  }
-];
-
-const resourceProgressItems = [
-  ["数学主线讲义", "math-main"],
-  ["数学习题集", "math-practice"],
-  ["数学一真题", "math-real"],
-  ["408 主线资料", "cs-main"],
-  ["408 真题", "cs-real"],
-  ["英语单词", "eng-words"],
-  ["英语真题阅读", "eng-reading"],
-  ["政治选择题", "pol-choice"]
-];
-
-const syllabusGroupTypeMeta = {
-  official: {
-    label: "官方范围映射",
-    note: "条目为备考拆解，不等同官方逐字大纲。"
-  },
-  prerequisite: {
-    label: "预备能力",
-    note: "用于补齐进入考研内容前的基础能力。"
-  },
-  supplement: {
-    label: "备考补充",
-    note: "用于执行和复盘，不作为官方考试范围声明。"
-  }
-};
-
-const syllabusGroupTypes = {
-  "math/高数预备": "prerequisite",
-  "cs408/C 与算法预备": "prerequisite",
-  "english/每日微积累": "supplement"
-};
-
-const syllabus = {
-  math: {
-    title: "数学一",
-    groups: [
-      ["高数预备", ["函数性质与图像", "定义域与值域", "反函数与复合函数", "常用初等函数", "三角恒等变换", "不等式与绝对值", "数列基础", "常用代数变形", "极坐标与参数表达预备"]],
-      ["极限与连续", ["数列极限", "函数极限", "左右极限", "极限四则运算", "无穷小与无穷大", "等价无穷小", "夹逼准则", "单调有界准则", "洛必达法则", "泰勒公式初步", "函数连续性", "间断点分类", "闭区间连续函数性质"]],
-      ["一元微分学", ["导数定义", "可导与连续关系", "求导法则", "复合函数求导", "反函数求导", "高阶导数", "隐函数求导", "参数方程求导", "微分", "单调性", "极值与最值", "凹凸性与拐点", "渐近线", "曲率基础", "导数应用-方程根"]],
-      ["中值定理", ["费马引理", "罗尔定理", "拉格朗日中值定理", "柯西中值定理", "泰勒中值定理", "不等式证明", "零点与根的个数证明", "证明题常见构造"]],
-      ["一元积分学", ["原函数与不定积分", "第一类换元积分", "第二类换元积分", "分部积分", "有理函数积分", "定积分定义", "定积分性质", "定积分换元", "定积分分部", "积分上限函数", "变限积分", "反常积分", "面积体积弧长", "定积分应用"]],
-      ["多元微分学", ["多元函数极限与连续", "偏导数", "高阶偏导数", "全微分", "多元复合函数链式法则", "隐函数求导", "方向导数与梯度", "二元泰勒公式基础", "多元极值", "条件极值", "拉格朗日乘子法"]],
-      ["重积分", ["二重积分概念", "积分区域画图", "直角坐标计算", "极坐标计算", "对称性与奇偶性", "交换积分次序", "三重积分概念", "柱坐标与球坐标", "积分区域分解", "重积分应用"]],
-      ["曲线曲面积分", ["第一类曲线积分", "第二类曲线积分", "曲线方向与参数化", "格林公式", "平面曲线积分与路径无关", "第一类曲面积分", "第二类曲面积分", "曲面方向与法向量", "高斯公式", "斯托克斯公式", "通量与环流"]],
-      ["级数", ["常数项级数", "正项级数比较判别", "比值与根值判别", "交错级数", "绝对收敛与条件收敛", "幂级数", "收敛半径与收敛域", "逐项求导与积分", "函数展开为幂级数", "傅里叶级数基础"]],
-      ["微分方程", ["可分离变量方程", "一阶线性方程", "齐次方程", "伯努利方程", "可降阶高阶方程", "二阶常系数线性方程", "非齐次特解设定", "差分方程基础", "微分方程应用"]],
-      ["线性代数", ["行列式性质", "行列式计算", "矩阵运算", "初等变换", "逆矩阵", "分块矩阵", "矩阵秩", "向量组线性相关", "极大无关组", "向量空间与基", "线性方程组", "齐次方程组解结构", "非齐次方程组解结构", "特征值与特征向量", "相似对角化", "实对称矩阵", "二次型", "正定矩阵"]],
-      ["概率统计", ["随机事件", "古典概型", "几何概型", "条件概率", "全概率与贝叶斯", "随机变量及分布", "分布函数", "常见离散分布", "常见连续分布", "二维随机变量", "联合分布", "边缘分布", "条件分布", "独立性", "随机变量函数分布", "期望", "方差", "协方差与相关系数", "大数定律", "中心极限定理", "样本与统计量", "抽样分布", "矩估计", "最大似然估计"]]
-    ]
-  },
-  cs408: {
-    title: "408",
-    groups: [
-      ["C 与算法预备", ["变量与表达式", "条件与循环", "数组", "字符串", "函数", "指针", "指针与数组", "结构体", "递归", "复杂度分析", "伪代码书写", "边界条件与测试样例"]],
-      ["数据结构-线性结构", ["顺序表", "单链表", "双链表", "静态链表", "栈", "队列", "循环队列", "串的基本概念", "模式匹配朴素算法", "KMP 思想", "数组与特殊矩阵"]],
-      ["数据结构-树", ["树的基本概念", "二叉树性质", "二叉树存储", "二叉树遍历", "遍历序列还原", "线索二叉树", "树与森林", "哈夫曼树", "二叉排序树", "平衡二叉树", "B 树与 B+ 树", "红黑树概念"]],
-      ["数据结构-图", ["图的存储", "邻接矩阵", "邻接表", "DFS", "BFS", "连通性", "最小生成树", "最短路径", "拓扑排序", "关键路径", "图算法复杂度"]],
-      ["数据结构-查找排序", ["顺序查找", "折半查找", "分块查找", "散列表", "哈希冲突处理", "插入排序", "交换排序", "选择排序", "归并排序", "基数排序", "排序稳定性", "外部排序基础"]],
-      ["计组-数据表示", ["进制转换", "定点数表示", "原码反码补码", "补码运算", "溢出判断", "移位运算", "浮点数表示", "IEEE754", "校验码", "海明码"]],
-      ["计组-运算与指令", ["ALU", "加减运算", "乘除运算", "指令格式", "寻址方式", "指令类型", "CISC 与 RISC", "汇编与机器指令关系"]],
-      ["计组-CPU", ["CPU 基本结构", "指令执行过程", "数据通路", "控制器", "硬布线控制", "微程序控制", "单周期与多周期", "流水线性能", "流水线冒险", "中断与异常"]],
-      ["计组-存储与 I/O", ["存储层次", "主存组织", "存储芯片扩展", "Cache 映射", "Cache 替换", "Cache 写策略", "虚拟存储器", "TLB", "总线", "程序查询 I/O", "中断 I/O", "DMA"]],
-      ["OS-进程线程", ["进程概念", "进程状态转换", "进程控制", "线程", "处理机调度", "调度算法", "周转时间与响应时间", "上下文切换"]],
-      ["OS-同步死锁", ["临界区", "互斥与同步", "信号量", "管程", "生产者消费者", "读者写者", "哲学家进餐", "死锁条件", "死锁预防", "死锁避免", "银行家算法", "死锁检测解除"]],
-      ["OS-内存文件 I/O", ["连续分配", "分页管理", "分段管理", "段页式", "虚拟内存", "页面置换", "工作集与抖动", "文件逻辑结构", "文件物理结构", "目录结构", "磁盘调度", "设备管理", "SPOOLing"]],
-      ["计网-基础与链路", ["分层体系结构", "性能指标", "物理层基础", "编码与调制", "传输介质", "差错控制", "流量控制", "可靠传输", "介质访问控制", "以太网", "交换机", "VLAN"]],
-      ["计网-网络层", ["IP 地址", "子网划分", "CIDR", "ARP", "DHCP", "ICMP", "路由选择", "最长前缀匹配", "RIP", "OSPF", "BGP", "IPv6", "NAT"]],
-      ["计网-传输与应用", ["UDP", "TCP 报文段", "三次握手", "四次挥手", "可靠传输", "滑动窗口", "流量控制", "拥塞控制", "DNS", "HTTP", "HTTPS 基础", "电子邮件", "FTP"]]
-    ]
-  },
-  english: {
-    title: "英语一",
-    groups: [
-      ["每日微积累", ["新词 20 个", "复习词 60 个", "错词回收", "一组长难句", "一句英译汉", "阅读手感保持", "作文语料复现"]],
-      ["词汇", ["高频核心词", "熟词僻义", "词根词缀", "真题生词本", "固定搭配", "同义替换", "情感态度词", "抽象名词", "动词短语"]],
-      ["语法长难句", ["句子成分", "主谓宾补识别", "从句识别", "名词性从句", "定语从句", "状语从句", "非谓语结构", "插入语", "倒装与强调", "比较结构", "并列与省略", "长句切分", "翻译顺序"]],
-      ["阅读理解", ["定位句识别", "题干关键词", "主旨题", "细节题", "推断题", "态度题", "例证题", "词义题", "篇章结构题", "选项干扰类型", "同义替换记录", "错题二刷"]],
-      ["新题型", ["段落排序", "小标题匹配", "句子填空", "上下文衔接", "代词指代", "逻辑连接词", "段落功能判断"]],
-      ["翻译", ["定语从句翻译", "状语从句翻译", "名词性从句翻译", "被动语态", "代词指代", "并列结构处理", "汉语语序重组", "术语与抽象词处理"]],
-      ["完形填空", ["逻辑关系", "词义辨析", "固定搭配", "上下文复现", "代词指代", "句间衔接"]],
-      ["作文", ["小作文格式", "通知/建议信/道歉信", "图表与图画描述", "图画作文", "观点展开", "原因结果让步", "模板默写", "限时写作", "语料纠错", "低级错误清单"]]
-    ]
-  },
-  politics: {
-    title: "政治",
-    groups: [
-      ["马原", ["哲学基本问题", "唯物论", "辩证法", "矛盾分析法", "认识论", "真理与价值", "唯物史观", "政治经济学", "剩余价值理论", "科学社会主义"]],
-      ["毛中特", ["毛泽东思想", "新民主主义革命", "社会主义改造", "社会主义建设初步探索", "中特理论体系", "新时代思想", "高质量发展", "现代化建设", "全面深化改革", "中国式现代化"]],
-      ["史纲", ["旧民主主义革命", "新民主主义革命", "社会主义革命", "社会主义建设", "改革开放史", "新时代历史成就", "重要会议", "历史人物与事件", "历史结论辨析"]],
-      ["思修法基", ["人生观", "理想信念", "中国精神", "社会主义核心价值观", "道德规范", "法治思想", "宪法法律基础", "权利义务", "时代新人"]],
-      ["当代与时政", ["国际格局", "大国关系", "中国外交", "全球治理", "年度会议", "重要讲话", "热点专题", "官方表述更新"]],
-      ["主观题", ["原理表达", "材料定位", "关键词默写", "当年版预测题背诵", "时政整合", "答题层次", "规范书写"]]
-    ]
-  }
-};
-
-const foundationDailySequence = {
-  math: [
-    ["高数预备", "函数性质与图像"],
-    ["高数预备", "常用初等函数"],
-    ["高数预备", "常用代数变形"],
-    ["极限与连续", "数列极限"],
-    ["极限与连续", "函数极限"],
-    ["极限与连续", "无穷小与无穷大"],
-    ["极限与连续", "等价无穷小"],
-    ["极限与连续", "洛必达法则"],
-    ["极限与连续", "函数连续性"],
-    ["极限与连续", "间断点分类"],
-    ["一元微分学", "导数定义"],
-    ["一元微分学", "求导法则"],
-    ["一元微分学", "高阶导数"],
-    ["一元微分学", "隐函数求导"],
-    ["一元微分学", "参数方程求导"],
-    ["一元微分学", "微分"],
-    ["一元微分学", "单调性"],
-    ["一元微分学", "极值与最值"],
-    ["一元微分学", "凹凸性与拐点"],
-    ["一元微分学", "渐近线"],
-    ["中值定理", "罗尔定理"],
-    ["中值定理", "拉格朗日中值定理"],
-    ["中值定理", "证明题常见构造"],
-    ["一元积分学", "原函数与不定积分"],
-    ["一元积分学", "换元积分"],
-    ["一元积分学", "分部积分"],
-    ["一元积分学", "定积分定义"],
-    ["一元积分学", "定积分性质"],
-    ["一元积分学", "变限积分"],
-    ["一元积分学", "定积分应用"]
-  ],
-  cs408: [
-    ["C 与算法预备", "变量与表达式"],
-    ["C 与算法预备", "条件与循环"],
-    ["C 与算法预备", "数组"],
-    ["C 与算法预备", "函数"],
-    ["C 与算法预备", "指针"],
-    ["C 与算法预备", "结构体"],
-    ["C 与算法预备", "递归"],
-    ["C 与算法预备", "复杂度分析"],
-    ["数据结构-线性结构", "顺序表"],
-    ["数据结构-线性结构", "单链表"],
-    ["数据结构-线性结构", "双链表"],
-    ["数据结构-线性结构", "栈"],
-    ["数据结构-线性结构", "队列"],
-    ["数据结构-线性结构", "循环队列"],
-    ["数据结构-线性结构", "串的基本概念"],
-    ["数据结构-线性结构", "KMP 思想"],
-    ["数据结构-树", "树的基本概念"],
-    ["数据结构-树", "二叉树性质"],
-    ["数据结构-树", "二叉树遍历"],
-    ["数据结构-树", "树与森林"],
-    ["数据结构-树", "哈夫曼树"],
-    ["数据结构-树", "二叉排序树"],
-    ["数据结构-图", "图的存储"],
-    ["数据结构-图", "DFS"],
-    ["数据结构-图", "BFS"],
-    ["数据结构-查找排序", "顺序查找"],
-    ["数据结构-查找排序", "折半查找"],
-    ["数据结构-查找排序", "插入排序"],
-    ["数据结构-查找排序", "交换排序"],
-    ["数据结构-查找排序", "归并排序"]
-  ],
-  english: [
-    ["词汇", "高频核心词"],
-    ["语法长难句", "句子成分"],
-    ["词汇", "同义替换"],
-    ["语法长难句", "从句识别"],
-    ["阅读理解", "定位句识别"],
-    ["语法长难句", "非谓语结构"],
-    ["阅读理解", "细节题"],
-    ["词汇", "熟词僻义"],
-    ["阅读理解", "选项干扰类型"],
-    ["翻译", "定语从句翻译"]
-  ]
-};
-
-const foundationPlan = [
-  {
-    title: "第 0 层：学习系统和计算机感",
-    weeks: "第 1-2 周",
-    goal: "能稳定记录学习，知道程序、内存、文件、网络这些词大概指什么。",
-    tasks: ["搭建记录表和网站使用习惯", "安装并会用一个代码编辑器", "会运行 C 或 Python 的 Hello World", "理解文件、目录、终端、编译/运行的区别"],
-    pass: "连续记录 7 天；能独立运行 3 个小程序；能说清楚源代码和可执行程序的区别。"
-  },
-  {
-    title: "第 1 层：数学预备",
-    weeks: "第 1-6 周",
-    goal: "补齐函数、代数、三角和数列等高数前置能力。",
-    tasks: ["函数图像和性质", "常用初等函数", "三角公式", "不等式与绝对值", "代数变形", "数列基础"],
-    pass: "能独立完成函数、极限前置题；看到分式、根式、三角式能做基本化简。"
-  },
-  {
-    title: "第 2 层：C 语言和算法表达",
-    weeks: "第 1-8 周",
-    goal: "为数据结构服务，不追求工程复杂度。",
-    tasks: ["变量、分支、循环", "数组和字符串", "函数和递归", "指针和结构体", "单链表基础操作", "复杂度 O 表示法"],
-    pass: "能写顺序表、单链表、栈、队列的基本操作；能估算简单循环复杂度。"
-  },
-  {
-    title: "第 3 层：数据结构入门",
-    weeks: "暑假前半",
-    goal: "把抽象结构变成图和代码，不只背定义。",
-    tasks: ["线性表", "栈和队列", "二叉树遍历", "图的 DFS/BFS", "查找", "排序"],
-    pass: "每类结构至少写 1 个代码或伪代码；能解释时间复杂度和适用场景。"
-  },
-  {
-    title: "第 4 层：408 系统观",
-    weeks: "2026 下半年",
-    goal: "理解程序如何从代码运行到机器、操作系统和网络。",
-    tasks: ["计组：CPU、指令、存储", "OS：进程、内存、文件", "计网：分层、IP、TCP、HTTP", "用图画执行过程"],
-    pass: "能画出从代码执行、内存访问、系统调用到网络请求的粗略链路。"
-  },
-  {
-    title: "第 5 层：考研题型化",
-    weeks: "2027 强化期",
-    goal: "从会概念变成能做题、能限时、能复盘。",
-    tasks: ["数学专题题型", "408 章节真题", "错题按知识点归档", "每周限时训练"],
-    pass: "数学和 408 综合训练进入 100+ 区间，错题能说出明确错因。"
-  }
-];
-
-const learningPath = [
-  { id: "start", name: "启动", range: "2026.06.15-06.30", goal: "低强度建立记录、补数学预备和 C 语言", deliverable: "连续记录 7 天，完成 28h 起步" },
-  { id: "base", name: "奠基", range: "2026.07-08", goal: "暑假逐步加长，高数基础、线代启动、数据结构第一轮", deliverable: "累计 218h，线性表/树/图能做基础题" },
-  { id: "map", name: "加压", range: "2026.09-12", goal: "9 月起提高强度，数学一和 408 主干过第一轮", deliverable: "累计 818h，数学一 70% 框架，408 至少两门" },
-  { id: "close", name: "收口", range: "2027.01-02", goal: "四门 408 和数学一第一轮收口", deliverable: "数学 90+，408 85+" },
-  { id: "strength", name: "强化", range: "2027.03-06", goal: "题型化、真题分章节、项目可运行", deliverable: "数学 110，408 105" },
-  { id: "battle", name: "套卷", range: "2027.07-08", goal: "真题套卷和政治启动", deliverable: "全科 390+" },
-  { id: "rank", name: "排位", range: "2027.09-10", goal: "报名、套卷稳定、近 5 套 405+", deliverable: "确定报考和院校梯队" },
-  { id: "sprint", name: "收束", range: "2027.11-12", goal: "模拟、背诵、错题回炉", deliverable: "近 10 套 415+" }
-];
-
-const subjectMethods = {
-  "数学": {
-    learn: "先看定义和 2-3 个例题，再闭卷做基础题。",
-    practice: "基础题 15-25 道；不会的只回定义，不刷难题逃避。",
-    check: "能独立写出关键公式、题型识别信号和错因。"
-  },
-  "408": {
-    learn: "先画结构图或过程图，再看例题和选择题。",
-    practice: "章节题 20 道，或写 1 个代码/伪代码实现。",
-    check: "能解释它解决什么问题、怎么做、复杂度或代价是什么。"
-  },
-  "英语": {
-    learn: "先背词，再做一篇阅读或一组长难句。",
-    practice: "限时做题后精读，不查词先复述结构。",
-    check: "写出生词、长难句、定位句和错题原因。"
-  },
-  "政治": {
-    learn: "先过框架，再刷选择题。",
-    practice: "选择题一刷后只二刷错题，主观题后期默写关键词。",
-    check: "能把错题归到概念、材料定位或时政记忆。"
-  },
-  "复盘": {
-    learn: "只看本周新增错题和未完成任务。",
-    practice: "回炉 5-10 道错题，写明天第一任务。",
-    check: "每道错题有明确错因和下一次处理方式。"
-  },
-  "补弱": {
-    learn: "只选一个最弱科目，不同时补多个洞。",
-    practice: "补 30 分钟核心任务，优先错题和基础定义。",
-    check: "写下为什么弱、下次如何提前识别。"
-  },
-  "项目": {
-    learn: "先确定最小功能，不追求大而全。",
-    practice: "推进一个可运行功能或补 README。",
-    check: "能讲清楚输入、处理、输出和改进点。"
-  }
-};
-
-const highStandards = [
-  ["前置知识", "6 月下半月只补会直接进入高数和数据结构的东西：函数图像、代数变形、C 循环/数组/函数、复杂度表达和英语句子切分。"],
-  ["数学", "定义能复述，公式能默写，基础题正确率 80%+，错题必须写识别信号。"],
-  ["408", "概念能画图，算法能写伪代码，大题能写步骤，所有错题归到四门知识点。"],
-  ["英语", "每天 20 分钟不断档；单词在真题语境里复现，阅读错题定位到词汇、句法、定位、逻辑或干扰项。"],
-  ["政治", "选择题错题二刷，主观题后期能默写关键词，不挤占数学和 408。"],
-  ["复盘", "按 D+1/D+3/D+7/D+14/D+30 回炉，每次记录具体错因。"]
-];
-
-const systemRules = [
-  ["01", "渐进加量", "2026 年 6 月 15 日从头开始；7-8 月逐步加长；9 月起提高到第一轮主干强度。"],
-  ["02", "核心优先", "数学一和 408 优先分配时间，周核心占比低于 65% 就预警。"],
-  ["03", "未完成顺延", "昨天没有完成的任务进入今天，同时压缩新增内容，避免补偿式超载。"],
-  ["04", "先交付再加量", "每个任务必须有题量、错因、图示或代码交付，只看视频不算真正完成。"],
-  ["05", "错题进复盘", "勾选完成后自动安排 D+1 / D+3 / D+7 / D+14 / D+30。"],
-  ["06", "日审周审月审", "每天收口到明天第一任务；每周看核心占比、回炉率和活跃天数；每月只调总量和弱项，不重写大计划。"],
-  ["07", "统计看趋势", "单日波动不判好坏，至少看 7 天有效小时、14 天趋势、错题回炉率和考纲证据。"],
-  ["08", "学习曲线", "投入量按阶段爬坡；连续低完成时降到底线日，连续稳定后再增加难度或题量。"],
-  ["09", "英语不断档", "英语用小剂量高频复现，不用单日硬补；任何计划日都至少保留词汇、句法或定位句证据。"],
-  ["10", "专题闭环", "强化期每个专题都要经历识别信号、限时练习、错因归档和二次重做，四步缺一项就不算过关。"]
-];
-
-const methodEvidence = [
-  ["主动回忆", "依据 practice testing / retrieval practice 思路，优先做题、闭卷默写、过程图和自测，而不是反复看讲义。"],
-  ["分散复盘", "D+1/D+3/D+7/D+14/D+30 是轻量回炉；每次只验证能否重新提取，不把复盘堆成第二套课程。"],
-  ["交错练习", "数学和 408 后期在章节题、真题、错题和限时题之间切换，避免只会单章套路。"],
-  ["可完成负荷", "任务默认 3 项，顺延时削减新增内容；连续低完成时降到底线日，先恢复执行再加量。"],
-  ["证据化掌握", "一个考点至少留下题量、正确率、错因、图示、代码或默写证据，不能只凭“感觉会了”标记掌握。"],
-  ["定时复盘", "每天睡前 5-8 分钟写明天第一任务；周日只看四个指标；月底只决定一个加量或减量动作。"]
-];
-
-const memoryCurveRules = [
-  { round: "D+1", action: "闭卷重做当天错题或核心例题。", pass: "能说出定义、触发条件和第一步。", fallback: "失败则只补一个概念，明天生成短复盘。", cost: "5-15m" },
-  { round: "D+3", action: "换一道同类题验证题型识别。", pass: "不看答案能列出解题路线。", fallback: "把错因归为概念、计算、条件或表达。", cost: "10-20m" },
-  { round: "D+7", action: "合并本周同类错因，重做高频错题。", pass: "同类错误本周不再重复。", fallback: "下周减少新增，优先补同类题。", cost: "15-25m" },
-  { round: "D+14", action: "从题目回到章节框架，补过程图或公式链。", pass: "能把题目挂回考纲小节。", fallback: "标记为需复盘，不进入已掌握。", cost: "15-25m" },
-  { round: "D+30", action: "月度回炉，只保留高频错题和核心公式。", pass: "限时重做仍能稳定完成。", fallback: "进入月度弱项清单，下一月降级处理。", cost: "20-35m" }
-];
-
-const auditCadenceRules = [
-  { label: "日审", value: "每天 5-8m", text: "记录有效分钟、题量、错题和明天第一任务；未完成任务只顺延最重要的 1-2 项。" },
-  { label: "周审", value: "每周 20-30m", text: "看 7 天有效小时、数学+408 占比、错题回炉率、活跃天数；只决定下周一个主攻弱项。" },
-  { label: "月审", value: "每月 45-60m", text: "核对累计小时、考纲证据、资料进度和阶段验收；不因单周波动推翻路线。" },
-  { label: "阶段审", value: "节点日", text: "2026-08、2026-12、2027-06、2027-10 必须检查是否需要降级、补基础或准备稳妥院校梯队。" }
-];
-
-const studyMetricRules = [
-  ["有效小时", "只统计做题、复盘、默写、精读、代码或产出整理；纯播放视频不单独算有效学习。"],
-  ["核心占比", "数学一 + 408 是主线，2026 年 9 月后周占比低于 65% 就减少非核心内容。"],
-  ["英语微积累", "每天至少 20 分钟，优先单词复现、长难句切分和阅读定位；再忙也不断档。"],
-  ["回炉率", "固定错题数 / 新增错题数；低于 70% 说明复盘债务在扩大。"],
-  ["掌握证据", "考纲条目标已掌握前，至少要有题量、正确率、错因或可解释产出。"],
-  ["趋势窗口", "7 天看执行，14 天看学习曲线，30 天才调整阶段计划。"]
-];
-
-const reviewOutcomeRules = [
-  ["通过", "闭卷能做、能讲清错因、能挂回考点；保持原复盘间隔。"],
-  ["失败", "不会第一步、同类错因重复或看答案才懂；生成 D+1 短复盘。"],
-  ["延期", "当天负荷过高时只允许 +1 或 +3 天；延期超过 2 次视作未掌握。"],
-  ["复盘减量", "到期复盘超过 3 项时，新内容上限自动收紧，先保护主动回忆质量。"]
-];
-
-const subjectAcceptanceRules = {
-  "数学": {
-    minimum: "45 分钟或 15 道基础题，至少订正当天错题。",
-    standard: "15-25 道题，正确率和错因有记录，关键公式闭卷默写。",
-    high: "能写出题型识别信号，并把错题挂回考纲小节。"
-  },
-  "408": {
-    minimum: "45 分钟或 15-20 道章节题，至少画出一个过程图。",
-    standard: "20 道题或 1 个代码/伪代码实现，能解释复杂度、代价或状态变化。",
-    high: "能把概念、图示、题目和错因统一到同一个知识点。"
-  },
-  "英语": {
-    minimum: "单词不断档，完成 20 分钟词句或 1 组长难句。",
-    standard: "新词、复习词、错词和定位句都有记录；阅读或长难句限时后再精读。",
-    high: "能复述段落结构，并把错题归为词汇、句法、定位、逻辑或干扰项类型。"
-  },
-  "政治": {
-    minimum: "20 分钟框架或选择题，不挤占数学和 408。",
-    standard: "选择题完成后归类错因，后期主观题能默写关键词。",
-    high: "能用官方表述组织答案层次，不背散句。"
-  },
-  "复盘": {
-    minimum: "回炉 5 道错题或 15 分钟到期复盘。",
-    standard: "重做不翻答案，写出二次错因和下一轮处理方式。",
-    high: "能合并同类错因，并决定是否降低新内容。"
-  },
-  "补弱": {
-    minimum: "只处理一个弱项，补 30 分钟基础定义或错题。",
-    standard: "写清弱在哪里、为什么弱、下一次如何提前识别。",
-    high: "把弱项拆成 2-3 个可复查的小动作。"
-  },
-  "项目": {
-    minimum: "推进一个可运行小功能或补一段 README。",
-    standard: "留下输入、处理、输出和技术取舍说明。",
-    high: "能形成复试可讲的证据：截图、链接、问题和改进点。"
-  }
-};
-
-const resourceUsageRules = [
-  "每科只保留一条主线资料，先完成 70% 再决定是否补充第二套。",
-  "新增资料必须说明解决什么问题：概念不清、题量不足、真题表达弱或错题回炉不足。",
-  "资料进度不能替代掌握证据；完成率高但错题回炉低时，优先停新资料。"
-];
-
-const taskBlueprints = {
-  "数学": {
-    output: "交付：基础题 15-25 道 + 错题原因 3 条以内 + 关键公式闭卷默写。",
-    steps: ["先读定义和例题", "闭卷做基础题", "标记错因和识别信号"],
-    metric: "题量/正确率"
-  },
-  "408": {
-    output: "交付：章节题 20 道或 1 个伪代码/过程图，必须能解释复杂度或代价。",
-    steps: ["先画结构或流程", "做选择题和大题", "补代码/伪代码表达"],
-    metric: "题量/图示"
-  },
-  "英语": {
-    output: "交付：新词 20 个 + 复习词 60 个 + 1 组长难句或阅读定位句 + 错选项原因。",
-    steps: ["先复现单词", "限时阅读或长难句", "精读定位句和错选项"],
-    metric: "词句/篇数"
-  },
-  "政治": {
-    output: "交付：选择题错题归类，后期主观题关键词能默写。",
-    steps: ["先过框架", "刷选择题", "二刷错题关键词"],
-    metric: "选择题"
-  },
-  "复盘": {
-    output: "交付：回炉 5-10 道错题，写出明天第一任务。",
-    steps: ["只看到期错题", "重做不翻答案", "写下二次错因"],
-    metric: "回炉率"
-  },
-  "补弱": {
-    output: "交付：只补一个弱项，写清弱在哪里、下次如何提前识别。",
-    steps: ["定位一个弱点", "补基础定义或错题", "写下下一步动作"],
-    metric: "弱项处理"
-  },
-  "项目": {
-    output: "交付：一个可运行小功能、README 说明或一段可讲技术点。",
-    steps: ["定义最小功能", "编码或补文档", "记录技术取舍"],
-    metric: "可运行"
-  }
-};
-
-const subjectPalette = {
-  math: "#13785f",
-  cs408: "#2868a8",
-  english: "#6a5acd",
-  politics: "#b7791f",
-  project: "#596579"
-};
-
-const resources = [
-  ["数学一", ["范围以教育部教育考试院当年数学一考试大纲为准，当前按高数、线代、概率统计主干备考", "教材查漏建议：同济高数、同济线代、浙大概率，均为非官方指定资料", "主线资料只选一套体系；660/880/1000/1800 等习题集属于非官方备考建议，按当年最新版确认", "2027 年 3 月后进入分章节真题和套卷；未来年份模拟卷出版后再确认"]],
-  ["408", ["范围以当年 408 计算机学科专业基础考试大纲为准，当前按数据结构、计组、OS、计网主干备考", "主线建议：王道或天勤 408 四科体系固定一种，均为非官方指定资料，当年最新版出版后确认", "查漏参考：严蔚敏、唐朔飞、汤小丹、谢希仁等教材，作为概念核对资料", "每章必须做题、画图、错题归档；资料选择服务执行，不替代官方大纲"]],
-  ["英语一", ["范围以当年英语一考试大纲为准，当前按词汇、长难句、阅读、翻译、写作主干备考", "单词工具固定一种，坚持到考前；工具和书目均为非官方指定资料", "真题阅读可用黄皮书、考研真相或同类解析体系之一，按当年版确认", "作文 2027 年暑假后系统定稿，最终表达以当年真题和评分要求校正"]],
-  ["政治", ["范围以当年政治考试大纲和时政要求为准，年度大纲和时政必须在官方发布后刷新", "2027 年 7-8 月启动基础框架，不提前重投入", "10 月后使用当年版背诵手册和时政材料，出版后确认", "11-12 月可用肖八、肖四或同类预测资料，均为非官方指定资料，并以官方表述收束"]]
-];
-
-const projectItems = [
-  "Git 仓库和 README",
-  "本地可运行版本",
-  "数据库表或核心算法设计",
-  "截图或演示说明",
-  "3 个技术问题",
-  "3 个改进方向",
-  "中英文自我介绍",
-  "跨考动机解释"
-];
-
 async function bootstrapApp() {
   try {
     setDefaultDates();
     hydrateIcons();
     bindNavigation();
+    initWorkspaceController();
     bindDensityControls();
     bindForms();
     bindSyllabusTabs();
@@ -888,51 +236,31 @@ async function bootstrapApp() {
     } else if (resetRequest.confirmed && !resetRequest.cleared) {
       showToast("本机缓存未完全清理，请在账号面板重试或手动导出后清理浏览器存储。");
     }
-    if (!storageAvailable) showToast("浏览器暂时禁止本机存储，页面可操作，但刷新后本机数据可能不会保留。");
+    if (!browserStorage.available) showToast("浏览器暂时禁止本机存储，页面可操作，但刷新后本机数据可能不会保留。");
   } catch (error) {
     console.error("[rw] app initialization failed", error);
     installRecoveryMode(error);
   }
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", bootstrapApp, { once: true });
-} else {
-  bootstrapApp();
-}
+// Under Vitest the module is imported only to reach the pure state layer that is
+// exported at the bottom of this file. Running the real bootstrap in that case
+// would rewire the whole page before every test, so it is skipped. Production and
+// dev builds always take the branch below.
+//
+// Integration tests that DO want the real wiring set `globalThis.__RW_BOOTSTRAP__`
+// before importing this module (see `tests/support/bootstrap-harness.js`). That
+// is what makes the production orchestrator behaviour-testable instead of only
+// pattern-matchable — the flag has no effect outside the test runtime.
+const IS_TEST_RUNTIME = import.meta.env?.MODE === "test";
+const BOOTSTRAP_REQUESTED = !IS_TEST_RUNTIME || globalThis.__RW_BOOTSTRAP__ === true;
 
-function hydrateIcons(root = document) {
-  document.querySelectorAll(".nav-item[data-icon]").forEach((button) => {
-    const node = button.querySelector(".nav-ico");
-    if (!node || node.dataset.lucide) return;
-    const iconName = navIconName(button.dataset.icon || "");
-    node.setAttribute("data-lucide", iconName);
-    node.setAttribute("aria-hidden", "true");
-  });
-  createIcons({
-    icons: appIcons,
-    root,
-    attrs: {
-      width: 17,
-      height: 17,
-      strokeWidth: 2
-    }
-  });
-}
-
-function navIconName(icon) {
-  return {
-    home: "layout-dashboard",
-    today: "list-checks",
-    week: "calendar-days",
-    path: "map",
-    grid: "book-open-check",
-    records: "clipboard-list",
-    review: "rotate-ccw",
-    scores: "bar-chart-3",
-    resources: "library",
-    settings: "settings"
-  }[icon] || "circle-gauge";
+if (BOOTSTRAP_REQUESTED) {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootstrapApp, { once: true });
+  } else {
+    bootstrapApp();
+  }
 }
 
 function loadState() {
@@ -982,15 +310,21 @@ function migrateState(parsed) {
       ...settingsInput
     } = parsedSettings;
     const settings = { ...defaultSettings, ...settingsInput };
+    // Numeric settings are resolved from the raw payload, not from the already
+    // default-filled object. Spreading `defaultSettings` first always populates
+    // the camelCase field, which would shadow the legacy snake_case fallback and
+    // silently reset a pre-camelCase payload back to the defaults.
+    settings.weekdayMinutes = firstIntegerValue([settingsInput.weekdayMinutes, settingsInput.weekday_minutes, defaultSettings.weekdayMinutes], 60, 720, defaultSettings.weekdayMinutes);
+    settings.weekendMinutes = firstIntegerValue([settingsInput.weekendMinutes, settingsInput.weekend_minutes, defaultSettings.weekendMinutes], 60, 840, defaultSettings.weekendMinutes);
+    settings.taskCount = firstIntegerValue([settingsInput.taskCount, settingsInput.task_count, defaultSettings.taskCount], 3, 4, defaultSettings.taskCount);
+    settings.coreRatio = firstIntegerValue([settingsInput.coreRatio, settingsInput.core_ratio, defaultSettings.coreRatio], 55, 85, defaultSettings.coreRatio);
+    // Runs after normalisation so the efficiency downgrade wins over whatever the
+    // payload carried, instead of being overwritten by the clamped raw value.
     if (!settings.efficiencyModeApplied) {
       if (settings.taskCount === 4) settings.taskCount = 3;
       if (!source.settings || source.settings.density === "balanced") settings.density = "focus";
       settings.efficiencyModeApplied = true;
     }
-    settings.weekdayMinutes = firstIntegerValue([settings.weekdayMinutes, settings.weekday_minutes, defaultSettings.weekdayMinutes], 60, 720, defaultSettings.weekdayMinutes);
-    settings.weekendMinutes = firstIntegerValue([settings.weekendMinutes, settings.weekend_minutes, defaultSettings.weekendMinutes], 60, 840, defaultSettings.weekendMinutes);
-    settings.taskCount = firstIntegerValue([settings.taskCount, settings.task_count, defaultSettings.taskCount], 3, 4, defaultSettings.taskCount);
-    settings.coreRatio = firstIntegerValue([settings.coreRatio, settings.core_ratio, defaultSettings.coreRatio], 55, 85, defaultSettings.coreRatio);
     if (!["focus", "balanced", "detail"].includes(settings.density)) settings.density = "focus";
     settings.targetExamDate = sanitizeDateOrFallback(settings.targetExamDate, DEFAULT_EXAM_DATE) || DEFAULT_EXAM_DATE;
     settings.reviewDays = Array.isArray(settings.reviewDays)
@@ -1048,7 +382,11 @@ function migrateState(parsed) {
       user: sanitizeUser(source.user)
     };
     return applyTombstones(nextState);
-  } catch {
+  } catch (error) {
+    // Silently returning `freshState()` here would discard every stored record
+    // without a trace. Surface the failure instead so a migration bug is
+    // diagnosable rather than presenting as "my data disappeared".
+    console.error("[rw] migrateState failed; falling back to a fresh state", error);
     return freshState();
   }
 }
@@ -1122,10 +460,12 @@ function sanitizeDateOrFallback(value, fallback = "") {
 function ensureSettingsContainer() {
   const current = stateObject(state.settings);
   const settings = { ...defaultSettings, ...current };
-  settings.weekdayMinutes = firstIntegerValue([settings.weekdayMinutes, settings.weekday_minutes, defaultSettings.weekdayMinutes], 60, 720, defaultSettings.weekdayMinutes);
-  settings.weekendMinutes = firstIntegerValue([settings.weekendMinutes, settings.weekend_minutes, defaultSettings.weekendMinutes], 60, 840, defaultSettings.weekendMinutes);
-  settings.taskCount = firstIntegerValue([settings.taskCount, settings.task_count, defaultSettings.taskCount], 3, 4, defaultSettings.taskCount);
-  settings.coreRatio = firstIntegerValue([settings.coreRatio, settings.core_ratio, defaultSettings.coreRatio], 55, 85, defaultSettings.coreRatio);
+  // Same reason as in migrateState: resolve from the stored payload so the legacy
+  // snake_case fallback is reachable when only that form is present.
+  settings.weekdayMinutes = firstIntegerValue([current.weekdayMinutes, current.weekday_minutes, defaultSettings.weekdayMinutes], 60, 720, defaultSettings.weekdayMinutes);
+  settings.weekendMinutes = firstIntegerValue([current.weekendMinutes, current.weekend_minutes, defaultSettings.weekendMinutes], 60, 840, defaultSettings.weekendMinutes);
+  settings.taskCount = firstIntegerValue([current.taskCount, current.task_count, defaultSettings.taskCount], 3, 4, defaultSettings.taskCount);
+  settings.coreRatio = firstIntegerValue([current.coreRatio, current.core_ratio, defaultSettings.coreRatio], 55, 85, defaultSettings.coreRatio);
   if (!["focus", "balanced", "detail"].includes(settings.density)) settings.density = "focus";
   settings.targetExamDate = sanitizeDateOrFallback(settings.targetExamDate, DEFAULT_EXAM_DATE) || DEFAULT_EXAM_DATE;
   settings.reviewDays = Array.isArray(settings.reviewDays)
@@ -1470,7 +810,7 @@ function sanitizeTask(task, date, index = 0) {
   return {
     id: taskId,
     date: sanitizeDateOrFallback(row.date, date) || date,
-    subject: sanitizeText(row.subject, "复盘", 80),
+    subject: normalizeSubjectLabel(row.subject),
     text: sanitizeText(row.text, "回炉错题，写明下次识别信号", 1000),
     topicId: firstSafeStateKey([row.topicId, row.topic_id]),
     minutes: sanitizeInteger(row.minutes, 0, 240),
@@ -1538,7 +878,7 @@ function sanitizeReviewItems(items) {
     return [{
       id: safeStateKey(item.id) || uid("review"),
       sourceTaskId: firstSafeStateKey([item.sourceTaskId, item.source_task_id]),
-      subject: sanitizeText(item.subject, "复盘", 80),
+      subject: normalizeSubjectLabel(item.subject),
       text: firstTextValue([item.text, item.title], "", 1000),
       round: firstTextValue([item.round, item.review_round], "", 40),
       dueDate,
@@ -1679,7 +1019,7 @@ function buildCleanStartArchive({ entries, scores, weekPlans, reviewItems, topic
     version: CLEAN_START_VERSION,
     startDate: PLAN_START_DATE,
     archivedAt,
-    note: "2026-06-15 从头开始；早于起点的数据仅归档，不再参与计划、统计和复盘。",
+    note: `${PLAN_START_DATE} 从头开始；早于起点的数据仅归档，不再参与计划、统计和复盘。`,
     counts: {
       entriesBeforeStart: archivedEntries.length,
       scoresBeforeStart: archivedScores,
@@ -1696,7 +1036,7 @@ function buildCleanStartArchive({ entries, scores, weekPlans, reviewItems, topic
 function sanitizeCustomTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).filter(isPlainStateObject).map((task) => ({
     id: safeStateKey(task.id) || uid("custom"),
-    subject: sanitizeText(task.subject, "复盘", 80),
+    subject: normalizeSubjectLabel(task.subject),
     text: sanitizeText(task.text, "", 1000),
     minutes: sanitizeInteger(task.minutes, 10, 240),
     updatedAt: firstTextValue([task.updatedAt, task.updated_at], "", 80)
@@ -1878,36 +1218,84 @@ function setLocalSaveResult(saved, successTitle, successMessage, failureTitle) {
     : "浏览器阻止写入本机缓存；本次更改只保留在当前页面。请立即导出备份，刷新前不要关闭页面。");
 }
 
-async function initCloudSession() {
+function bindCloudAuthListener() {
+  if (stopCloudAuthListener) return;
+  stopCloudAuthListener = onAuthChange((user) => {
+    // Login and logout actions perform their own pull/cleanup. Ignore the
+    // matching Supabase event while that request is still settling to avoid a
+    // second concurrent merge that can overwrite the visible state.
+    if (authRequestInFlight) return;
+    return handleCloudAuthChange(user);
+  });
+}
+
+async function handleCloudAuthChange(user) {
+  currentUser = user;
+  state.user = user ? { id: user.id, email: user.email || "" } : null;
+  let localSaved;
+  if (user) {
+    const pullResult = await pullCloudState();
+    localSaved = pullResult?.localSaved !== false;
+  } else {
+    state.sync = {
+      ...state.sync,
+      status: state.sync?.cloudPaused ? "paused" : "local",
+      pending: false,
+      lastError: "not-authenticated"
+    };
+    localSaved = saveState({ skipCloud: true });
+  }
+  renderSyncStatus();
+  renderAll();
+  renderAuthPanel();
+  if (!localSaved) {
+    setLocalSaveResult(false, "账号会话状态已保存", "账号会话状态已写入本机缓存。", "账号会话状态未写入本机缓存");
+  }
+}
+
+/**
+ * Detect a Supabase auth redirect (email confirmation, recovery, magic link or
+ * an error callback) in the current URL. These land before a session exists in
+ * storage, so they must be allowed to boot the cloud client.
+ */
+function hasCloudAuthRedirect() {
   try {
-    currentUser = await getCurrentUser();
+    const raw = `${window.location.hash || ""}&${window.location.search || ""}`;
+    return /(?:^|[?&#])(?:access_token|refresh_token|error_description|error_code)=/i.test(raw)
+      || /(?:^|[?&#])type=(?:signup|recovery|invite|magiclink|email_change)/i.test(raw);
+  } catch {
+    return false;
+  }
+}
+
+async function initCloudSession() {
+  if (!supabaseConfigured) {
+    currentUser = null;
+    state.user = null;
+    renderSyncStatus();
+    return;
+  }
+  // The Supabase SDK is a ~209 kB dynamic chunk. It must not be fetched for a
+  // browser that has never held a cloud session. `onAuthChange` and
+  // `getCurrentSession` both require the client, so the SDK would load here.
+  // Only continue when a session is persisted, or when the URL carries an auth
+  // redirect that is about to establish one.
+  if (!hasPersistedCloudSession() && !hasCloudAuthRedirect()) {
+    currentUser = null;
+    state.user = null;
+    renderSyncStatus();
+    return;
+  }
+  // Subscribe before reading the session so email-confirmation redirects and
+  // sessions restored by Supabase are handled even when localStorage is empty.
+  bindCloudAuthListener();
+  try {
+    const sessionResult = await getCurrentSession();
+    currentUser = sessionResult?.user || null;
     if (currentUser) {
       state.user = { id: currentUser.id, email: currentUser.email || "" };
       await pullCloudState();
     }
-    onAuthChange(async (user) => {
-      currentUser = user;
-      state.user = user ? { id: user.id, email: user.email || "" } : null;
-      let localSaved = true;
-      if (user) {
-        const pullResult = await pullCloudState();
-        localSaved = pullResult?.localSaved !== false;
-      } else {
-        state.sync = {
-          ...state.sync,
-          status: state.sync?.cloudPaused ? "paused" : "local",
-          pending: false,
-          lastError: "not-authenticated"
-        };
-        localSaved = saveState({ skipCloud: true });
-      }
-      renderSyncStatus();
-      renderAll();
-      renderAuthPanel();
-      if (!localSaved) {
-        setLocalSaveResult(false, "账号会话状态已保存", "账号会话状态已写入本机缓存。", "账号会话状态未写入本机缓存");
-      }
-    });
   } catch (error) {
     currentUser = null;
     state.user = null;
@@ -2415,10 +1803,16 @@ function renderSyncStatus() {
   const errorSuffix = state.sync?.status === "error" && state.sync?.lastError
     ? ` · ${shortSyncError(state.sync.lastError)}`
     : "";
-  setText("syncStatusText", currentUser ? `${label}${errorSuffix} · ${currentUser.email || "已登录"}` : `${label}${errorSuffix}`);
+  setText("syncStatusText", `${label}${errorSuffix}`);
   const pill = document.getElementById("syncPill");
   if (pill) pill.dataset.status = status || "local";
   setText("sideDataSave", state.sync?.lastSyncAt ? `同步 ${state.sync.lastSyncAt.slice(5, 16).replace("T", " ")}` : label);
+  const authButton = document.getElementById("authOpenBtn");
+  if (authButton) {
+    const labelNode = authButton.querySelector("span");
+    if (labelNode) labelNode.textContent = currentUser ? "账号" : "登录";
+    authButton.title = currentUser ? `账号：${currentUser.email || "已登录"}` : "登录与云同步";
+  }
 }
 
 function shortSyncError(message) {
@@ -2473,18 +1867,6 @@ function getCurrentPhase(dateValue = planTodayISO()) {
 }
 
 function bindNavigation() {
-  document.querySelectorAll(".nav-item").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      setRoute(button.dataset.view);
-    });
-  });
-  document.querySelector(".nav-list")?.addEventListener("click", (event) => {
-    const button = event.target.closest(".nav-item[data-view]");
-    if (!button) return;
-    event.preventDefault();
-    setRoute(button.dataset.view);
-  });
   document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -2493,7 +1875,6 @@ function bindNavigation() {
     const view = button.dataset.view || button.dataset.jump;
     if (!isValidView(view)) return;
     event.preventDefault();
-    event.stopPropagation();
     setRoute(view);
   }, true);
 
@@ -2503,13 +1884,6 @@ function bindNavigation() {
 
   window.addEventListener("pageshow", () => {
     normalizeHashRoute();
-  });
-
-  document.querySelectorAll("[data-jump]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      setRoute(button.dataset.jump);
-    });
   });
   document.documentElement.dataset.navBound = "1";
 }
@@ -2528,34 +1902,14 @@ function bindDensityControls() {
 }
 
 function densityLabel(value) {
-  return ({ focus: "专注", balanced: "平衡", detail: "详尽" })[value] || "平衡";
+  return densityModeMeta(value).label;
 }
 
 function applyDensityMode() {
   ensureSettingsContainer();
-  const density = state.settings.density || "balanced";
-  document.body.dataset.density = density;
-  document.querySelectorAll(DENSITY_BUTTON_SELECTOR).forEach((button) => {
-    const active = button.dataset.density === density;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-pressed", String(active));
-  });
-
-  document.querySelectorAll(".detail-section").forEach((section) => {
-    if (density === "detail") {
-      section.open = true;
-    } else if (density === "focus") {
-      section.open = false;
-    }
-  });
-
-  document.querySelectorAll(".plan-detail").forEach((section) => {
-    section.open = density === "detail";
-  });
-
-  document.querySelectorAll(".syllabus-group").forEach((section) => {
-    if (density === "detail") section.open = true;
-  });
+  const density = normalizeDensityMode(state.settings.density, "balanced");
+  state.settings.density = density;
+  applyDensityModeToDocument(density);
 }
 
 function initRoute() {
@@ -2573,7 +1927,7 @@ function setRoute(viewId) {
 }
 
 function isValidView(viewId) {
-  return Boolean(viewId && document.getElementById(viewId)?.classList.contains("view"));
+  return isKnownViewId(viewId) && document.getElementById(viewId)?.classList.contains("view");
 }
 
 function currentHashView() {
@@ -2757,7 +2111,7 @@ function validateScoreForm(score) {
   const invalidField = fields.find((field) => !field.valid);
   const hasScore = fields.some((field) => field.value > 0);
   fields.forEach((field) => {
-    field.input?.setAttribute("aria-invalid", String(Boolean(invalidField) ? !field.valid : !hasScore));
+    field.input?.setAttribute("aria-invalid", String(invalidField ? !field.valid : !hasScore));
   });
   if (!invalidField && hasScore) return true;
   (invalidField?.input || fields[0]?.input)?.focus();
@@ -2960,10 +2314,6 @@ function extractImportStatePayload(payload) {
   if (hasImportStateKeys(payload)) return payload;
   const nested = isPlainImportRecord(payload.payload) ? payload.payload : payload.state;
   return hasImportStateKeys(nested) ? nested : null;
-}
-
-function isImportPayloadCandidate(payload) {
-  return Boolean(extractImportStatePayload(payload));
 }
 
 function importConfirmationMessage(nextState) {
@@ -3267,6 +2617,7 @@ function bindAuth() {
   document.getElementById("signInBtn")?.addEventListener("click", () => authAction("login"));
   document.getElementById("signUpBtn")?.addEventListener("click", () => authAction("signup"));
   document.getElementById("signOutBtn")?.addEventListener("click", signOutAction);
+  document.getElementById("syncDialogBtn")?.addEventListener("click", manualSyncNow);
   document.getElementById("syncNowBtn")?.addEventListener("click", manualSyncNow);
   document.getElementById("downloadBackupBtn")?.addEventListener("click", () => downloadStateBackup("manual-backup"));
   document.getElementById("pushLocalBtn")?.addEventListener("click", pushLocalToCloud);
@@ -3275,13 +2626,14 @@ function bindAuth() {
   document.querySelectorAll("#authEmail, #authPassword").forEach((input) => {
     input.addEventListener("input", clearAuthValidation);
   });
+  bindPasswordVisibility(hydrateIcons);
   document.documentElement.dataset.authBound = "1";
 }
 
 function openAuthDialog(dialog = document.getElementById("authDialog")) {
   renderAuthPanel();
   dialog?.showModal();
-  document.getElementById("authEmail")?.focus();
+  focusAuthPanel(currentUser);
 }
 
 function closeAuthDialog(dialog = document.getElementById("authDialog")) {
@@ -3291,6 +2643,7 @@ function closeAuthDialog(dialog = document.getElementById("authDialog")) {
 
 async function signOutAction() {
   try {
+    authRequestInFlight = true;
     setAuthBusy(true);
     setAuthResult("pending", "正在退出", "正在断开云端会话，本机数据会保留。");
     await signOut();
@@ -3300,6 +2653,7 @@ async function signOutAction() {
   } catch (error) {
     setAuthResult("error", "退出失败", friendlyAuthError(error));
   } finally {
+    authRequestInFlight = false;
     setAuthBusy(false);
     renderAuthPanel();
   }
@@ -3325,8 +2679,30 @@ function clearLocalSessionState(lastError = "not-authenticated") {
 
 async function manualSyncNow() {
   try {
+    authRequestInFlight = true;
     setAuthBusy(true);
-    setAuthResult("pending", "正在同步", "正在检查本机与云端状态。");
+    setAuthResult("pending", "正在同步", "先拉取云端更新，再合并并写回本机数据。");
+    const pullResult = await pullCloudState();
+    if (!pullResult?.ok) {
+      if (pullResult?.reason === "cloud-paused") {
+        setAuthResult("pending", "云端同步暂停", "当前保留本机数据。若要恢复云端同步，请点击“导入云端”。");
+        return;
+      }
+      if (pullResult?.reason === "local-import-pending") {
+        setAuthResult("pending", "等待迁移选择", "检测到旧版本地数据。请先下载备份，再选择“导入云端”或“保留本机”。");
+        return;
+      }
+      if (pullResult?.reason === "not-authenticated") {
+        setAuthResult("error", "未登录", "请先登录账号，再同步到云端。");
+        return;
+      }
+      if (pullResult?.reason === "unconfigured") {
+        setAuthResult("error", "云端未配置", "请先配置 Supabase URL 和 publishable key。");
+        return;
+      }
+      setAuthResult("error", "拉取云端失败", friendlySyncError(pullResult?.error || state.sync?.lastError || "请检查网络后重试。"));
+      return;
+    }
     const result = await syncNow();
     renderAuthPanel();
     if (result?.ok) {
@@ -3362,6 +2738,7 @@ async function manualSyncNow() {
       setAuthResult("error", "同步未完成", friendlySyncError(result?.error || state.sync?.lastError || result?.reason || "未知错误"));
     }
   } finally {
+    authRequestInFlight = false;
     setAuthBusy(false);
     renderAuthPanel();
   }
@@ -3381,6 +2758,7 @@ async function authAction(mode) {
     return;
   }
   try {
+    authRequestInFlight = true;
     setAuthBusy(true);
     setAuthResult("pending", mode === "signup" ? "正在注册" : "正在登录", "正在连接 Supabase Auth，请稍等。");
     const result = mode === "signup" ? await signUpWithEmail(email, password) : await signInWithEmail(email, password);
@@ -3391,6 +2769,7 @@ async function authAction(mode) {
     }
     currentUser = result?.user || result || null;
     if (currentUser) {
+      bindCloudAuthListener();
       state.user = { id: currentUser.id, email: currentUser.email || email };
       const pullResult = await pullCloudState();
       if (!pullResult?.ok) {
@@ -3448,6 +2827,7 @@ async function authAction(mode) {
   } catch (error) {
     setAuthResult("error", `${mode === "signup" ? "注册" : "登录"}失败`, friendlyAuthError(error));
   } finally {
+    authRequestInFlight = false;
     setAuthBusy(false);
   }
 }
@@ -3486,13 +2866,13 @@ function clearAuthValidation() {
 
 function renderAuthPanel() {
   ensureSyncContainer();
-  const configured = supabaseConfigured ? "云端已配置" : "未配置 Supabase 环境变量";
-  const storageText = storageAvailable ? "本机缓存正常" : "本机缓存不可用";
-  const userText = currentUser
-    ? `当前账号：${currentUser.email || "已登录"}`
-    : "未登录时也可先在本机记录。";
-  setText("authHint", `${configured} · ${storageText}。${userText}`);
-  setText("authBuildText", `版本 ${APP_BUILD}`);
+  renderAuthPanelState({
+    user: currentUser,
+    configured: supabaseConfigured,
+    storageAvailable: browserStorage.available,
+    syncLabel: syncStatusLabel(),
+    build: APP_BUILD
+  });
   renderAuthResult();
   const migrationBox = document.getElementById("migrationBox");
   if (migrationBox) {
@@ -3503,6 +2883,20 @@ function renderAuthPanel() {
       : "检测到旧版本地数据时，先下载备份，再决定是否导入云端。");
   }
   renderSnapshotPanel();
+}
+
+function syncStatusLabel() {
+  const status = syncDisplayStatus();
+  return ({
+    local: supabaseConfigured ? "未登录" : "仅本机保存",
+    unconfigured: "未配置云端",
+    pending: "等待同步",
+    syncing: "同步中",
+    synced: "已同步",
+    error: "同步失败",
+    offline: "离线草稿",
+    paused: "云端暂停"
+  })[status] || "仅本机保存";
 }
 
 function renderSnapshotPanel() {
@@ -3641,12 +3035,7 @@ function isLikelyEmail(email) {
 }
 
 function setAuthBusy(isBusy) {
-  ["signInBtn", "signUpBtn", "signOutBtn", "syncNowBtn", "downloadBackupBtn", "pushLocalBtn", "keepLocalBtn"].forEach((id) => {
-    const button = document.getElementById(id);
-    if (button) button.disabled = isBusy;
-  });
-  document.getElementById("authForm")?.setAttribute("aria-busy", String(isBusy));
-  document.getElementById("migrationBox")?.setAttribute("aria-busy", String(isBusy));
+  setAuthPanelBusy(isBusy);
 }
 
 function setAuthResult(status, title, message) {
@@ -3668,6 +3057,12 @@ function renderAuthResult() {
 function friendlyAuthError(error) {
   const text = safeErrorMessage(error);
   const lower = text.toLowerCase();
+  if (lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("fetch failed")) {
+    return "无法连接 Supabase。请检查网络、Vercel 环境变量和 Supabase 项目 URL 后重试。";
+  }
+  if (lower.includes("auth session missing") || lower.includes("session missing")) {
+    return "登录会话已失效，请重新登录。当前本机数据仍会保留。";
+  }
   if (lower.includes("invalid login credentials")) return "邮箱或密码不正确。如果是刚注册，请确认是否已完成邮箱确认。";
   if (lower.includes("email not confirmed")) return "邮箱还没有确认。请打开确认邮件后再登录。";
   if (lower.includes("user already registered") || lower.includes("already registered")) return "这个邮箱已经注册过，请直接点击“登录并同步”。";
@@ -3875,24 +3270,70 @@ function setSelectValue(id, value) {
   if (element) element.value = value || "";
 }
 
-function renderAll() {
+// The production CSP (vercel.json) declares `style-src 'self'` with no
+// 'unsafe-inline'. Per CSP3, inline `style` attributes are governed by
+// `style-src-attr`, which falls back to `style-src` — so every `style="..."`
+// emitted inside a template string is refused by the browser. That silently
+// zeroed every progress bar, ring and chart in production while all gates
+// stayed green (they only ever exercised the Vite dev server, which sends no
+// CSP header).
+//
+// Dynamic values are therefore carried on `data-*` attributes in the markup and
+// applied here through CSSOM. CSP does not police CSSOM writes, so the strict
+// `style-src 'self'` policy can stay in place.
+const DEFERRED_STYLE_RULES = Object.freeze([
+  { attribute: "data-fill", apply: (element, value) => { element.style.width = `${value}%`; } },
+  { attribute: "data-height", apply: (element, value) => { element.style.height = `${value}%`; } },
+  { attribute: "data-var-value", apply: (element, value) => { element.style.setProperty("--value", value); } }
+]);
+
+function applyDeferredStyles(root = document) {
+  for (const rule of DEFERRED_STYLE_RULES) {
+    root.querySelectorAll(`[${rule.attribute}]`).forEach((element) => {
+      rule.apply(element, element.getAttribute(rule.attribute));
+    });
+  }
+}
+
+function getWorkspaceRenderer() {
+  if (workspaceRenderer) return workspaceRenderer;
+
+  workspaceRenderer = createViewRenderCoordinator({
+    renderShared: renderSharedWorkspace,
+    renderers: {
+      dashboard: renderDashboard,
+      today() {
+        loadEntryForm();
+        renderTasks();
+        renderRecentLogs();
+        renderFirstMonth();
+        renderReviewQueue();
+      },
+      week: renderWeekPlanner,
+      foundation: renderFoundation,
+      syllabus: renderSyllabus,
+      records: renderRecords,
+      review: renderReview,
+      scores: renderScores,
+      resources: renderResources,
+      settings: renderSettings
+    },
+    renderAfter() {
+      renderStorageStatus();
+      applyDensityMode();
+      applyDeferredStyles();
+    }
+  });
+  return workspaceRenderer;
+}
+
+function renderAll(viewId = activeViewId() || DEFAULT_VIEW_ID) {
   ensureRuntimeContainers();
-  loadEntryForm();
-  renderDashboard();
-  renderTasks();
-  renderWeekPlanner();
-  renderRecentLogs();
-  renderSyllabus();
-  renderFoundation();
-  renderRecords();
-  renderReview();
-  renderScores();
-  renderResources();
-  renderFirstMonth();
-  renderSettings();
-  renderReviewQueue();
-  renderStorageStatus();
-  applyDensityMode();
+  getWorkspaceRenderer().render(viewId);
+}
+
+function renderSharedWorkspace() {
+  renderSideNav(lastDaysEntries(7), getCurrentPhase());
 }
 
 function getEntryTotals(entry) {
@@ -3946,12 +3387,12 @@ function renderDashboard() {
   document.getElementById("coreRatioMetric").textContent = `${weekMinutes ? Math.round(coreMinutes / weekMinutes * 100) : 0}%`;
   document.getElementById("monthProgressMetric").textContent = `${Math.round(monthProgress)}%`;
   document.getElementById("monthProgressText").textContent = `本月目标 ${monthTarget}h`;
-  document.getElementById("totalProgressText").textContent = `目标 ${TARGET_TOTAL_HOURS}h，当前 ${(totalMinutes / 60 / TARGET_TOTAL_HOURS * 100).toFixed(1)}%`;
+  document.getElementById("totalProgressText").textContent = `参考容量 ${TARGET_TOTAL_HOURS}h，当前 ${(totalMinutes / 60 / TARGET_TOTAL_HOURS * 100).toFixed(1)}%；不作为硬性定额`;
   document.getElementById("weekTargetText").textContent = `本阶段周目标 ${phase.weeklyTarget}h`;
   document.getElementById("currentPhaseBadge").textContent = `阶段 ${phase.id} · ${phase.name}`;
   setText("examDateStatus", dateStatus);
   setText("officialBasisText", officialBasisText());
-  renderCurveMetric(phase);
+  renderCurveMetric();
 
   renderRisk(week, phase);
   renderQuotas(week, phase);
@@ -3972,9 +3413,8 @@ function renderDashboard() {
     monthTarget,
     monthMinutes
   });
-  renderSideNav(week, phase);
   renderFocusBoard(previewDailyTasks());
-  renderTargetLane({ phase, week, totalMinutes, monthTarget, monthMinutes });
+  renderTargetLane({ week, totalMinutes, monthTarget, monthMinutes });
   renderWorkflowRail();
   renderStorageStatus();
   renderStrategyBoard({ phase, week, weekMinutes, coreMinutes });
@@ -3999,17 +3439,20 @@ function renderRisk(week, phase) {
     return;
   }
 
+  // The label is the risk state, not its colour. Showing "绿色" made the metric
+  // read as a swatch name, and the project has retired the green palette
+  // entirely — so the word was also the only place green still reached the UI.
   let color = "green";
-  let label = "绿色";
+  let label = "节奏正常";
   let text = "节奏正常，继续按计划推进。";
 
   if (weekHours < phase.weeklyTarget * 0.7 || coreRatio < 0.55 || activeDays <= 3) {
     color = "red";
-    label = "红色";
+    label = "需降载";
     text = "下周减少新增内容，优先补数学和 408。";
   } else if (weekHours < phase.weeklyTarget * 0.9 || coreRatio < 0.65 || mistakeRatio < 0.5) {
     color = "amber";
-    label = "黄色";
+    label = "略偏紧";
     text = "略有偏航，优先补核心时长和错题回炉。";
   }
 
@@ -4062,7 +3505,7 @@ function renderStrategyBoard({ phase, week, weekMinutes, coreMinutes }) {
       <div class="review-window-mini ${item.key}">
         <span>${escapeHtml(item.label)}</span>
         <strong>${item.count}</strong>
-        <div><em style="width:${Math.max(3, item.count / max * 100)}%"></em></div>
+        <div><em data-fill="${Math.max(3, item.count / max * 100)}"></em></div>
       </div>
     `).join("");
   }
@@ -4095,7 +3538,7 @@ function planIntensityLabel(value) {
   return ({ bottomline: "底线", normal: "正常", strong: "加强" })[value] || "正常";
 }
 
-function renderCurveMetric(phase = getCurrentPhase()) {
+function renderCurveMetric() {
   const today = parseDate(planTodayISO());
   const days = [];
   for (let index = 13; index >= 0; index -= 1) {
@@ -4109,13 +3552,18 @@ function renderCurveMetric(phase = getCurrentPhase()) {
   const recentAvg = averageHours(days.slice(7));
   const activeDays = days.slice(7).filter((day) => day.hours > 0).length;
   const ratio = previousAvg ? recentAvg / previousAvg : 0;
+  // This metric is the ratio of the last 7 days to the 7 before it — a
+  // week-over-week change, not a curve. It used to be labelled 学习曲线 and
+  // rendered as a bare percentage, which read as if a chart were being
+  // summarised by a single number.
   let metric = `${recentAvg.toFixed(1)}h/天`;
-  let text = activeDays ? `${activeDays}/7 天有记录，继续看 14 天学习曲线。` : "记录 3 天后判断 14 天趋势";
+  let text = activeDays ? `${activeDays}/7 天有记录，满两周后给出环比。` : "记录 3 天后给出与前一周的对比";
   if (previousAvg) {
-    metric = `${Math.round(ratio * 100)}%`;
-    text = ratio >= 1.12 ? "近 7 天升高，确认不是单日硬冲。" :
-      ratio <= 0.78 ? "近 7 天回落，先恢复底线日。" :
-      "曲线基本平稳，保持当前负荷。";
+    const percent = Math.round(ratio * 100);
+    metric = `${percent}%`;
+    text = ratio >= 1.12 ? `近 7 天比前一周高 ${percent - 100}%，确认不是单日硬冲。` :
+      ratio <= 0.78 ? `近 7 天比前一周低 ${100 - percent}%，先恢复底线日。` :
+      "与前一周基本持平，保持当前负荷。";
   }
   setText("curveMetric", metric);
   setText("curveText", text);
@@ -4131,9 +3579,9 @@ function riskSnapshot(week, phase) {
   const activeDays = new Set(week.filter((entry) => entry.total > 0).map((entry) => entry.date)).size;
 
   if (activeDays === 0) return { label: "待记录", color: "muted" };
-  if (weekHours < phase.weeklyTarget * 0.7 || coreRatio < 0.55 || activeDays <= 3) return { label: "红色", color: "red" };
-  if (weekHours < phase.weeklyTarget * 0.9 || coreRatio < 0.65 || mistakeRatio < 0.5) return { label: "黄色", color: "amber" };
-  return { label: "绿色", color: "green" };
+  if (weekHours < phase.weeklyTarget * 0.7 || coreRatio < 0.55 || activeDays <= 3) return { label: "需降载", color: "red" };
+  if (weekHours < phase.weeklyTarget * 0.9 || coreRatio < 0.65 || mistakeRatio < 0.5) return { label: "略偏紧", color: "amber" };
+  return { label: "节奏正常", color: "green" };
 }
 
 function renderSideNav(week, phase) {
@@ -4166,7 +3614,7 @@ function examDateStatusText() {
 }
 
 function officialBasisText() {
-  return `资料核验 ${SOURCE_CHECK_DATE}：学习数据从 2026-06-15 从头开始；科目以北大软微 2026 已发布信息为备考基准；2027 年 12 月仍为推算窗口，官方日期待发布。`;
+  return `资料核验 ${SOURCE_CHECK_DATE}：学习计划从 ${PLAN_START_DATE} 开始；科目以北大软微已发布信息为备考基准，2027 年 12 月仍为推算窗口。`;
 }
 
 function renderWorkflowRail() {
@@ -4199,7 +3647,7 @@ function renderWorkflowRail() {
   `).join("");
 }
 
-function renderTargetLane({ phase, week, totalMinutes, monthTarget, monthMinutes }) {
+function renderTargetLane({ week, totalMinutes, monthTarget, monthMinutes }) {
   const totalHours = totalMinutes / 60;
     const next = nextMilestone();
     const [month, , cumulative, mathFocus, csFocus, otherFocus, scoreWatch] = next;
@@ -4241,7 +3689,7 @@ function renderTargetLane({ phase, week, totalMinutes, monthTarget, monthMinutes
       return `
         <div class="target-subject">
           <div><span>${subject}</span><strong>${currentText}</strong></div>
-          <div class="progress-track slim"><div class="progress-fill" style="width:${fill}%"></div></div>
+          <div class="progress-track slim"><div class="progress-fill" data-fill="${fill}"></div></div>
           <em>${note}</em>
         </div>
       `;
@@ -4308,7 +3756,7 @@ function renderStorageStatus() {
 }
 
 function renderStorageHealthText() {
-  setText("storageHealthText", storageAvailable ? "本机缓存正常" : "本机缓存不可用，建议检查浏览器隐私/存储权限");
+  setText("storageHealthText", browserStorage.available ? "本机缓存正常" : "本机缓存不可用，建议检查浏览器隐私/存储权限");
 }
 
 function addDays(date, days) {
@@ -4384,7 +3832,7 @@ function renderQuotas(week, phase) {
       <div class="quota">
         <span>${label} · ${targetLabel}</span>
         <strong>${hours.toFixed(1)}h</strong>
-        <div class="progress-track"><div class="progress-fill" style="width:${percent}%"></div></div>
+        <div class="progress-track"><div class="progress-fill" data-fill="${percent}"></div></div>
       </div>
     `;
   }).join("");
@@ -4401,7 +3849,7 @@ function renderRingGrid({ phase, weekMinutes, coreMinutes, totalMinutes, monthPr
   const corePercent = weekMinutes ? coreMinutes / weekMinutes * 100 : 0;
   const totalPercent = totalMinutes / 60 / TARGET_TOTAL_HOURS * 100;
   const rings = [
-    ["总量", totalPercent, `${(totalMinutes / 60).toFixed(0)}h`, `${TARGET_TOTAL_HOURS}h`],
+    ["参考容量", totalPercent, `${(totalMinutes / 60).toFixed(0)}h`, `${TARGET_TOTAL_HOURS}h`],
     ["本月", monthProgress, `${Math.round(monthProgress)}%`, "月目标"],
     ["本周", weekPercent, `${(weekMinutes / 60).toFixed(1)}h`, `${phase.weeklyTarget}h`],
     ["核心", corePercent, `${Math.round(corePercent)}%`, "65%+"]
@@ -4412,7 +3860,7 @@ function renderRingGrid({ phase, weekMinutes, coreMinutes, totalMinutes, monthPr
     const clamped = Math.max(0, Math.min(100, percent));
     return `
       <div class="ring-card">
-        <div class="ring" style="--value:${clamped}">
+        <div class="ring" data-var-value="${clamped}">
           <span>${value}</span>
         </div>
         <strong>${label}</strong>
@@ -4441,7 +3889,7 @@ function renderSubjectChart(week, phase) {
     return `
       <div class="subject-bar">
         <div class="subject-bar-track">
-          <div class="subject-bar-fill" style="height:${visualFill}%; --mobile-width:${visualFill}%; --bar:${subjectPalette[key] || "#13785f"}"></div>
+          <div class="subject-bar-fill" data-height="${visualFill}"></div>
         </div>
         <strong>${hours.toFixed(1)}</strong>
         <span>${label}</span>
@@ -4469,7 +3917,7 @@ function renderTrendChart(phase = getCurrentPhase()) {
     const height = Math.max(4, day.hours / maxHours * 100);
     return `
       <div class="trend-day" title="${day.iso} · ${day.hours.toFixed(1)}h">
-        <div class="trend-stem"><span style="height:${height}%"></span></div>
+        <div class="trend-stem"><span data-height="${height}"></span></div>
         <em>${day.date.getDate()}</em>
       </div>
     `;
@@ -4567,6 +4015,7 @@ function renderTasks(force = false, date = planTodayISO()) {
   document.getElementById("todayTasks").innerHTML = fullHtml;
   document.getElementById("todayTasksPreview").innerHTML = compactHtml;
   document.getElementById("dailyPlan").innerHTML = renderPlanCards(tasks);
+  renderDailyOperatingConsole(tasks, date);
   renderDailyTaskProgress(tasks);
   renderScienceProtocol(tasks, date);
   renderEnglishDrip(tasks, date);
@@ -4618,6 +4067,9 @@ function renderTasks(force = false, date = planTodayISO()) {
       }
     });
   });
+  // `renderTasks` is also reached from the form submit handler in `bindForms`,
+  // which bypasses the render coordinator's `renderAfter` hook.
+  applyDeferredStyles();
   return result;
 }
 
@@ -4684,6 +4136,28 @@ function subjectToEntryKey(subject) {
   }[subject] || null;
 }
 
+/**
+ * Task and review subjects are stored as Chinese labels (数学 / 408 / 英语 …),
+ * not as the internal keys. `subjectToEntryKey` only understands labels, so a
+ * payload carrying `subject: "math"` would both render the raw key in the UI and
+ * silently fail to map a completed task onto a record field.
+ *
+ * Cloud rows and pre-rename local payloads can carry either form, so normalise
+ * at the sanitising boundary. Values that are neither a known label nor a known
+ * key pass through untouched.
+ *
+ * The label set is declared inside the function on purpose. `loadState()` runs
+ * during module evaluation, well before module-level `const`s further down the
+ * file are initialised — referencing one from here throws a temporal-dead-zone
+ * ReferenceError, which `migrateState` would swallow and turn into a wiped
+ * state.
+ */
+function normalizeSubjectLabel(value, fallback = "复盘") {
+  const labels = ["数学", "408", "英语", "政治", "复盘", "项目", "补弱"];
+  const text = sanitizeText(value, fallback, 80);
+  return labels.includes(text) ? text : subjectLabel(subjectKey(text));
+}
+
 function nextSevenDates(startDate = planTodayISO()) {
   const start = parseDate(startDate);
   return Array.from({ length: 7 }, (_, index) => {
@@ -4698,6 +4172,77 @@ function generateWeekPlan() {
   return saveState();
 }
 
+function renderWeekPlanContext() {
+  const today = planTodayISO();
+  const phase = getCurrentPhase(today);
+  const playbook = phasePlanById(phase.id);
+  const todayTasks = normalizeTaskList(planTasksForDate(today), today).filter((task) => task.status !== "shifted");
+  const firstTask = todayTasks.find((task) => !isTaskDone(task, state.tasks)) || todayTasks[0];
+  const role = weeklyCycleForDate(today);
+  const taskPlan = firstTask ? phaseSubjectPlan(phase.id, firstTask.subject) : null;
+  const focus = document.getElementById("weekFocusSlice");
+  if (focus) {
+    focus.innerHTML = firstTask ? `
+      <div class="week-focus-date">
+        <span>${escapeHtml(role.label)} · ${escapeHtml(role.role)}</span>
+        <strong>${escapeHtml(firstTask.subject)} · ${Number(firstTask.minutes) || 0}m</strong>
+      </div>
+      <div class="week-focus-task">
+        <p>${escapeHtml(firstTask.text)}</p>
+        <em>${escapeHtml(taskPlan?.output || taskBlueprint(firstTask).output)}</em>
+      </div>
+      <div class="week-focus-pass">
+        <span>做完标准</span>
+        <p>${escapeHtml(taskPlan?.pass || subjectAcceptanceRules[firstTask.subject]?.standard || subjectAcceptanceRules["复盘"].standard)}</p>
+      </div>
+    ` : `<div class="empty-state">本周还没有任务，先生成 7 天计划。</div>`;
+  }
+
+  const cadence = document.getElementById("weekCadenceStrip");
+  if (cadence) {
+    cadence.innerHTML = `
+      <div class="week-cycle-head" aria-hidden="true">
+        <span>日程</span><span>双核心</span><span>维护与复盘</span><span>缓冲与停手</span>
+      </div>
+      ${weeklyStudyCycle.map((item) => `
+        <article class="cadence-day ${item.day === role.day ? "active" : ""}">
+          <div class="cadence-identity"><span>${escapeHtml(item.label)}</span><strong>${escapeHtml(item.role)}</strong><em>${escapeHtml(item.load)}</em></div>
+          <p data-label="双核心">${escapeHtml(item.core)}</p>
+          <p data-label="维护与复盘">${escapeHtml(item.support)} ${escapeHtml(item.review)}</p>
+          <p data-label="缓冲与停手"><strong>${escapeHtml(item.buffer)}</strong>${escapeHtml(item.stopRule)}</p>
+        </article>
+      `).join("")}
+    `;
+  }
+
+  const diagnostic = document.getElementById("weekDiagnosticHead");
+  if (diagnostic) {
+    diagnostic.innerHTML = `
+      <div><span>阶段 ${escapeHtml(playbook.id)}</span><strong>${escapeHtml(playbook.name)}</strong><p>${escapeHtml(playbook.mission)}</p></div>
+      <div><span>周目标</span><strong>${escapeHtml(playbook.weeklyHours)}</strong><p>${escapeHtml(playbook.weeklyGoal)}</p></div>
+      <div><span>退出门</span><strong>${playbook.exitGate.length} 项</strong><p>${escapeHtml(playbook.exitGate[0])}</p></div>
+    `;
+  }
+
+  const audit = document.getElementById("weeklyAuditMatrix");
+  if (audit) {
+    const chainValues = [
+      `阶段 ${playbook.id} · ${playbook.name}`,
+      playbook.weeklyGoal,
+      `${role.role}：${role.core} ${role.support}`,
+      firstTask ? (taskPlan?.resource || taskBlueprint(firstTask).resource) : "生成周计划后匹配",
+      firstTask ? `${firstTask.minutes} 分钟` : playbook.weeklyHours,
+      firstTask ? (taskPlan?.output || taskBlueprint(firstTask).output) : role.output,
+      firstTask ? (taskPlan?.pass || "按科目验收") : playbook.exitGate[0],
+      firstTask ? (taskPlan?.review || "按表现自适应复盘") : "按表现自适应复盘",
+      playbook.adjustment[0]
+    ];
+    audit.innerHTML = planChain.map((label, index) => `
+      <article><span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(label)}</strong><p>${escapeHtml(chainValues[index])}</p></article>
+    `).join("");
+  }
+}
+
 function renderWeekPlanner() {
   const container = document.getElementById("weekPlanner");
   if (!container) return;
@@ -4706,6 +4251,7 @@ function renderWeekPlanner() {
   dates.forEach((date) => {
     if (!Object.prototype.hasOwnProperty.call(weekPlans, date)) buildDailyTasks(false, date);
   });
+  renderWeekPlanContext();
   container.innerHTML = dates.map((date) => {
     const tasks = normalizeTaskList(planTasksForDate(date), date);
     const visibleTasks = tasks.filter((task) => task.status !== "shifted");
@@ -4716,7 +4262,11 @@ function renderWeekPlanner() {
     const hasEnglish = visibleTasks.some((task) => task.subject === "英语");
     const dueReviewCount = dueReviewItems(date).length;
     const isToday = date === planTodayISO();
+    const firstOpenTaskIndex = visibleTasks.findIndex((task) => !isTaskDone(task, state.tasks));
+    const focusTaskIndex = firstOpenTaskIndex >= 0 ? firstOpenTaskIndex : 0;
     const shortDate = date.slice(5).replace("-", "/");
+    const dayRole = weeklyCycleForDate(date);
+    const phase = getCurrentPhase(date);
     return `
       <article class="week-day-card ${isToday ? "today" : ""}">
         <div class="week-day-head">
@@ -4730,6 +4280,7 @@ function renderWeekPlanner() {
         <div class="week-day-summary">
           <span><strong>${done}/${visibleTasks.length}</strong> 完成</span>
           <span><strong>${total}</strong> 分钟</span>
+          <span><strong>${escapeHtml(dayRole.role)}</strong> ${escapeHtml(dayRole.load)}</span>
         </div>
         <div class="week-subject-row" aria-label="当日科目">
           ${subjects.length ? subjects.map((subject) => `<span>${escapeHtml(subject)}</span>`).join("") : "<span>休整</span>"}
@@ -4739,27 +4290,39 @@ function renderWeekPlanner() {
           <span class="${dueReviewCount ? "warn" : "ok"}">复盘 ${dueReviewCount}</span>
         </div>
         <div class="week-day-progress">
-          <div style="width:${percent}%"></div>
+          <div data-fill="${percent}"></div>
+        </div>
+        <div class="week-day-protocol density-detail-only">
+          <p><strong>复盘</strong>${escapeHtml(dayRole.review)}</p>
+          <p><strong>缓冲</strong>${escapeHtml(dayRole.buffer)}</p>
+          <p><strong>停手</strong>${escapeHtml(dayRole.stopRule)}</p>
         </div>
         <div class="week-task-list">
-          ${visibleTasks.map((task, index) => `
-            <div class="week-task ${isTaskDone(task, state.tasks) ? "done" : ""} ${task.source === "carryover" ? "carryover" : ""}">
-              <span class="week-task-index">${index + 1}</span>
-              <div class="week-task-body">
-                <div class="week-task-title">
-                  <strong>${escapeHtml(task.subject)}</strong>
-                  <em>${Number(task.minutes) || 0}m</em>
+          ${visibleTasks.map((task, index) => {
+            const prescription = phaseSubjectPlan(phase.id, task.subject);
+            const blueprint = taskBlueprint(task);
+            return `
+              <div class="week-task ${index === focusTaskIndex ? "next-action" : ""} ${isTaskDone(task, state.tasks) ? "done" : ""} ${task.source === "carryover" ? "carryover" : ""}">
+                <span class="week-task-index">${index + 1}</span>
+                <div class="week-task-body">
+                  <div class="week-task-title">
+                    <strong>${escapeHtml(task.subject)}</strong>
+                    <em>${Number(task.minutes) || 0}m</em>
+                  </div>
+                  <p>${escapeHtml(task.text)}</p>
+                  <span>${task.source === "carryover" ? `从 ${escapeHtml(task.carriedFrom || "前序任务")} 顺延` : task.locked ? "已锁定" : "可调整"}</span>
+                  <div class="week-task-detail density-detail-only">
+                    <dl><div><dt>资料</dt><dd>${escapeHtml(prescription?.resource || blueprint.resource)}</dd></div><div><dt>交付</dt><dd>${escapeHtml(prescription?.output || blueprint.output)}</dd></div><div><dt>验收</dt><dd>${escapeHtml(prescription?.pass || subjectAcceptanceRules[task.subject]?.standard || subjectAcceptanceRules["复盘"].standard)}</dd></div></dl>
+                  </div>
                 </div>
-                <p>${escapeHtml(task.text)}</p>
-                <span>${task.source === "carryover" ? `从 ${escapeHtml(task.carriedFrom || "前序任务")} 顺延` : task.locked ? "已锁定" : "可调整"}</span>
+                <div class="week-task-actions">
+                  <button type="button" data-lock-task="${escapeAttr(task.id)}">${task.locked ? "解锁" : "锁定"}</button>
+                  <button type="button" data-edit-task="${escapeAttr(task.id)}">编辑</button>
+                  <button type="button" data-shift-task="${escapeAttr(task.id)}">顺延</button>
+                </div>
               </div>
-              <div class="week-task-actions">
-                <button type="button" data-lock-task="${escapeAttr(task.id)}">${task.locked ? "解锁" : "锁定"}</button>
-                <button type="button" data-edit-task="${escapeAttr(task.id)}">编辑</button>
-                <button type="button" data-shift-task="${escapeAttr(task.id)}">顺延</button>
-              </div>
-            </div>
-          `).join("")}
+            `;
+          }).join("")}
         </div>
       </article>
     `;
@@ -4904,7 +4467,7 @@ function renderFocusBoard(tasks) {
   setText("focusPrimaryTask", primary ? primary.text : "进入今日页生成任务。");
   setText("focusPrimaryTime", primary ? `${primary.minutes}m` : "--m");
   setText("focusReviewCount", `${dueCount} 项`);
-  setText("focusPace", `${weekHours.toFixed(1)} / ${phase.weeklyTarget}h`);
+  setText("focusPace", `${weekHours.toFixed(1)}h / ${phase.weeklyTarget}h`);
     setText("focusRecordHint", dueCount ? "先处理到期复盘。" : "完成后保存记录。");
   setStyleWidth("focusWeekFill", `${weekPercent}%`);
 
@@ -5198,7 +4761,7 @@ function dailyBudgetMinutes(date = planTodayISO()) {
   const settingCap = isWeekend ? state.settings.weekendMinutes : state.settings.weekdayMinutes;
   const rampCap = isWeekend ? ramp.weekend : ramp.weekday;
   const current = parseDate(date);
-  const earlyRampEnd = parseDate("2026-08-31");
+  const earlyRampEnd = parseDate("2026-09-27");
   const userCap = current <= earlyRampEnd ? Math.min(settingCap || rampCap, rampCap) : Math.max(settingCap, rampCap);
   const floor = bottomLineMinutes(phase);
   const normalBudget = phase.id === "A" ? Math.min(userCap, Math.max(Math.min(floor, userCap), rampCap)) : Math.max(floor, userCap);
@@ -5288,10 +4851,22 @@ function renderPlanCards(tasks) {
   return tasks.map((task, index) => {
     const blueprint = taskBlueprint(task);
     const method = subjectMethods[task.subject] || subjectMethods["复盘"];
+    const phase = getCurrentPhase(task.date || planTodayISO());
+    const prescription = phaseSubjectPlan(phase.id, task.subject);
+    const protocol = dailyStudyProtocols[task.subject] || dailyStudyProtocols["复盘"];
     const checked = isTaskDone(task, state.tasks) ? "checked" : "";
-    const openDetail = state.settings.density === "detail" ? "open" : "";
     const featured = index === 0 ? "primary-task" : "";
     const carryover = task.source === "carryover" ? "carryover-task" : "";
+    const acceptance = subjectAcceptanceRules[task.subject] || subjectAcceptanceRules["复盘"];
+    const reviewWindow = task.reviewItemId
+      ? "本项为到期复盘；闭卷完成后记录结果，失败则次日短复盘。"
+      : prescription?.review || "完成后进入默认复盘检查点；通过后拉长，失败时缩短到 D+1。";
+    const sourceText = prescription?.resource || blueprint.resource || "使用当前科目的唯一主线资料；只有主线完成 70% 后才评估补充资料。";
+    const prerequisite = blueprint.prerequisite || "先确认前一考点能闭卷说出定义与第一步；不能提取时先补前置。";
+    const basis = blueprint.basis || "主动回忆、分散复盘和可验收产出；不把观看或划线当作完成。";
+    const outputText = prescription?.output || blueprint.output.replace(/^交付：/, "");
+    const acceptanceText = prescription?.pass || `${acceptance.standard} ${acceptance.high}`;
+    const dailyAction = prescription?.dailyTask || method.practice;
     return `
       <article class="plan-card ${checked ? "done" : ""} ${featured} ${carryover}">
         <div class="plan-index">${index + 1}</div>
@@ -5308,19 +4883,76 @@ function renderPlanCards(tasks) {
             <em>${escapeHtml(blueprint.metric)}</em>
           </div>
           <p>${escapeHtml(task.text)}</p>
-          <div class="plan-output">${escapeHtml(blueprint.output)}</div>
-          <details class="plan-detail" ${openDetail}>
-            <summary>展开学法和验收</summary>
+          <div class="plan-output density-balanced-only"><strong>交付</strong>${escapeHtml(outputText)}</div>
+          <details class="plan-detail density-balanced-only">
+            <summary>执行方法与验收</summary>
             <ul>
-              <li>${escapeHtml(method.learn)}</li>
-              <li>${escapeHtml(method.practice)}</li>
-              <li>${escapeHtml(method.check)}</li>
+              <li>${escapeHtml(dailyAction)}</li>
+              <li>${escapeHtml(protocol.volume)}</li>
+              <li>${escapeHtml(acceptanceText)}</li>
             </ul>
           </details>
+          <section class="plan-diagnostic density-detail-only" aria-label="${escapeAttr(task.subject)}任务详尽说明">
+            <div class="plan-diagnostic-grid">
+              <article><span>阶段目标</span><p>阶段 ${escapeHtml(phase.id)} · ${escapeHtml(phasePlanById(phase.id).mission)}</p></article>
+              <article><span>前置</span><p>${escapeHtml(prerequisite)}</p></article>
+              <article class="wide"><span>执行步骤</span><p>${escapeHtml(dailyAction)}</p></article>
+              <article class="wide"><span>学习块</span><ol>${protocol.blocks.map(([label, ratio, action]) => `<li><strong>${escapeHtml(label)} ${escapeHtml(ratio)}</strong>${escapeHtml(action)}</li>`).join("")}</ol></article>
+              <article><span>资料章节</span><p>${escapeHtml(prescription?.scope || task.text)}</p></article>
+              <article><span>交付物</span><p>${escapeHtml(outputText)}</p></article>
+              <article><span>验收线</span><p>${escapeHtml(acceptanceText)}</p></article>
+              <article><span>时间预算</span><p>${Number(task.minutes) || 0} 分钟；到点先验收，未完成只顺延核心步骤。</p></article>
+              <article><span>复盘窗口</span><p>${escapeHtml(reviewWindow)}</p></article>
+              <article><span>资料使用规则</span><p>${escapeHtml(sourceText)}</p></article>
+              <article><span>方法依据</span><p>${escapeHtml(basis)}</p></article>
+            </div>
+          </section>
         </div>
       </article>
     `;
   }).join("");
+}
+
+function renderDailyOperatingConsole(tasks, date = planTodayISO()) {
+  const container = document.getElementById("dailyOperatingConsole");
+  if (!container) return;
+  const controls = normalizePlanControls(state.settings.planControls);
+  const load = dailyLoadTemplates.find((item) => item.key === controls.planIntensity) || dailyLoadTemplates[1];
+  const role = weeklyCycleForDate(date);
+  const openTask = tasks.find((task) => !isTaskDone(task, state.tasks)) || tasks[0];
+  const total = tasks.reduce((sum, task) => sum + (Number(task.minutes) || 0), 0);
+  const startup = startup28DayPlan.find((item) => item.date === date);
+  const startupLabel = startup ? `启动第 ${startup.day} 天 · ${startup.load}` : `${role.label} · ${role.role}`;
+  const startupTasks = startup?.blocks.map(([subject, minutes, action, output]) => `
+    <article><div><strong>${escapeHtml(subject)}</strong><span>${Number(minutes) || 0}m</span></div><p>${escapeHtml(action)}</p><em>${escapeHtml(output)}</em></article>
+  `).join("") || "";
+  container.innerHTML = `
+    <section class="operating-focus density-focus-only" aria-label="专注模式今日动作">
+      <div><span>${escapeHtml(startupLabel)}</span><strong>${escapeHtml(openTask?.subject || "先完成启动校准")} · ${Number(openTask?.minutes) || 0}m</strong></div>
+      <p>${escapeHtml(openTask?.text || dailyOperatingSchedule[0].action)}</p>
+      <em><strong>停手线</strong>${escapeHtml(role.stopRule)}</em>
+    </section>
+    <section class="operating-balanced density-balanced-only" aria-label="平衡模式今日执行流程">
+      <header><div><span>${escapeHtml(startupLabel)}</span><strong>${escapeHtml(load.label)} · 计划 ${total}m</strong></div><p>${escapeHtml(load.buffer)}</p></header>
+      <div class="operating-rail">
+        ${dailyOperatingSchedule.map((step, index) => `
+          <article><span>${String(index + 1).padStart(2, "0")} · ${escapeHtml(step.window)}</span><strong>${escapeHtml(step.label)}</strong><p>${escapeHtml(step.action)}</p></article>
+        `).join("")}
+      </div>
+      <footer><strong>今日停手线</strong><span>${escapeHtml(role.stopRule)}</span></footer>
+    </section>
+    <section class="operating-detail density-detail-only" aria-label="详尽模式今日执行协议">
+      <header><div><span>${escapeHtml(startupLabel)}</span><strong>今日执行协议</strong><p>${escapeHtml(load.allocation)}</p></div><div><span>启用条件</span><p>${escapeHtml(load.trigger)}</p></div></header>
+      ${startup ? `<div class="startup-today-strip"><strong>今天逐项完成</strong><div>${startupTasks}</div><p><span>复盘</span>${escapeHtml(startup.review)}</p><p><span>缓冲 ${startup.bufferMinutes}m</span>${escapeHtml(startup.stopRule)}</p></div>` : ""}
+      <div class="operating-table">
+        <div class="operating-table-head"><span>时段</span><span>动作</span><span>必须留下</span></div>
+        ${dailyOperatingSchedule.map((step) => `
+          <article><div><span>${escapeHtml(step.window)}</span><strong>${escapeHtml(step.label)}</strong></div><p>${escapeHtml(step.action)}</p><em>${escapeHtml(step.output)}</em></article>
+        `).join("")}
+      </div>
+      <footer><p><strong>缓冲</strong>${escapeHtml(role.buffer)}</p><p><strong>停手</strong>${escapeHtml(role.stopRule)}</p></footer>
+    </section>
+  `;
 }
 
 function renderDailyTaskProgress(tasks) {
@@ -5334,7 +4966,7 @@ function renderDailyTaskProgress(tasks) {
       <strong>今日完成 ${done}/${tasks.length}</strong>
       <span>${minutes} 分钟已完成 · ${percent}%</span>
     </div>
-    <div class="progress-track slim"><div class="progress-fill" style="width:${percent}%"></div></div>
+    <div class="progress-track slim"><div class="progress-fill" data-fill="${percent}"></div></div>
   `;
 }
 
@@ -5348,11 +4980,14 @@ function renderScienceProtocol(tasks, date = planTodayISO()) {
     .reduce((sum, task) => sum + (task.minutes || 0), 0);
   const coreRatio = total ? Math.round(coreMinutes / total * 100) : 0;
   const hasEnglish = tasks.some((task) => task.subject === "英语");
+  const dayRole = weeklyCycleForDate(date);
+  const spacingRule = learningScienceRules.find((item) => item.key === "spacing");
   const rows = [
     ["主动回忆", tasks.some((task) => ["数学", "408", "复盘"].includes(task.subject)) ? "已安排" : "需补", "题量、闭卷重做、过程图优先。"],
-    ["间隔复盘", reviewDue ? `${reviewDue} 项到期` : "队列健康", reviewDue ? "今日任务只抽取最高优先级，其余在复盘页处理。" : "完成任务后自动生成 D+1 到 D+30。"],
+    ["自适应复盘", reviewDue ? `${reviewDue} 项到期` : "队列健康", reviewDue ? "只抽取最高优先级；失败缩短间隔并减少新内容。" : spacingRule?.guardrail || "默认检查点会按表现调整。"],
     ["英语不断档", hasEnglish ? "已保留" : "需手动补", "最低 20 分钟：新词、复习词、错词和 1 句定位。"],
-    ["核心占比", `${coreRatio}%`, `目标 ${state.settings.coreRatio || 65}% 左右，低负荷日先守数学和 408。`]
+    ["核心占比", `${coreRatio}%`, `目标 ${state.settings.coreRatio || 65}% 左右，低负荷日先守数学和 408。`],
+    ["今日节律", dayRole.role, `${dayRole.action} ${dayRole.output}`]
   ];
   container.innerHTML = `
     <div class="science-head">
@@ -5469,10 +5104,12 @@ function manualTopic(subjectTitle, group, topic) {
 function topicTask(date, phase, subject, topic, minutes, fallback) {
   const detail = topic ? `${topic.group}：${topic.topic}` : fallback;
   const stateLabel = topic && topic.state === 1 ? "复盘" : "推进";
+  const prescription = phaseSubjectPlan(phase.id, subject);
+  const action = prescription?.dailyTask ? `；${prescription.dailyTask}` : "";
   return {
     id: `${date}-${phase.id}-${subject}-${topic ? topic.id : "fallback"}`,
     subject,
-    text: `${stateLabel}${detail}`,
+    text: `${stateLabel}${detail}${action}`,
     minutes
   };
 }
@@ -5783,7 +5420,97 @@ function renderAcceptance(tasks) {
   `).join("");
 }
 
+function renderCurrentPhasePlaybook() {
+  const phase = getCurrentPhase();
+  const playbook = phasePlanById(phase.id);
+  const today = planTodayISO();
+  const tasks = normalizeTaskList(planTasksForDate(today), today).filter((task) => task.status !== "shifted");
+  const currentTask = tasks.find((task) => !isTaskDone(task, state.tasks)) || tasks[0];
+  const prescription = currentTask ? phaseSubjectPlan(phase.id, currentTask.subject) : null;
+  const role = weeklyCycleForDate(today);
+
+  const focus = document.getElementById("phaseFocusLayout");
+  if (focus) {
+    focus.innerHTML = `
+      <div class="phase-focus-head"><span>阶段 ${escapeHtml(playbook.id)} · ${escapeHtml(playbook.range)}</span><strong>${escapeHtml(playbook.name)}</strong></div>
+      <p>${escapeHtml(playbook.mission)}</p>
+      <div class="phase-next-action">
+        <span>${escapeHtml(role.label)} · ${escapeHtml(role.role)}</span>
+        <strong>${escapeHtml(currentTask?.text || role.action)}</strong>
+        <em>${escapeHtml(prescription?.pass || playbook.exitGate[0])}</em>
+      </div>
+    `;
+  }
+
+  const operations = document.getElementById("phaseOperationsLayout");
+  if (operations) {
+    operations.innerHTML = `
+      <header class="phase-operations-head">
+        <div><span>当前阶段 ${escapeHtml(playbook.id)} · ${escapeHtml(playbook.duration)}</span><h3>${escapeHtml(playbook.name)}</h3><p>${escapeHtml(playbook.mission)}</p></div>
+        <div><span>本周预算</span><strong>${escapeHtml(playbook.weeklyHours)}</strong><em>${escapeHtml(playbook.weeklyGoal)}</em></div>
+      </header>
+      <div class="phase-subject-board">
+        ${playbook.subjects.map((item) => `
+          <article><span>${escapeHtml(item.hours)}</span><strong>${escapeHtml(item.subject)}</strong><p>${escapeHtml(item.scope)}</p><em>${escapeHtml(item.output)}</em></article>
+        `).join("")}
+      </div>
+      <div class="phase-gate-row"><span>进入条件</span><p>${escapeHtml(playbook.entryGate)}</p><span>本阶段过关</span><p>${escapeHtml(playbook.exitGate.join("；"))}</p></div>
+    `;
+  }
+
+  const diagnostic = document.getElementById("phaseDiagnosticLayout");
+  if (diagnostic) {
+    diagnostic.innerHTML = `
+      <header class="phase-diagnostic-head"><div><span>PHASE ${escapeHtml(playbook.id)}</span><h3>${escapeHtml(playbook.name)}</h3><p>${escapeHtml(playbook.range)} · ${escapeHtml(playbook.duration)} · ${escapeHtml(playbook.weeklyHours)}</p></div><strong>${playbook.exitGate.length} 个退出门</strong></header>
+      <div class="phase-diagnostic-grid">
+        <article><span>任务</span><p>${escapeHtml(playbook.mission)}</p></article>
+        <article><span>入口</span><p>${escapeHtml(playbook.entryGate)}</p></article>
+        <article><span>周配额</span><p>${escapeHtml(playbook.weeklyGoal)}</p></article>
+        <article><span>今日角色</span><p>${escapeHtml(role.action)} ${escapeHtml(role.output)}</p></article>
+        <article class="wide"><span>退出门</span><ol>${playbook.exitGate.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol></article>
+        <article class="wide"><span>触发式调参</span><ol>${playbook.adjustment.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol></article>
+      </div>
+    `;
+  }
+}
+
+function renderPhaseDossier() {
+  const container = document.getElementById("phaseDossier");
+  if (!container) return;
+  const activePhase = getCurrentPhase();
+  container.innerHTML = detailedPhasePlans.map((phase) => `
+    <details class="phase-file ${phase.id === activePhase.id ? "active" : ""}" ${phase.id === activePhase.id ? "open" : ""}>
+      <summary>
+        <span>阶段 ${escapeHtml(phase.id)}</span>
+        <strong>${escapeHtml(phase.name)}</strong>
+        <em>${escapeHtml(phase.range)} · ${escapeHtml(phase.weeklyHours)}</em>
+      </summary>
+      <div class="phase-file-body">
+        <div class="phase-file-brief"><article><span>入口</span><p>${escapeHtml(phase.entryGate)}</p></article><article><span>任务</span><p>${escapeHtml(phase.mission)}</p></article><article><span>周目标</span><p>${escapeHtml(phase.weeklyGoal)}</p></article></div>
+        <div class="phase-subject-table">
+          ${phase.subjects.map((item) => `
+            <article>
+              <header><strong>${escapeHtml(item.subject)}</strong><span>${escapeHtml(item.hours)}</span></header>
+              <dl>
+                <div><dt>资料</dt><dd>${escapeHtml(item.resource)}</dd></div>
+                <div><dt>章节</dt><dd>${escapeHtml(item.scope)}</dd></div>
+                <div><dt>每日</dt><dd>${escapeHtml(item.dailyTask)}</dd></div>
+                <div><dt>交付</dt><dd>${escapeHtml(item.output)}</dd></div>
+                <div><dt>验收</dt><dd>${escapeHtml(item.pass)}</dd></div>
+                <div><dt>复盘</dt><dd>${escapeHtml(item.review)}</dd></div>
+              </dl>
+            </article>
+          `).join("")}
+        </div>
+        <div class="phase-file-footer"><div><span>退出门</span><ul>${phase.exitGate.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div><div><span>调参</span><ul>${phase.adjustment.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div></div>
+      </div>
+    </details>
+  `).join("");
+}
+
 function renderFoundation() {
+  renderCurrentPhasePlaybook();
+  renderPhaseDossier();
   renderLearningPath();
   renderWeekPath();
   document.getElementById("foundationGrid").innerHTML = foundationPlan.map((stage, index) => `
@@ -5804,15 +5531,15 @@ function renderFoundation() {
 }
 
 function renderFirstMonth() {
-  document.getElementById("firstMonthGrid").innerHTML = firstMonthActions.map((item) => `
-    <article class="first-month-card">
-      <div class="first-month-head">
-        <strong>${item.week}</strong>
-        <span>${item.pass}</span>
-      </div>
-      <ul>${item.tasks.map((task) => `<li>${task}</li>`).join("")}</ul>
-    </article>
-  `).join("");
+  const container = document.getElementById("firstMonthGrid");
+  if (!container) return;
+  container.innerHTML = renderStartupCalendarTemplate(startup28DayPlan, selectedStartupWeek);
+  container.querySelectorAll("[data-startup-week]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedStartupWeek = sanitizeInteger(button.dataset.startupWeek, 0, 3);
+      renderFirstMonth();
+    });
+  });
 }
 
 function renderLearningPath() {
@@ -5932,21 +5659,21 @@ function switchView(viewId, options = {}) {
   });
   const nav = [...document.querySelectorAll(".nav-item[data-view]")].find((item) => item.dataset.view === viewId);
   document.getElementById("viewTitle").textContent = nav ? nav.dataset.title || nav.textContent.trim() : "";
+  if (workspaceRenderer) renderAll(viewId);
   if (options.moveFocus) {
     document.getElementById("main-content")?.focus({ preventScroll: true });
-  }
-  if (nav && window.matchMedia("(max-width: 760px)").matches) {
-    window.requestAnimationFrame(() => {
-      nav.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-    });
   }
   scrollToTop();
 }
 
 function scrollToTop() {
-  window.requestAnimationFrame(() => window.scrollTo(0, 0));
-  window.setTimeout(() => window.scrollTo(0, 0), 60);
-  window.setTimeout(() => window.scrollTo(0, 0), 180);
+  const resetScroll = () => {
+    window.scrollTo(0, 0);
+    document.getElementById("main-content")?.scrollTo(0, 0);
+  };
+  window.requestAnimationFrame(resetScroll);
+  window.setTimeout(resetScroll, 60);
+  window.setTimeout(resetScroll, 180);
 }
 
 function exportRecordsCsv() {
@@ -6054,7 +5781,7 @@ function renderSyllabusMini() {
     return `
       <div class="mini-row">
         <div class="mini-row-head"><span>${syllabus[key].title}</span><span>${stat.percent}%</span></div>
-        <div class="progress-track"><div class="progress-fill" style="width:${stat.percent}%"></div></div>
+        <div class="progress-track"><div class="progress-fill" data-fill="${stat.percent}"></div></div>
         <div class="mini-row-meta">已掌握 ${stat.done}/${stat.total} · 需复盘 ${stat.review} · 下一步：${next ? `${next.group} / ${next.topic}` : "回炉错题"}</div>
       </div>
     `;
@@ -6076,16 +5803,16 @@ function renderSyllabus(selected = document.querySelector(".seg.active")?.datase
     const groupType = syllabusGroupMeta(selected, group);
     const shouldOpen = Boolean(query) || density === "detail" || progress.review > 0 || group === nextGroup || (!nextGroup && index === 0);
     return `
-      <details class="syllabus-group" ${shouldOpen ? "open" : ""}>
+      <details class="syllabus-group" data-density-expand="detail" ${shouldOpen ? "open" : ""}>
         <summary class="syllabus-group-summary">
           <div>
             <span class="syllabus-type-pill ${groupType.type}">${escapeHtml(groupType.label)}</span>
             <strong>${escapeHtml(group)}</strong>
-            <span>${sanitizeNumber(progress.done)}/${sanitizeNumber(progress.total)} 已掌握 · ${sanitizeNumber(progress.review)} 需复盘 · ${escapeHtml(groupType.note)}</span>
+            <span>${sanitizeNumber(progress.done)}/${sanitizeNumber(progress.total)} 已掌握 · ${sanitizeNumber(progress.review)} 需复盘</span>
           </div>
           <em>${sanitizeNumber(progress.percent, 0, 100)}%</em>
         </summary>
-        <div class="progress-track slim"><div class="progress-fill" style="width:${sanitizeNumber(progress.percent, 0, 100)}%"></div></div>
+        <div class="progress-track slim"><div class="progress-fill" data-fill="${sanitizeNumber(progress.percent, 0, 100)}"></div></div>
         <div class="topic-list">
           ${topics.map((topic) => renderTopic(selected, group, topic)).join("")}
         </div>
@@ -6119,6 +5846,9 @@ function renderSyllabus(selected = document.querySelector(".seg.active")?.datase
       }
     });
   });
+  // `renderSyllabus` is also reached from the tab and search handlers in
+  // `bindSyllabusTabs`, which bypass the render coordinator's `renderAfter` hook.
+  applyDeferredStyles();
 }
 
 function topicMatchesQuery(subject, group, topic, query) {
@@ -6180,12 +5910,15 @@ function renderSyllabusDashboard(selected) {
   if (!container) return;
   const detail = syllabusSubjectDetail(selected);
   const next = nextTopics(selected, 4);
+  // The type explanation belongs to the legend, once per type. It used to be
+  // appended to every group row, so a 13-group subject repeated the same
+  // sentence 13 times down the page.
   const legend = Object.entries(syllabusGroupTypeMeta).map(([type, meta]) => `
-    <span class="syllabus-type-pill ${type}">${escapeHtml(meta.label)}</span>
+    <span class="syllabus-type-pill ${type}" title="${escapeAttr(meta.note)}">${escapeHtml(meta.label)}</span>
   `).join("");
   container.innerHTML = `
     <section class="syllabus-hero">
-      <div class="ring syllabus-ring" style="--value:${sanitizeNumber(detail.percent, 0, 100)}">
+      <div class="ring syllabus-ring" data-var-value="${sanitizeNumber(detail.percent, 0, 100)}">
         <span>${sanitizeNumber(detail.percent, 0, 100)}%</span>
       </div>
       <div>
@@ -6218,14 +5951,12 @@ function renderSyllabusDashboard(selected) {
         `).join("")}
       </div>
     </section>
-    <section class="syllabus-group-bars">
-      ${detail.groups.map((group) => `
-        <div class="group-bar">
-          <div><span>${group.group}</span><em>${group.done}/${group.total}</em></div>
-          <div class="progress-track slim"><div class="progress-fill" style="width:${group.percent}%"></div></div>
-        </div>
-      `).join("")}
-    </section>
+    <!-- The group-progress bars that used to close this grid were removed: they
+         rendered the same groups, the same done/total and the same percentage
+         that #syllabusBoard already shows as expandable rows directly below, so
+         every subject displayed its group list twice. Being the tallest column,
+         the duplicated list also stretched the grid row and left the hero, the
+         next-task list and the framework card mostly empty. -->
   `;
 }
 
@@ -6574,6 +6305,103 @@ function groupProgress(subject, groupName) {
   return syllabusSubjectDetail(subject).groups.find((item) => item.group === groupName) || { percent: 0, done: 0, review: 0, total: 0 };
 }
 
+function renderReviewScience() {
+  const scienceGrid = document.getElementById("reviewScienceGrid");
+  const adjustmentTable = document.getElementById("adjustmentTable");
+
+  if (scienceGrid) {
+    scienceGrid.innerHTML = learningScienceRules.map((rule, index) => `
+      <article class="review-science-card">
+        <header>
+          <span>${String(index + 1).padStart(2, "0")}</span>
+          <div><strong>${escapeHtml(rule.name)}</strong><em>${escapeHtml(rule.evidence)}</em></div>
+        </header>
+        <p>${escapeHtml(rule.action)}</p>
+        <div><span>边界</span><p>${escapeHtml(rule.guardrail)}</p></div>
+      </article>
+    `).join("");
+  }
+
+  if (adjustmentTable) {
+    adjustmentTable.innerHTML = `
+      <div class="adjustment-table-head"><span>决策</span><span>触发条件</span><span>只执行这一个动作</span></div>
+      ${adaptiveAdjustmentRules.map(([label, trigger, action]) => `
+        <article>
+          <strong>${escapeHtml(label)}</strong>
+          <p>${escapeHtml(trigger)}</p>
+          <p>${escapeHtml(action)}</p>
+        </article>
+      `).join("")}
+    `;
+  }
+}
+
+function renderReviewModeLayouts({ weekHours, coreRatio, mistakeRatio, activeDays, dueCount, avg14, monthHours, monthTarget }) {
+  const focus = document.getElementById("reviewFocusLayout");
+  const operations = document.getElementById("reviewOperationsLayout");
+  const diagnostic = document.getElementById("reviewDiagnosticLayout");
+  const nextAction = dueCount > 3
+    ? "暂停新增章节，先处理最老的 1 项到期复盘。"
+    : activeDays < 4
+      ? "下周先恢复底线日，不补偿式加时。"
+      : mistakeRatio < 0.7
+        ? "只修复本周重复最多的一个错因。"
+        : "保持当前总量，只推进下周第一个核心任务。";
+  const status = dueCount > 3 || activeDays < 4 ? "需要降载" : mistakeRatio < 0.7 ? "先修复错因" : "维持节奏";
+
+  if (focus) {
+    focus.innerHTML = `
+      <header><span>本周只做一个决定</span><strong>${escapeHtml(status)}</strong></header>
+      <div class="review-focus-action"><span>下一动作</span><p>${escapeHtml(nextAction)}</p></div>
+      <dl><div><dt>有效学习</dt><dd>${weekHours.toFixed(1)}h</dd></div><div><dt>活跃天数</dt><dd>${activeDays} 天</dd></div><div><dt>到期复盘</dt><dd>${dueCount} 项</dd></div></dl>
+      <footer><strong>停手线</strong><span>只调整总量、难度、复盘上限或一个弱项中的一个；不同时换资料、加时长和换方法。</span></footer>
+    `;
+  }
+
+  if (operations) {
+    operations.innerHTML = `
+      <header><div><span>7 天执行复盘</span><h3>先看证据，再改计划</h3></div><strong>${escapeHtml(status)}</strong></header>
+      <div class="review-operation-grid">
+        <article><span>有效时长</span><strong>${weekHours.toFixed(1)}h</strong><p>14 天日均 ${avg14.toFixed(1)}h，检查趋势而不是单日峰值。</p></article>
+        <article><span>核心投入</span><strong>${Math.round(coreRatio * 100)}%</strong><p>数学与 408 看 7 天窗口，参考区间 60%-75%。</p></article>
+        <article><span>回炉结果</span><strong>${Math.round(mistakeRatio * 100)}%</strong><p>低于 70% 先减少新内容，不用追加整套资料。</p></article>
+        <article><span>月度容量</span><strong>${monthHours.toFixed(1)} / ${monthTarget}h</strong><p>这是排程容量，不是必须追满的绩效指标。</p></article>
+      </div>
+      <footer><strong>本周建议</strong><span>${escapeHtml(nextAction)}</span></footer>
+    `;
+  }
+
+  if (diagnostic) {
+    diagnostic.innerHTML = `
+      <header><div><span>诊断口径</span><h3>容量、证据与风险</h3></div><strong>${escapeHtml(studyCapacityPolicy.decisionWindow)}</strong></header>
+      <div class="review-diagnostic-grid">
+        <article><span>参考容量</span><strong>${studyCapacityPolicy.referenceHours}h</strong><p>${escapeHtml(studyCapacityPolicy.interpretation)}</p></article>
+        <article><span>加量门</span><p>${escapeHtml(studyCapacityPolicy.increase)}</p></article>
+        <article><span>保持门</span><p>${escapeHtml(studyCapacityPolicy.hold)}</p></article>
+        <article><span>降载门</span><p>${escapeHtml(studyCapacityPolicy.reduce)}</p></article>
+      </div>
+    `;
+  }
+}
+
+function renderPlanGovernance() {
+  const corrections = document.getElementById("planCorrectionList");
+  const roadmap = document.getElementById("oversightRoadmap");
+  if (corrections) {
+    corrections.innerHTML = studyPlanCorrections.map((item, index) => `
+      <article><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(item.issue)}</strong><p>${escapeHtml(item.correction)}</p><em>${escapeHtml(item.action)}</em></div></article>
+    `).join("");
+  }
+  if (roadmap) {
+    roadmap.innerHTML = `
+      <header><div><span>功能路线</span><strong>监管、时长展示与复盘</strong></div><p>P0 先解决记录是否可信，P1 再做趋势和资料治理，P2 最后扩展共享与恢复提醒。</p></header>
+      <div>${oversightFeatureRoadmap.map((feature) => `
+        <article><span>${escapeHtml(feature.priority)}</span><strong>${escapeHtml(feature.name)}</strong><p>${escapeHtml(feature.value)}</p><em>${escapeHtml(feature.acceptance)}</em></article>
+      `).join("")}</div>
+    `;
+  }
+}
+
 function renderReview() {
   const phase = getCurrentPhase();
   const week = lastDaysEntries(7);
@@ -6591,20 +6419,25 @@ function renderReview() {
   const monthTarget = currentMonth ? currentMonth[1] : phase.weeklyTarget * 4;
   const dueCount = reviewRows().filter((item) => isReviewDue(item, planDate)).length;
   const avgSyllabus = Math.round(["math", "cs408", "english", "politics"].reduce((sum, subject) => sum + syllabusProgress(subject).percent, 0) / 4);
-  const learningStatus = weekHours >= phase.weeklyTarget * 0.9 && coreRatio >= 0.65 && activeDays >= 6 ? "可小幅加难度" :
+  // The review backlog gates the load advice. It used to be derived only from
+  // hours / core ratio / active days, so a week with strong execution but four
+  // overdue reviews showed "需要降载" in the banner and "可小幅加难度" in this
+  // tile — two opposite conclusions on one screen.
+  const learningStatus = dueCount > 3 ? "先清复盘再加量" :
+    weekHours >= phase.weeklyTarget * 0.9 && coreRatio >= 0.65 && activeDays >= 6 ? "可小幅加难度" :
     weekHours < phase.weeklyTarget * 0.7 || activeDays <= 3 ? "先恢复底线日" :
     "保持当前负荷";
 
+  // The banner above already reports weekly hours, core ratio and mistake
+  // recovery with the same numbers, so the grid only carries what the banner
+  // does not: the breakdown, the backlog and the resulting advice.
   const items = [
-    ["周总有效小时", `${weekHours.toFixed(1)}h`, `目标 ${phase.weeklyTarget}h`],
-    ["数学+408 占比", `${Math.round(coreRatio * 100)}%`, "绿色线 65%"],
-    ["错题回炉率", `${Math.round(mistakeRatio * 100)}%`, "绿色线 70%"],
     ["本周学习天数", `${activeDays} 天`, "目标 6-7 天"],
     ["14天日均", `${avg14.toFixed(1)}h`, "判断曲线，不看单日"],
     ["本月累计", `${monthHours.toFixed(1)}h`, `月目标 ${monthTarget}h`],
     ["到期复盘", `${dueCount} 项`, dueCount ? "先清到期再开新内容" : "队列正常"],
     ["考纲证据", `${avgSyllabus}%`, "四科平均掌握标记"],
-    ["负荷建议", learningStatus, "按完成率调整难度"]
+    ["负荷建议", learningStatus, "按完成率与复盘积压调整难度"]
   ];
 
   document.getElementById("weeklyReview").innerHTML = items.map(([label, value, hint]) => `
@@ -6617,6 +6450,9 @@ function renderReview() {
 
   renderMilestone();
   renderRollingWindowChart();
+  renderReviewScience();
+  renderReviewModeLayouts({ weekHours, coreRatio, mistakeRatio, activeDays, dueCount, avg14, monthHours, monthTarget });
+  renderPlanGovernance();
 
   const totalHours = sumMinutes(entriesArray(), "total") / 60;
   document.getElementById("monthTable").innerHTML = monthlyPlan.map((row) => {
@@ -6626,8 +6462,8 @@ function renderReview() {
     return `
       <div class="month-row${current}">
         <div class="month-row-head">
-          <span>${month} · 目标 ${target}h</span>
-          <span>${reached ? "已达累计" : `累计 ${cumulative}h`}</span>
+          <span>${month} · 参考预算 ${target}h</span>
+          <span>${reached ? "达到参考累计" : `参考累计 ${cumulative}h`}</span>
         </div>
         <div class="month-meta">数学：${math} · 408：${cs408} · 其他：${other} · 监测：${score}</div>
       </div>
@@ -6652,7 +6488,7 @@ function renderRollingWindowChart() {
     <div class="rolling-window-bars">
       ${windows.map((item) => `
         <div class="rolling-window-bar">
-          <div class="rolling-window-track"><span style="height:${Math.max(4, item.minutes / maxMinutes * 100)}%"></span></div>
+          <div class="rolling-window-track"><span data-height="${Math.max(4, item.minutes / maxMinutes * 100)}"></span></div>
           <strong>${item.count}</strong>
           <em>${escapeHtml(item.label)}</em>
           <small>${item.minutes}m</small>
@@ -6679,7 +6515,7 @@ function renderCoach(week, phase) {
 
   if (streak >= 7 && weekHours >= phase.weeklyTarget * 0.9 && coreRatio >= 0.65) {
     title = "节奏健康，可以推进新内容";
-    text = `继续保持数学+408 的核心占比。下一节点 ${next[0]}，累计目标 ${next[2]}h。`;
+    text = `继续保持数学+408 的核心占比。下一节点 ${next[0]}，参考累计 ${next[2]}h。`;
     pace = "节奏健康";
   } else if (weekHours < phase.weeklyTarget * 0.7 && streak >= 3) {
     title = "执行偏轻，先补核心时长";
@@ -6759,8 +6595,8 @@ function renderMilestone() {
         <strong>${remaining.toFixed(1)}h</strong>
       </div>
     </div>
-    <div class="progress-track"><div class="progress-fill" style="width:${percent}%"></div></div>
-    <p>本月目标 ${target}h，累计目标 ${cumulative}h。数学：${math}；408：${cs408}；其他：${other}；监测：${score}。</p>
+    <div class="progress-track"><div class="progress-fill" data-fill="${percent}"></div></div>
+    <p>本月参考预算 ${target}h，参考累计 ${cumulative}h。数学：${math}；408：${cs408}；其他：${other}；监测：${score}。阶段推进仍以证据和趋势为准。</p>
   `;
 }
 
@@ -6876,20 +6712,129 @@ function averageScores(scores) {
   return sum;
 }
 
+function resourceStackForSubject(subject) {
+  const key = { "数学": "math", "数学一": "math", "408": "cs408", "英语": "english", "英语一": "english", "政治": "politics" }[subject];
+  return subjectResourceStacks.find((item) => item.key === key) || null;
+}
+
+function resourceStageForPhase(stack, phaseId) {
+  if (!stack) return null;
+  const phaseIndexes = {
+    math: { A: 0, B: 1, C: 1, D: 2, E: 3, F: 4, G: 4, H: 5 },
+    cs408: { A: 0, B: 1, C: 2, D: 3, E: 4, F: 4, G: 4, H: 5 },
+    english: { A: 0, B: 1, C: 1, D: 2, E: 3, F: 4, G: 4, H: 5 },
+    politics: { A: 0, B: 0, C: 0, D: 0, E: 1, F: 2, G: 3, H: 4 }
+  };
+  const index = phaseIndexes[stack.key]?.[phaseId] ?? 0;
+  return stack.stages[Math.min(index, stack.stages.length - 1)];
+}
+
+function renderResourcePlaybooks() {
+  const phase = getCurrentPhase();
+  const playbook = phasePlanById(phase.id);
+  const today = planTodayISO();
+  const tasks = normalizeTaskList(planTasksForDate(today), today).filter((task) => task.status !== "shifted");
+  const firstTask = tasks.find((task) => !isTaskDone(task, state.tasks)) || tasks[0];
+  const prescription = firstTask ? phaseSubjectPlan(phase.id, firstTask.subject) : playbook.subjects[0];
+  const focusStack = resourceStackForSubject(firstTask?.subject || prescription?.subject) || subjectResourceStacks[0];
+  const focusStage = resourceStageForPhase(focusStack, phase.id) || focusStack.stages[0];
+  const focusGovernance = resourceSubjectGovernance[focusStack.key] || resourceSubjectGovernance.math;
+  const focusControl = resourceStageControl(focusStack.key, focusStage);
+  const focus = document.getElementById("resourceFocusLayout");
+  if (focus) {
+    focus.innerHTML = `
+      <div><span>${escapeHtml(focusStage.window)}</span><strong>${escapeHtml(focusStack.subject)}</strong><em>${escapeHtml(focusStage.stage)}</em></div>
+      <div class="resource-focus-copy"><span>当前只拿这一套</span><p>${escapeHtml(focusStage.material)}</p><em>${escapeHtml(focusStage.role)}</em></div>
+      <div class="resource-now-action"><span>今天怎么用</span><strong>${escapeHtml(focusStage.session)}</strong><em>留下：${escapeHtml(focusStage.evidence)}</em></div>
+      <div class="resource-focus-stop"><strong>停用线</strong><span>${escapeHtml(focusStage.switchRule)}</span></div>
+      <div class="resource-focus-contract"><p><strong>启用门</strong>${escapeHtml(focusControl.activation)}</p><p><strong>版本</strong>${escapeHtml(focusGovernance.version)}</p></div>
+    `;
+  }
+
+  const operations = document.getElementById("resourceOperationsLayout");
+  if (operations) {
+    operations.innerHTML = `
+      <header><div><span>阶段 ${escapeHtml(playbook.id)}</span><h3>资料操作台</h3><p>资料不是阅读清单，每次必须连到今日任务、交付和验收。</p></div><strong>${escapeHtml(playbook.name)}</strong></header>
+      <div class="resource-operation-grid">
+        ${playbook.subjects.map((item) => {
+          const stack = resourceStackForSubject(item.subject);
+          const stage = resourceStageForPhase(stack, phase.id);
+          const control = resourceStageControl(stack?.key || "math", stage);
+          return `
+            <article>
+              <div><strong>${escapeHtml(item.subject)}</strong><span>${escapeHtml(item.hours)}</span></div>
+              <h4>${escapeHtml(stage?.material || item.resource)}</h4>
+              <p>${escapeHtml(stage?.session || item.dailyTask)}</p>
+              <dl><div><dt>产出</dt><dd>${escapeHtml(stage?.evidence || item.output)}</dd></div><div><dt>启用</dt><dd>${escapeHtml(control.activation)}</dd></div><div><dt>停用</dt><dd>${escapeHtml(stage?.switchRule || item.pass)}</dd></div></dl>
+            </article>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  const diagnostic = document.getElementById("resourceDiagnosticLayout");
+  if (diagnostic) {
+    diagnostic.innerHTML = `
+      <header><div><span>资料控制</span><h3>资料选择诊断</h3></div><strong>${subjectResourceStacks.length} 科 · ${subjectResourceStacks.reduce((sum, item) => sum + item.stages.length, 0)} 个使用窗口</strong></header>
+      <div class="resource-diagnostic-grid">
+        <article><span>范围与角色</span><p>${escapeHtml(resourceGovernanceRules.slice(0, 2).map(([, rule]) => rule).join(" "))}</p></article>
+        <article><span>购买与版本</span><p>${escapeHtml(resourceGovernanceRules.slice(2, 4).map(([, rule]) => rule).join(" "))}</p></article>
+        <article><span>当前阶段</span><p>${escapeHtml(playbook.weeklyGoal)}</p></article>
+        <article><span>替换与纠错</span><p>${escapeHtml(adaptiveAdjustmentRules.find(([label]) => label === "换资料")?.[2] || "一次只替换一套主线。")} ${escapeHtml(studyPlanCorrections.find((item) => item.issue.includes("资料完成"))?.correction || "候补位未触发时保持空置。")}</p></article>
+      </div>
+    `;
+  }
+}
+
+function renderResourceSubjectStack() {
+  const tabs = document.getElementById("resourceSubjectTabs");
+  const grid = document.getElementById("resourceGrid");
+  if (!tabs || !grid) return;
+  if (!subjectResourceStacks.some((item) => item.key === selectedResourceSubject)) selectedResourceSubject = subjectResourceStacks[0].key;
+  tabs.innerHTML = subjectResourceStacks.map((item) => `
+    <button type="button" class="seg ${item.key === selectedResourceSubject ? "active" : ""}" data-resource-subject="${escapeAttr(item.key)}" aria-pressed="${item.key === selectedResourceSubject}">${escapeHtml(item.subject)}</button>
+  `).join("");
+  const stack = subjectResourceStacks.find((item) => item.key === selectedResourceSubject) || subjectResourceStacks[0];
+  grid.innerHTML = `
+    <section class="resource-protocol-intro"><div><span>主线配置</span><h4>${escapeHtml(stack.subject)}</h4></div><div><p>${escapeHtml(stack.primary)}</p><em>${escapeHtml(stack.decision)}</em></div><div><strong>候补位</strong><p>${escapeHtml(stack.reservePolicy)}</p></div></section>
+    <section class="resource-subject-governance"><p><strong>官方锚点</strong>${escapeHtml((resourceSubjectGovernance[stack.key] || resourceSubjectGovernance.math).officialAnchor)}</p><p><strong>启用前置</strong>${escapeHtml((resourceSubjectGovernance[stack.key] || resourceSubjectGovernance.math).prerequisite)}</p><p><strong>冲突检查</strong>${escapeHtml((resourceSubjectGovernance[stack.key] || resourceSubjectGovernance.math).conflict)}</p></section>
+    <div class="resource-protocol-list">
+      ${stack.stages.map((stage, index) => `
+        <article class="resource-protocol-row">
+          <div class="resource-protocol-stage"><span>${String(index + 1).padStart(2, "0")} · ${escapeHtml(stage.window)}</span><strong>${escapeHtml(stage.stage)}</strong><em>${escapeHtml(stage.role)}</em></div>
+          <div class="resource-protocol-main"><h4>${escapeHtml(stage.material)}</h4><p>${escapeHtml(stage.session)}</p><dl><div><dt>必须产出</dt><dd>${escapeHtml(stage.evidence)}</dd></div><div><dt>启用门</dt><dd>${escapeHtml(resourceStageControl(stack.key, stage).activation)}</dd></div><div><dt>停用 / 切换</dt><dd>${escapeHtml(stage.switchRule)}</dd></div><div><dt>预留候补</dt><dd>${escapeHtml(stage.reserve)}</dd></div></dl></div>
+        </article>
+      `).join("")}
+    </div>
+  `;
+  tabs.querySelectorAll("[data-resource-subject]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedResourceSubject = button.dataset.resourceSubject;
+      renderResourceSubjectStack();
+      renderResourceDossier();
+    });
+  });
+}
+
+function renderResourceDossier() {
+  const container = document.getElementById("resourceDossier");
+  if (!container) return;
+  container.innerHTML = renderResourceDossierTemplate(subjectResourceStacks, selectedResourceSubject);
+  container.querySelectorAll("[data-resource-dossier-subject]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedResourceSubject = button.dataset.resourceDossierSubject;
+      renderResourceSubjectStack();
+      renderResourceDossier();
+    });
+  });
+}
+
 function renderResources() {
   const assets = ensureAssetContainers();
-  const usageCard = `
-    <article class="resource-card resource-rule-card">
-      <h4>资料使用规则</h4>
-      <ul>${resourceUsageRules.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
-    </article>
-  `;
-  document.getElementById("resourceGrid").innerHTML = usageCard + resources.map(([title, items]) => `
-    <article class="resource-card">
-      <h4>${escapeHtml(title)}</h4>
-      <ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
-    </article>
-  `).join("");
+  renderResourcePlaybooks();
+  renderResourceSubjectStack();
+  renderResourceDossier();
 
   document.getElementById("projectChecklist").innerHTML = projectItems.map((item) => {
     const checked = assets.project[item] ? "checked" : "";
@@ -6979,8 +6924,8 @@ function renderSettings() {
   renderStorageHealthText();
 
   document.getElementById("standardsList").innerHTML = [
-    ["数据起点", "2026-06-15 从头开始；早于起点的记录、模考、周计划、复盘队列和考纲掌握证据只归档，不参与统计和排程。"],
-    ["渐进时长", "2026 年 6 月 15 日从工作日 90m、周末 150m 开始；7 月约 120/210m，8 月约 150/240m；9 月起进入第一轮主干强度。"],
+    ["数据起点", `${PLAN_START_DATE} 从头开始；早于起点的记录、模考、周计划、复盘队列和考纲掌握证据只归档，不参与统计和排程。`],
+    ["渐进时长", "首四周从工作日 90m、周末 150m 起步，再按 120/180m、150/210m 爬坡；完成率连续达到 80% 后进入 180/300m 主干预算。"],
     ...highStandards
   ].map(([subject, standard]) => `
     <div class="standard-item">
@@ -7078,12 +7023,6 @@ function renderStrategySources() {
   `).join("");
 }
 
-function sumMinutesForMonth(month) {
-  return entriesArray()
-    .filter((entry) => entry.date.startsWith(month))
-    .reduce((sum, entry) => sum + entry.total, 0);
-}
-
 function showToast(message) {
   const toast = document.getElementById("toast");
   if (!toast) return;
@@ -7155,10 +7094,116 @@ window.__rwDebug = {
   health: () => ({
     build: APP_BUILD,
     appStarted,
-    storageAvailable,
+    storageAvailable: browserStorage.available,
     activeView: activeViewId(),
     hash: window.location.hash,
     supabaseConfigured,
     user: currentUser?.email || null
   })
+};
+
+// ---------------------------------------------------------------------------
+// Testable surface.
+//
+// This module is the only production implementation, but 6,900 lines of it mix
+// DOM wiring with pure state rules. The exports below isolate the pure half so
+// `tests/unit/state-rules.test.js` can exercise it with real inputs instead of
+// pattern-matching this file's source text.
+//
+// Everything exported here MUST stay free of DOM, `localStorage`, `state`,
+// `currentUser` and Supabase access: it has to be callable with plain arguments.
+// New pure rules belong in `src/domain/`, which is the intended long-term home;
+// these exports are the seam that makes moving them out safe.
+// ---------------------------------------------------------------------------
+export {
+  // State scaffolding
+  migrateState,
+  freshState,
+  defaultSyncState,
+  // Primitives
+  isPlainStateObject,
+  stateObject,
+  stateArray,
+  sanitizeBoolean,
+  sanitizeEnum,
+  sanitizeNumber,
+  sanitizeInteger,
+  sanitizeText,
+  sanitizeStringList,
+  booleanValue,
+  // First-value coercion
+  firstNumberValue,
+  firstIntegerValue,
+  firstTextValue,
+  firstStateLabel,
+  firstEnumValue,
+  firstBooleanValue,
+  firstStringList,
+  firstDateKey,
+  // Text, key and date safety
+  safeScalarText,
+  safeErrorMessage,
+  safeStateKey,
+  firstSafeStateKey,
+  safeStateLabel,
+  sanitizeDateKey,
+  sanitizeDateOrFallback,
+  sanitizeUserText,
+  sanitizeUser,
+  // Numbers, statuses and timestamps
+  normalizeRatio,
+  normalizeTimestamp,
+  timestampMs,
+  normalizeTopicStatus,
+  normalizeTaskRecordImpact,
+  firstTaskRecordImpact,
+  // Collection sanitizers
+  sanitizeEntries,
+  sanitizeScores,
+  sanitizeNumericObject,
+  sanitizeTopicEvidence,
+  sanitizeWeekPlans,
+  sanitizeTask,
+  sanitizeReviewItems,
+  sanitizeCustomTasks,
+  sanitizeProjectState,
+  sanitizeSnapshots,
+  sanitizeSnapshotReason,
+  sanitizeSnapshotPayload,
+  snapshotRows,
+  cloneJson,
+  // Clean-start filtering
+  isOnOrAfterPlanStart,
+  filterEntriesFromStart,
+  filterScoresFromStart,
+  filterWeekPlansFromStart,
+  filterTaskStateFromStart,
+  filterReviewItemsFromStart,
+  filterTopicEvidenceFromStart,
+  filterDeletedFromStart,
+  sanitizeTaskState,
+  buildCleanStartArchive,
+  // Task identity
+  taskIdDate,
+  hasMalformedDatePrefix,
+  taskDateFromWeekPlans,
+  // Merge layer
+  mergeStateByUpdatedAt,
+  mergeArrayById,
+  mergeSettingsByVersionedAssets,
+  mergeCustomTasks,
+  mergeTopicState,
+  mergeVersionedObject,
+  mergeObjectsByUpdatedAt,
+  mergeWeekPlans,
+  // Tombstone layer
+  mergeDeletedTombstones,
+  mergeDeletedTombstoneMeta,
+  shouldApplyTombstone,
+  pruneTombstone,
+  applyTombstones,
+  markDeleted,
+  unmarkDeleted,
+  sanitizeDeleted,
+  sanitizeDeletedMeta
 };

@@ -7,8 +7,10 @@
  * Pure infrastructure — no DOM interaction, no Supabase calls.
  */
 
-const CACHE_KEY = 'pku_swm_420_dashboard_v3';
-const DIRTY_QUEUE_KEY = 'pku_swm_420_dirty_queue';
+import { STORAGE_KEYS } from '../core/storage-contract.js';
+
+const CACHE_KEY = STORAGE_KEYS.APP_STATE;
+const DIRTY_QUEUE_KEY = STORAGE_KEYS.OFFLINE_DIRTY_QUEUE;
 
 /** Tables tracked by the offline cache */
 const TRACKED_TABLES = [

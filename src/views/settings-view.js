@@ -8,7 +8,6 @@
  */
 
 import { StateManager } from '../core/state-manager.js';
-import { EventBus, EVENTS } from '../core/event-bus.js';
 import { exportAllData } from '../infrastructure/sync-service.js';
 import { escapeAttr, escapeHTML } from '../utils/html.js';
 import { nonNegativeNumber } from '../utils/number.js';
@@ -123,7 +122,7 @@ function templateRows() {
 
 function sanitizeLocalExportPayload(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return {};
-  const { snapshots, sync, user, ...rest } = payload;
+  const { snapshots: _snapshots, sync: _sync, user: _user, ...rest } = payload;
   return safeCloneWithoutSensitiveKeys(rest);
 }
 
@@ -202,9 +201,9 @@ function setSettingsFeedback(saved, successMessage) {
 function renderDensitySection() {
   const current = getDensityMode();
   const modes = [
-    { value: 'focus', label: '专注' },
-    { value: 'balanced', label: '平衡' },
-    { value: 'detail', label: '详尽' },
+    { value: 'focus', label: '专注', level: '行动' },
+    { value: 'balanced', label: '平衡', level: '执行' },
+    { value: 'detail', label: '详尽', level: '诊断' },
   ];
 
   return `
@@ -214,7 +213,7 @@ function renderDensitySection() {
         ${modes.map(m => `
           <button type="button" class="density-btn ${m.value === current ? 'active' : ''}"
             data-density="${escapeAttr(m.value)}" aria-label="密度模式: ${escapeAttr(m.label)}"
-            aria-pressed="${String(m.value === current)}">${m.label}</button>
+            aria-pressed="${String(m.value === current)}"><span>${m.label}</span><small aria-hidden="true">${m.level}</small></button>
         `).join('')}
       </div>
     </section>
@@ -313,6 +312,7 @@ function onDensityClick(e) {
   setSettingsFeedback(saved, '显示密度已保存。');
   // Update document attribute for CSS
   document.documentElement.setAttribute('data-density', mode);
+  document.body.setAttribute('data-density', mode);
 
   // Update active button state
   containerEl.querySelectorAll('.density-btn').forEach((button) => {

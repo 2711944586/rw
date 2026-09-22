@@ -7,7 +7,7 @@
  * Addresses Requirements: 2.1, 3.3, 5.1, 5.3, 5.6, 9.1, 9.2, 9.5
  */
 
-import { generateDailyPlan, computeCoreRatio } from '../domain/plan-generator.js';
+import { generateDailyPlan } from '../domain/plan-generator.js';
 import { validateCompletion } from '../domain/task-contract.js';
 import {
   canSubmitPass,
@@ -166,8 +166,6 @@ function buildPlanInput() {
     const lastDate = new Date(recordDates[0] + 'T00:00:00Z');
     const now = new Date(today + 'T00:00:00Z');
     consecutiveMissedDays = Math.max(0, Math.round((now - lastDate) / (1000 * 60 * 60 * 24)));
-  } else {
-    consecutiveMissedDays = 0;
   }
 
   // Due reviews

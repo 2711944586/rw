@@ -107,7 +107,6 @@ function renderClaimCard(rawClaim, status, today) {
  * Render a group section.
  */
 function renderGroup(title, claims, status, description) {
-  const statusLabels = { verified: '已验证', pending: '待验证', outdated: '已过期' };
   const statusColors = { verified: 'var(--green)', pending: 'var(--amber)', outdated: 'var(--red)' };
   const safeStatus = statusColors[status] ? status : 'outdated';
 

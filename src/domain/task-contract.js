@@ -46,10 +46,11 @@ function artifactList(value) {
 /**
  * Validates whether a task completion attempt satisfies its contract.
  *
- * @param {Object} task - The task with its contract fields
- * @param {string[]} task.required_artifacts - Artifacts required for completion
- * @param {number} task.required_problem_count - Minimum problems required
- * @param {Object} payload - The user's submission payload
+ * @param {Object} [task] - The task with its contract fields. Both fields are
+ *   optional so an incomplete task reports errors instead of throwing.
+ * @param {string[]} [task.required_artifacts] - Artifacts required for completion
+ * @param {number} [task.required_problem_count] - Minimum problems required
+ * @param {Object} [payload] - The user's submission payload
  * @param {string[]} [payload.artifacts] - Artifacts submitted by user
  * @param {number} [payload.problem_count] - Number of problems submitted
  * @param {number} [payload.correct_count] - Number of correct answers
@@ -102,10 +103,10 @@ export function validateCompletion(task = {}, payload = {}) {
 /**
  * Validates whether a topic can be promoted to "mastered" status.
  *
- * @param {Object} topicProgress - The topic's progress data
- * @param {number} topicProgress.total_problems - Total problems completed for this topic
- * @param {number} topicProgress.recent_14d_accuracy - Rolling accuracy over last 14 days (0..1)
- * @param {string|Date} topicProgress.last_review - Date of last review (ISO string or Date)
+ * @param {Object} [topicProgress] - The topic's progress data (missing fields count as unmet)
+ * @param {number} [topicProgress.total_problems] - Total problems completed for this topic
+ * @param {number} [topicProgress.recent_14d_accuracy] - Rolling accuracy over last 14 days (0..1)
+ * @param {string|Date} [topicProgress.last_review] - Date of last review (ISO string or Date)
  * @param {string|Date} [today] - Reference date for "today" (defaults to now)
  * @returns {{ canPromote: boolean, unmetCriteria: string[] }}
  */
@@ -160,10 +161,10 @@ export function validateMasteryPromotion(topicProgress = {}, today = new Date())
 /**
  * Checks whether a mastered topic should be demoted based on review accuracy.
  *
- * @param {Object} topic - The topic object
- * @param {string} topic.mastery_status - Current mastery status
- * @param {Object} reviewResult - The review result
- * @param {number} reviewResult.accuracy - Accuracy of the review (0..1)
+ * @param {Object} [topic] - The topic object (missing mastery_status is treated as not mastered)
+ * @param {string} [topic.mastery_status] - Current mastery status
+ * @param {Object} [reviewResult] - The review result
+ * @param {number} [reviewResult.accuracy] - Accuracy of the review (0..1)
  * @returns {{ shouldDemote: boolean, newStatus: string }}
  */
 export function checkMasteryDemotion(topic = {}, reviewResult = {}) {

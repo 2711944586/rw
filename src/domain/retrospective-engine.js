@@ -62,13 +62,14 @@ function threeColorSignal(value, greenThreshold, yellowThreshold) {
 /**
  * Compute daily retrospective signals across 4 dimensions.
  *
- * @param {Object} input - DailyRetroInput
- * @param {number} input.taskCompletionRate - 0..1
- * @param {number} input.recordCount - number of records submitted
- * @param {number} input.taskCount - number of tasks planned
- * @param {number} input.reviewDueProcessedRate - 0..1
- * @param {number} input.coreRatio - 0..1
- * @param {string} input.phase - 'foundation'|'reinforcement'|'pastExam'|'sprint'
+ * @param {Object} [input] - DailyRetroInput. Every field is optional: missing or
+ *   malformed values are coerced to safe defaults rather than rejected.
+ * @param {number} [input.taskCompletionRate] - 0..1
+ * @param {number} [input.recordCount] - number of records submitted
+ * @param {number} [input.taskCount] - number of tasks planned
+ * @param {number} [input.reviewDueProcessedRate] - 0..1
+ * @param {number} [input.coreRatio] - 0..1
+ * @param {string} [input.phase] - 'foundation'|'reinforcement'|'pastExam'|'sprint'
  * @returns {Object} DailyRetroResult with taskSignal, reviewSignal, coreRatioSignal, recordSignal
  */
 export function computeDailyRetro(input = {}) {
@@ -100,13 +101,13 @@ export function computeDailyRetro(input = {}) {
  * Compute weekly retrospective overall signal.
  *
  * @param {Array} dailyResults - Array of DailyRetroResult objects for the week
- * @param {Object} weekData
- * @param {number} weekData.totalEffectiveMinutes - Actual effective minutes this week
- * @param {number} weekData.plannedMinutes - Planned minutes target for this week
- * @param {number} weekData.breakDays - Number of days with no activity
- * @param {number} weekData.mistakeRecoveryRate - 0..1, fraction of mistakes recovered
- * @param {number} weekData.coreRatioMedian - Median core ratio for the week
- * @param {string} weekData.phase - Current phase
+ * @param {Object} [weekData] - All fields optional; coerced to safe defaults.
+ * @param {number} [weekData.totalEffectiveMinutes] - Actual effective minutes this week
+ * @param {number} [weekData.plannedMinutes] - Planned minutes target for this week
+ * @param {number} [weekData.breakDays] - Number of days with no activity
+ * @param {number} [weekData.mistakeRecoveryRate] - 0..1, fraction of mistakes recovered
+ * @param {number} [weekData.coreRatioMedian] - Median core ratio for the week
+ * @param {string} [weekData.phase] - Current phase
  * @returns {Object} WeeklyRetroResult with overallSignal and signals breakdown
  */
 export function computeWeeklyRetro(dailyResults, weekData = {}) {
@@ -150,10 +151,10 @@ export function computeWeeklyRetro(dailyResults, weekData = {}) {
 /**
  * Compute monthly audit comparing actual vs planned cumulative minutes.
  *
- * @param {Object} monthData
- * @param {number} monthData.actualMinutes - Actual cumulative effective minutes
- * @param {Object} planCurve
- * @param {number} planCurve.cumulativePlannedMinutes - Planned cumulative minutes
+ * @param {Object} [monthData] - All fields optional; coerced to safe defaults.
+ * @param {number} [monthData.actualMinutes] - Actual cumulative effective minutes
+ * @param {Object} [planCurve] - All fields optional; coerced to safe defaults.
+ * @param {number} [planCurve.cumulativePlannedMinutes] - Planned cumulative minutes
  * @returns {Object} MonthlyAuditResult
  */
 export function computeMonthlyAudit(monthData = {}, planCurve = {}) {

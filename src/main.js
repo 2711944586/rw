@@ -1,3 +1,6 @@
+import "@fontsource-variable/geist/wght.css";
+import "@fontsource-variable/noto-sans-sc/wght.css";
+
 function installShellFallback(error) {
   console.error("[rw] main module fallback", error);
   const defaultViewId = "dashboard";

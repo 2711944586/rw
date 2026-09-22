@@ -362,9 +362,10 @@ function generateRecoveryPlan(input) {
  * 5. Trim to budget
  * 6. Volume cap: task count <= ceil(7dayMedianTaskCount * 1.15)
  *
- * @param {Object} input - PlanInput
- * @param {number} input.availableMinutes - User's available minutes today
- * @param {string} input.phase - 'foundation' | 'reinforcement' | 'pastExam' | 'sprint'
+ * @param {Object} [input] - PlanInput. Omitted fields fall back to defaults, so
+ *   every member is optional even though a full plan needs the first two.
+ * @param {number} [input.availableMinutes] - User's available minutes today
+ * @param {string} [input.phase] - 'foundation' | 'reinforcement' | 'pastExam' | 'sprint'
  * @param {Object} [input.quotas] - Per-subject time quotas
  * @param {number} [input.coreRatioTarget] - Minimum core ratio
  * @param {Array} [input.blockedTopics] - Topics with unmet prerequisites

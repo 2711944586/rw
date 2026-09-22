@@ -6,25 +6,62 @@
  *
  * Pre-loads today-view during idle time via requestIdleCallback.
  * Emits 'state:changed' via EventBus on route transitions.
+ *
+ * NOT wired into production yet — `app.js` still owns the hash. Two rules keep
+ * the two implementations from fighting when this one takes over:
+ *
+ *   1. The default route comes from `route-contract.js`, not from a local
+ *      literal, so `DEFAULT_ROUTE` and `DEFAULT_VIEW_ID` cannot disagree.
+ *   2. The hash is written as `#<viewId>` — the same shape `app.js` already
+ *      produces — so existing links keep resolving. Reading stays tolerant of
+ *      the legacy `#/<viewId>` form.
  */
 
 import { EventBus, EVENTS } from './event-bus.js';
+import { VIEW_IDS } from './route-contract.js';
 
 /**
- * Map of route names to lazy-loading factory functions.
- * Each factory returns a Promise resolving to a view module with mount/unmount.
+ * Views that correspond to a production route id in `route-contract.js`.
+ * Keys MUST be members of `VIEW_IDS`; `tests/unit/router.test.js` enforces it.
  */
-const VIEW_MAP = {
-  'today':     () => import('../views/today-view.js'),
-  'weekly':    () => import('../views/weekly-view.js'),
-  'reviews':   () => import('../views/reviews-view.js'),
-  'records':   () => import('../views/records-view.js'),
-  'settings':  () => import('../views/settings-view.js'),
-  'facts':     () => import('../views/fact-index-view.js'),
-  'showcase':  () => import('../views/showcase-view.js'),
-  'retro':     () => import('../views/retrospective-view.js'),
+const CONTRACT_ROUTES = {
+  'today': () => import('../views/today-view.js'),
+  'records': () => import('../views/records-view.js'),
+  'review': () => import('../views/reviews-view.js'),
+  'settings': () => import('../views/settings-view.js'),
 };
 
+/**
+ * Migration-layer pages with no production route id yet.
+ *
+ * These are NOT renames waiting to happen — each covers a different surface
+ * than the production page whose name it resembles (`weekly` is a summary view,
+ * production `week` is a day-by-day planner; `facts` lists source claims,
+ * production `syllabus` tracks topic mastery; `retro` is the richer
+ * daily/weekly/monthly retro, production `review` is the review queue).
+ * Promoting one of these into `CONTRACT_ROUTES` requires deciding the target
+ * information architecture first, which is why the split is explicit here
+ * rather than guessed at.
+ */
+const MIGRATION_ONLY_ROUTES = {
+  'weekly': () => import('../views/weekly-view.js'),
+  'facts': () => import('../views/fact-index-view.js'),
+  'showcase': () => import('../views/showcase-view.js'),
+  'retro': () => import('../views/retrospective-view.js'),
+};
+
+const VIEW_MAP = { ...CONTRACT_ROUTES, ...MIGRATION_ONLY_ROUTES };
+
+/**
+ * The router's own default, which is deliberately NOT `DEFAULT_VIEW_ID` yet.
+ *
+ * `route-contract.js` names `dashboard` as the app-wide default, but the
+ * migration layer has no dashboard view, so falling back to it would render the
+ * route-error panel instead of a page. This must stay a member of `VIEW_IDS`
+ * (asserted in `tests/unit/router.test.js`) and should become `DEFAULT_VIEW_ID`
+ * the moment a dashboard view lands. Until then the difference is a declared
+ * exception, not a silent divergence.
+ */
 const DEFAULT_ROUTE = 'today';
 
 /** Cache for already-loaded view modules */
@@ -109,8 +146,9 @@ async function navigate(route) {
   const token = ++navigationToken;
   currentRoute = route;
 
-  // Update hash without triggering hashchange
-  const newHash = `#/${route}`;
+  // Write the same hash shape `app.js` produces (`#view`), so the two
+  // implementations agree on URLs while this router is still being migrated in.
+  const newHash = `#${route}`;
   if (window.location.hash !== newHash) {
     window.history.replaceState(null, '', newHash);
   }
@@ -235,4 +273,8 @@ export const Router = {
   /** Exposed for testing */
   _parseHash: parseHash,
   _VIEW_MAP: VIEW_MAP,
+  _CONTRACT_ROUTES: CONTRACT_ROUTES,
+  _MIGRATION_ONLY_ROUTES: MIGRATION_ONLY_ROUTES,
+  _DEFAULT_ROUTE: DEFAULT_ROUTE,
+  _VIEW_IDS: VIEW_IDS,
 };

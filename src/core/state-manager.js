@@ -9,10 +9,11 @@
 
 import { EventBus, EVENTS } from './event-bus.js';
 import { nonNegativeNumber } from '../utils/number.js';
+import { STORAGE_KEYS } from './storage-contract.js';
 
-const STORAGE_KEY = 'pku_swm_420_dashboard_v3';
-const LEGACY_STORAGE_KEY = 'pku_swm_420_state';
-const DIRTY_KEY = 'pku_swm_420_dirty';
+const STORAGE_KEY = STORAGE_KEYS.APP_STATE;
+const LEGACY_STORAGE_KEY = STORAGE_KEYS.LEGACY_MODULAR_STATE;
+const DIRTY_KEY = STORAGE_KEYS.STATE_DIRTY_MAP;
 const UNSAFE_PATH_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 function isPlainObject(value) {

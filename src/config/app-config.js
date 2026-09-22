@@ -1,0 +1,14 @@
+export const SCHEMA_VERSION = 3;
+export const PLAN_LOGIC_VERSION = "4.1-evidence-capacity-governance-2026-08-31";
+export const APP_BUILD = "2026-09-22-ui-review-fixes-v4.1.2";
+export const PLAN_START_DATE = "2026-08-31";
+export const CLEAN_START_VERSION = "2026-08-31-from-zero-v2";
+export const DEFAULT_EXAM_DATE = "2027-12-25";
+export const DEFAULT_EXAM_DATE_STATUS = "推算排程日，非官方初试日期";
+export const SOURCE_CHECK_DATE = "2026-08-17";
+export const REFERENCE_CAPACITY_HOURS = 2200;
+export const TARGET_TOTAL_HOURS = REFERENCE_CAPACITY_HOURS;
+export const DENSITY_BUTTON_SELECTOR = ".density-toggle button[data-density]";
+export const STORAGE_FAILURE_NOTICE_INTERVAL_MS = 30_000;
+export const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
+export const DELETED_TYPES = Object.freeze(["records", "scores", "tasks", "reviews"]);

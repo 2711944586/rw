@@ -14,7 +14,6 @@ import {
 } from '../domain/retrospective-engine.js';
 import { calibrate } from '../domain/calibration-engine.js';
 import { StateManager } from '../core/state-manager.js';
-import { EventBus, EVENTS } from '../core/event-bus.js';
 import { escapeHTML } from '../utils/html.js';
 import { nonNegativeNumber, positiveNumber } from '../utils/number.js';
 
@@ -160,7 +159,6 @@ function getDailyRetroInput() {
  */
 function signalDot(signal, label) {
   const colors = { green: 'var(--green)', yellow: 'var(--amber)', red: 'var(--red)' };
-  const bgColors = { green: 'var(--green-soft)', yellow: 'var(--amber-soft)', red: 'var(--red-soft)' };
   const labels = { green: '正常', yellow: '注意', red: '需调整' };
   const safeSignal = colors[signal] ? signal : 'red';
   return `

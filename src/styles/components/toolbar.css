@@ -1,0 +1,124 @@
+.top-actions .toolbar-icon-button,
+.top-actions label.toolbar-icon-button {
+  inline-size: 40px;
+  block-size: 40px;
+  min-inline-size: 40px;
+  min-block-size: 40px;
+  flex: 0 0 40px;
+  display: inline-grid;
+  place-items: center;
+  gap: 0;
+  padding: 0;
+  border: 1px solid rgba(31, 36, 47, 0.11);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 2px 7px rgba(31, 36, 47, 0.05);
+  color: var(--workspace-text);
+  line-height: 0;
+  cursor: pointer;
+  transition: background 180ms var(--workspace-ease), border-color 180ms var(--workspace-ease), color 180ms var(--workspace-ease), box-shadow 180ms var(--workspace-ease), transform 180ms var(--workspace-ease);
+}
+
+.top-actions .toolbar-icon-button:hover,
+.top-actions label.toolbar-icon-button:hover {
+  border-color: rgba(70, 103, 216, 0.22);
+  background: #ffffff;
+  color: var(--workspace-accent-dark);
+  box-shadow: inset 0 1px 0 #ffffff, 0 5px 14px rgba(31, 36, 47, 0.08);
+  transform: translateY(-1px);
+}
+
+.top-actions .toolbar-icon-button:active,
+.top-actions label.toolbar-icon-button:active {
+  box-shadow: inset 0 1px 2px rgba(31, 36, 47, 0.09);
+  transform: translateY(0);
+}
+
+.top-actions .toolbar-icon-button > span,
+.top-actions label.toolbar-icon-button > span {
+  display: none !important;
+}
+
+.top-actions .toolbar-icon-button svg,
+.top-actions label.toolbar-icon-button svg {
+  inline-size: 17px;
+  block-size: 17px;
+  display: block;
+  margin: 0;
+  pointer-events: none;
+}
+
+.top-actions .sync-pill {
+  inline-size: 40px !important;
+  block-size: 40px;
+  min-inline-size: 40px !important;
+  min-block-size: 40px;
+  flex: 0 0 40px !important;
+  display: grid;
+  place-items: center;
+  padding: 0 !important;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.top-actions .sync-pill > span {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.top-actions .sync-pill .toolbar-icon-button {
+  inline-size: 40px;
+  block-size: 40px;
+  min-inline-size: 40px;
+  min-block-size: 40px;
+}
+
+.top-actions #syncNowBtn svg {
+  transform: translateX(-0.5px);
+}
+
+.top-actions .sync-pill[data-status="syncing"] #syncNowBtn svg {
+  animation: toolbar-sync-spin 850ms linear infinite;
+}
+
+@keyframes toolbar-sync-spin {
+  to {
+    transform: translateX(-0.5px) rotate(360deg);
+  }
+}
+
+@media (max-width: 900px) {
+  .top-actions .toolbar-icon-button,
+  .top-actions label.toolbar-icon-button,
+  .top-actions .sync-pill,
+  .top-actions .sync-pill .toolbar-icon-button {
+    inline-size: 38px !important;
+    block-size: 38px;
+    min-inline-size: 38px !important;
+    min-block-size: 38px;
+    flex-basis: 38px !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .top-actions #exportBtn,
+  .top-actions label.import-label {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top-actions .sync-pill[data-status="syncing"] #syncNowBtn svg {
+    animation: none;
+  }
+}

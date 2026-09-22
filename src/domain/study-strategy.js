@@ -21,9 +21,14 @@ export const strategySources = [
     use: '01-04 方向按政治、英语一、数学一、408 作为当前备考基准，2028 入学仍需当年复核。',
   },
   {
+    title: '420 分经验样本',
+    source: 'B 站《一战北大软微 420 经验贴》',
+    use: '吸收数学与 408 长期主线、英语持续投入、资料按需固定、少刷量多复盘等共性；不复制作者每天 6-8 小时或约 2608 小时的个体总量。',
+  },
+  {
     title: '408 主线经验',
-    source: '王道论坛、计算机考研论坛、北大软微 11408 公开经验贴',
-    use: '跨考先补 C、复杂度和数据结构，随后计组、OS、计网；每章必须留下题量、过程图、伪代码和错题归档。',
+    source: '434 分分享、跨考上岸分享、王道论坛与 11408 公开经验',
+    use: '交叉样本共同支持先补 C、复杂度和数据结构，再推进计组、OS、计网；每章留下题量、过程图、伪代码和错题归档。',
   },
   {
     title: '数学主线经验',
@@ -54,39 +59,39 @@ export const strategySources = [
 
 export const phaseStrategies = {
   A: {
-    label: '启动与补前置',
-    method: '6 月 15 日起低强度建档，补函数图像、代数变形、C 语言基础和英语句法；每天只追求完成证据。',
-    reviewRule: '只做轻量 D+1，错题当天写清错因，避免刚启动就被复盘债务压住。',
+    label: '启动与负荷校准',
+    method: '8 月 31 日起四周爬坡，补函数图像、代数变形、C 语言基础和英语句法；不追补过去月份，每天只追求完成证据。',
+    reviewRule: '首周只做轻量 D+1，之后逐步加入 D+3/D+7；完成率连续达到 80% 才增加一个学习块。',
   },
   B: {
-    label: '暑假奠基',
-    method: '高数基础、线代预热、C 到数据结构一轮、英语阅读入门同步推进，资料固定一套主线。',
+    label: '基础主干',
+    method: '高数基础、线代启动、数据结构主干和英语阅读同步推进，每科固定一套主线，完成 70% 前不扩张资料。',
     reviewRule: '错题 D+1/D+3 必清，周末合并同类错因，连续两周未回炉就减少新内容。',
   },
   C: {
-    label: '第一轮主干',
+    label: '一轮闭合',
     method: '数学三大模块和 408 四门建立完整框架，核心占比维持 65%+，每周至少一次章节小测。',
     reviewRule: '复盘必须挂回考纲小节，过期 7 天视作未掌握，不靠“看懂”标记通过。',
   },
   D: {
-    label: '寒假闭合',
-    method: '第一轮收口，补齐概率、OS、计网，形成知识图。',
-    reviewRule: 'D+14 复盘要从题目回到章节框架。',
+    label: '强化真题',
+    method: '按题型和系统链路做分章真题，先解决识别信号与表达，再增加速度和综合度。',
+    reviewRule: 'D+14 从题目回到章节框架；专题验收不过关就不进入整套刷量。',
   },
   E: {
-    label: '强化专题',
-    method: '分章节真题和题型强化，数学看识别信号，408 看系统链路，弱项按 14 天趋势滚动补。',
-    reviewRule: '错题回炉率低于 70% 时减少新题；专题不过关不进入套卷刷量。',
+    label: '暑期套卷',
+    method: '数学和 408 从分章过渡到整套真题，英语写作和政治选择题启动；试卷数量服从复盘质量。',
+    reviewRule: '套卷后 48 小时完成错题复盘；回炉率低于 70% 时暂停新增模拟卷。',
   },
   F: {
-    label: '真题套卷',
-    method: '数学和 408 进入限时套卷，英语作文启动，政治选择题启动。',
-    reviewRule: '套卷后 48 小时完成错题复盘和二次归因。',
+    label: '报名稳定',
+    method: '核验招生信息并完成报名，用近 5 套表现定位弱项，真题优先于模拟题数量。',
+    reviewRule: '套卷后 48 小时完成二次归因，同一错因重复两次就建立定向补弱任务。',
   },
   G: {
-    label: '报名校准',
-    method: '核验招生信息，近 5 套全科均分决定是否准备稳妥梯队。',
-    reviewRule: '只保留高频错题、公式链和大题表达规范。',
+    label: '冲刺补弱',
+    method: '围绕近 5 套趋势修复高频失分，完成网上确认，政治主观题进入关键词默写。',
+    reviewRule: '只保留高频错题、公式链、大题表达和反复失分专题。',
   },
   H: {
     label: '考前收束',
@@ -230,14 +235,14 @@ export function getPhaseStrategy(phaseId, track = 'balanced') {
 
 export function subjectPlanWeights(phaseId, controls = DEFAULT_PLAN_CONTROLS) {
   const normalized = normalizePlanControls(controls);
-  const politicsActive = ['F', 'G', 'H'].includes(phaseId);
+  const politicsActive = ['E', 'F', 'G', 'H'].includes(phaseId);
   const weights = {
     math: phaseId === 'A' ? 0.35 : 0.33,
     cs408: phaseId === 'A' ? 0.35 : 0.35,
     english: phaseId === 'A' ? 0.16 : 0.14,
     politics: politicsActive ? 0.12 : 0,
     review: phaseId === 'A' ? 0.08 : 0.10,
-    project: ['D', 'F'].includes(phaseId) ? 0.04 : 0,
+    project: ['C', 'D', 'E'].includes(phaseId) ? 0.04 : 0,
   };
 
   if (normalized.experienceTrack === 'mathHeavy') weights.math += 0.08;
@@ -374,7 +379,7 @@ function diffDays(dateStr, baseStr) {
   if (!dateKey || !baseKey) return Number.NaN;
   const date = new Date(`${dateKey}T00:00:00Z`);
   const base = new Date(`${baseKey}T00:00:00Z`);
-  return Math.round((date - base) / MS_PER_DAY);
+  return Math.round((date.getTime() - base.getTime()) / MS_PER_DAY);
 }
 
 function clampInt(value, min, max) {

@@ -14,19 +14,7 @@
 import { supabase, supabaseConfigured, getCurrentUser } from './supabase-client.js';
 import { OfflineCache } from './offline-cache.js';
 import { EventBus, EVENTS } from '../core/event-bus.js';
-
-/** Tables that are synced to/from Supabase */
-const SYNCED_TABLES = [
-  'daily_records',
-  'study_tasks',
-  'review_items',
-  'topic_progress',
-  'mock_scores',
-  'resources',
-  'source_registry',
-  'calibration_snapshots',
-  'project_showcase_items',
-];
+import { getSyncConflictKey, SYNCED_TABLES } from './sync-contract.js';
 
 const SYNCED_TABLE_SET = new Set(SYNCED_TABLES);
 let onlineListenerAttached = false;
@@ -98,7 +86,7 @@ export async function pushDirtyRecords(dirtyRecords) {
     }));
 
     try {
-      const { error } = await supabase.from(table).upsert(rows, { onConflict: getConflictKey(table) });
+      const { error } = await supabase.from(table).upsert(rows, { onConflict: getSyncConflictKey(table) });
 
       if (error) {
         lastError = error;
@@ -158,7 +146,7 @@ export async function pushDirtyRecords(dirtyRecords) {
 /**
  * Pull the latest remote state from all user tables.
  *
- * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
+ * @returns {Promise<{success: boolean, data?: Object, error?: string, failed?: string[]}>}
  */
 export async function pullRemoteState() {
   if (!supabaseConfigured || !supabase) {
@@ -447,26 +435,6 @@ async function updateLastSyncedAt(userId) {
   } catch {
     // Non-critical — don't fail the sync for this
   }
-}
-
-/**
- * Determine the upsert conflict key for a given table.
- * @param {string} table
- * @returns {string}
- */
-function getConflictKey(table) {
-  const conflictKeys = {
-    daily_records: 'user_id,study_date',
-    study_tasks: 'id',
-    review_items: 'id',
-    topic_progress: 'user_id,topic_id',
-    mock_scores: 'id',
-    resources: 'user_id,resource_key',
-    source_registry: 'claim_id',
-    calibration_snapshots: 'id',
-    project_showcase_items: 'id',
-  };
-  return conflictKeys[table] || 'id';
 }
 
 /**

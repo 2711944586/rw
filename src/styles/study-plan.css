@@ -1,0 +1,1552 @@
+/* Study plan layout v4.2
+   This file is the single layout layer for the three information modes.
+   Base components stay in base.css/workspace.css; mode-specific composition stays here. */
+
+:root {
+  --plan-bg: #f1f3f6;
+  --plan-canvas: #f8f9fb;
+  --plan-surface: #ffffff;
+  --plan-surface-soft: #f5f7fa;
+  --plan-ink: #182230;
+  --plan-text: #344054;
+  --plan-muted: #667085;
+  --plan-line: #dde3ea;
+  --plan-line-strong: #c5cfdb;
+  --plan-accent: #315b94;
+  --plan-accent-strong: #274a78;
+  --plan-accent-soft: #e8eef7;
+  --plan-navy: #202735;
+  --plan-warning: #9a6700;
+  --plan-warning-soft: #fff6dc;
+  --plan-danger: #a13a3a;
+  --plan-danger-soft: #fff0f0;
+  --plan-radius: 10px;
+  --plan-shadow: 0 1px 2px rgba(20, 31, 48, 0.04), 0 12px 30px rgba(35, 49, 69, 0.055);
+  --plan-shadow-raised: 0 2px 4px rgba(20, 31, 48, 0.055), 0 18px 42px rgba(35, 49, 69, 0.075);
+  --plan-inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+body[data-density] {
+  --primary: var(--plan-accent);
+  --primary-dark: var(--plan-accent-strong);
+  --primary-darker: #203d66;
+  --primary-ink: #203d66;
+  --primary-soft: var(--plan-accent-soft);
+  --green: var(--plan-accent);
+  --green-ink: var(--plan-accent-strong);
+  --green-soft: var(--plan-accent-soft);
+  --workspace-bg: var(--plan-bg);
+  --workspace-canvas: var(--plan-canvas);
+  --workspace-surface: var(--plan-surface);
+  --workspace-ink: var(--plan-ink);
+  --workspace-text: var(--plan-text);
+  --workspace-muted: var(--plan-muted);
+  --workspace-line: var(--plan-line);
+  --workspace-line-strong: var(--plan-line-strong);
+  --workspace-accent: var(--plan-accent);
+  --workspace-accent-dark: var(--plan-accent-strong);
+  --workspace-accent-soft: var(--plan-accent-soft);
+  background: var(--plan-bg);
+  color: var(--plan-text);
+}
+
+body[data-density]::before,
+body[data-density] .main,
+body[data-density] .view,
+body[data-density] .app-shell {
+  background-image: none;
+}
+
+body[data-density] .main {
+  background: var(--plan-bg);
+}
+
+body[data-density] .view {
+  padding-bottom: 72px;
+}
+
+body[data-density] .panel,
+body[data-density] .hero-panel,
+body[data-density] .detail-section,
+body[data-density] .workflow-card,
+body[data-density] .storage-card {
+  border-color: var(--plan-line);
+  border-radius: var(--plan-radius);
+  background: var(--plan-surface);
+  background-image: none;
+}
+
+body[data-density] .panel,
+body[data-density] .hero-panel {
+  box-shadow: var(--plan-inner-highlight), var(--plan-shadow);
+}
+
+body[data-density] .detail-section,
+body[data-density] .workflow-card,
+body[data-density] .storage-card {
+  box-shadow: var(--plan-inner-highlight);
+}
+
+body[data-density] .panel:hover,
+body[data-density] .hero-panel:hover {
+  border-color: var(--plan-line-strong);
+  box-shadow: var(--plan-inner-highlight), var(--plan-shadow-raised);
+  transform: none;
+}
+
+body[data-density] .primary-button,
+body[data-density] .progress-fill,
+body[data-density] .week-day-progress > div,
+body[data-density] .rolling-window-track > span,
+body[data-density] input[type="range"] {
+  accent-color: var(--plan-accent);
+}
+
+body[data-density] .primary-button,
+body[data-density] .progress-fill,
+body[data-density] .week-day-progress > div,
+body[data-density] .rolling-window-track > span {
+  background: var(--plan-accent);
+  background-image: none;
+}
+
+body[data-density] .risk.green,
+body[data-density] .metric-card.risk.green,
+body[data-density] .status-success,
+body[data-density] .success-state,
+body[data-density] .signal-badge.green {
+  border-color: #c9d5e4;
+  background: var(--plan-accent-soft);
+  color: var(--plan-accent-strong);
+}
+
+body[data-density] .plan-card,
+body[data-density] .week-day-card,
+body[data-density] .resource-protocol-row,
+body[data-density] .phase-file,
+body[data-density] .review-science-card {
+  border-radius: var(--plan-radius);
+}
+
+body[data-density] :is(p, li, dd, .month-meta) {
+  text-wrap: pretty;
+}
+
+body[data-density] :is(.metric-card strong, .review-item strong, .week-day-summary strong, .resource-progress-row strong) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Shared mode hierarchy. */
+body[data-density="focus"] {
+  --density-view-width: 1120px;
+  --density-track-width: 960px;
+  --density-shell-gutter: 56px;
+  --density-panel-padding: 30px;
+  --density-heading-size: 24px;
+  --density-copy-size: 15px;
+}
+
+body[data-density="balanced"] {
+  --density-view-width: 1280px;
+  --density-track-width: 1224px;
+  --density-shell-gutter: 56px;
+  --density-panel-padding: 26px;
+  --density-heading-size: 22px;
+  --density-copy-size: 14px;
+}
+
+body[data-density="detail"] {
+  --density-view-width: 1380px;
+  --density-track-width: 1332px;
+  --density-shell-gutter: 48px;
+  --density-panel-padding: 22px;
+  --density-heading-size: 21px;
+  --density-copy-size: 14px;
+}
+
+@media (min-width: 901px) {
+  body[data-density] .topbar {
+    width: min(var(--density-track-width), calc(100% - var(--density-shell-gutter)));
+    margin-inline: auto;
+    border-color: var(--plan-line);
+    background: rgba(252, 253, 255, 0.94);
+    box-shadow: var(--plan-inner-highlight), 0 8px 24px rgba(35, 49, 69, 0.06);
+  }
+}
+
+body[data-density] .panel-head h3 {
+  color: var(--plan-ink);
+  font-family: var(--workspace-display);
+  font-weight: 720;
+  letter-spacing: 0;
+  line-height: 1.28;
+}
+
+body[data-density] .panel-head p {
+  max-width: 68ch;
+  color: var(--plan-muted);
+  line-height: 1.65;
+}
+
+body[data-density] .panel > .panel-head:first-child {
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--plan-line);
+}
+
+/* Focus dashboard: one centered task lane followed by two compact checks. */
+body[data-density="focus"] #dashboard.view.active {
+  width: min(var(--density-view-width), 100%);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+body[data-density="focus"] #dashboard > :is(.command-panel, .focus-board, .target-lane, .metric-grid) {
+  width: min(var(--density-track-width), 100%);
+  margin-inline: auto;
+}
+
+body[data-density="focus"] #dashboard > :is(.command-panel, .focus-board) {
+  grid-column: 1 / -1;
+}
+
+body[data-density="focus"] #dashboard > .focus-board {
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  grid-template-rows: minmax(320px, auto);
+  gap: 14px;
+}
+
+body[data-density="focus"] #dashboard > .focus-board > .focus-primary {
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 320px;
+}
+
+body[data-density="focus"] #dashboard > .focus-board > .focus-card:nth-child(2) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+body[data-density="focus"] #dashboard > .focus-board > .focus-card:nth-child(n + 3) {
+  display: none !important;
+}
+
+body[data-density="focus"] #dashboard > .target-lane {
+  grid-column: 1;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body[data-density="focus"] #dashboard > .target-lane > .loop-audit-card {
+  grid-column: 1;
+}
+
+body[data-density="focus"] #dashboard > .metric-grid {
+  grid-column: 2;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body[data-density="focus"] #dashboard > .metric-grid > .metric-card.risk {
+  grid-column: 1;
+  min-height: 100%;
+}
+
+/* Focus: one complete session, not an empty strip. */
+body[data-density="focus"] #today .today-workbench {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body[data-density="focus"] #today .today-plan-panel {
+  min-height: 590px;
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  border-top: 3px solid var(--plan-navy);
+  box-shadow: var(--plan-shadow);
+}
+
+body[data-density="focus"] #today .today-plan-panel .panel-head {
+  margin-bottom: 0;
+}
+
+body[data-density="focus"] .operating-focus {
+  min-height: 210px;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.28fr);
+  border: 1px solid #30394a;
+  border-radius: var(--plan-radius);
+  background: var(--plan-navy);
+  background-image: none;
+}
+
+body[data-density="focus"] .operating-focus > div {
+  grid-row: 1 / span 2;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: 28px;
+}
+
+body[data-density="focus"] .operating-focus > div strong {
+  font-size: 34px;
+  line-height: 1.15;
+}
+
+body[data-density="focus"] .operating-focus > p {
+  display: grid;
+  align-content: center;
+  min-height: 132px;
+  padding: 26px 30px;
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 620;
+  line-height: 1.75;
+}
+
+body[data-density="focus"] .operating-focus > em {
+  padding: 18px 30px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  color: #cbd4e1;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+body[data-density="focus"] .daily-progress {
+  margin: 0;
+  border-color: var(--plan-line);
+  border-radius: var(--plan-radius);
+  background: var(--plan-surface-soft);
+}
+
+body[data-density="focus"] .daily-plan {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body[data-density="focus"] .daily-plan .plan-card.primary-task {
+  min-height: 210px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-content: center;
+  border-radius: var(--plan-radius);
+  background: #ffffff;
+  border: 1px solid var(--plan-line-strong);
+  box-shadow: none;
+}
+
+body[data-density="focus"] .plan-card.primary-task .plan-head strong,
+body[data-density="focus"] .plan-card.primary-task p {
+  color: var(--plan-ink);
+}
+
+body[data-density="focus"] .plan-card.primary-task .plan-head strong {
+  font-size: 22px;
+}
+
+body[data-density="focus"] .plan-card.primary-task p {
+  max-width: 64ch;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+body[data-density="focus"] .plan-card.primary-task .plan-index {
+  background: var(--plan-accent-soft);
+  color: var(--plan-accent-strong);
+}
+
+body[data-density="focus"] #week .week-command-panel,
+body[data-density="focus"] #resources .resource-command-panel,
+body[data-density="focus"] #foundation .phase-command-panel,
+body[data-density="focus"] #review .review-command-panel {
+  min-height: 430px;
+  display: grid;
+  align-content: center;
+  border-top: 3px solid var(--plan-navy);
+  box-shadow: var(--plan-shadow);
+}
+
+body[data-density="focus"] #week .week-command-panel .panel-head {
+  align-self: start;
+  margin-bottom: 26px;
+}
+
+body[data-density="focus"] .week-focus-slice {
+  min-height: 250px;
+  grid-template-columns: minmax(180px, 0.72fr) minmax(0, 1.55fr) minmax(220px, 0.9fr);
+  border: 1px solid var(--plan-line-strong);
+  border-radius: var(--plan-radius);
+  background: #ffffff;
+}
+
+body[data-density="focus"] .week-focus-slice > div {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: 26px;
+}
+
+body[data-density="focus"] .week-focus-date {
+  background: var(--plan-navy);
+  color: #ffffff;
+}
+
+body[data-density="focus"] .week-focus-task p,
+body[data-density="focus"] .week-focus-pass p {
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+body[data-density="focus"] .phase-focus-layout,
+body[data-density="focus"] .resource-focus-layout,
+body[data-density="focus"] .review-focus-layout {
+  min-height: 320px;
+}
+
+body[data-density="focus"] .resource-focus-layout {
+  grid-template-columns: minmax(170px, 0.55fr) minmax(0, 1.45fr);
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--plan-line-strong);
+  border-radius: var(--plan-radius);
+}
+
+body[data-density="focus"] .resource-focus-layout > div {
+  border-radius: 0;
+}
+
+body[data-density="focus"] .resource-focus-layout > div:first-child {
+  display: grid;
+  align-content: center;
+  padding: 26px;
+  background: var(--plan-navy);
+}
+
+body[data-density="focus"] .resource-focus-copy,
+body[data-density="focus"] .resource-now-action,
+body[data-density="focus"] .resource-focus-stop,
+body[data-density="focus"] .resource-focus-contract {
+  padding: 20px 24px;
+  border: 0;
+  border-top: 1px solid var(--plan-line);
+  background: #ffffff;
+}
+
+body[data-density="focus"] .resource-focus-copy {
+  border-top: 0;
+}
+
+body[data-density="focus"] .resource-now-action {
+  grid-column: 1 / -1;
+  border-left: 4px solid var(--plan-accent);
+  background: var(--plan-accent-soft);
+}
+
+body[data-density="focus"] .resource-focus-stop,
+body[data-density="focus"] .resource-focus-contract {
+  grid-column: 1 / -1;
+}
+
+.resource-focus-contract {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.resource-focus-contract p {
+  margin: 0;
+  color: var(--plan-text);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.resource-focus-contract strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--plan-accent-strong);
+}
+
+.review-focus-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--plan-line-strong);
+  border-radius: var(--plan-radius);
+}
+
+.review-focus-layout > header,
+.review-focus-action,
+.review-focus-layout > dl,
+.review-focus-layout > footer {
+  padding: 24px 26px;
+}
+
+.review-focus-layout > header {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  background: var(--plan-navy);
+  color: #ffffff;
+}
+
+.review-focus-layout > header span,
+.review-focus-action span {
+  color: #aebbd0;
+  font-size: 12px;
+}
+
+.review-focus-layout > header strong {
+  font-size: 30px;
+}
+
+.review-focus-action {
+  display: grid;
+  align-content: center;
+  background: var(--plan-accent-soft);
+}
+
+.review-focus-action p {
+  margin: 6px 0 0;
+  color: var(--plan-ink);
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.65;
+}
+
+.review-focus-layout > dl {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  background: var(--plan-line);
+}
+
+.review-focus-layout > dl div {
+  padding: 18px 24px;
+  background: #ffffff;
+}
+
+.review-focus-layout dt {
+  color: var(--plan-muted);
+  font-size: 12px;
+}
+
+.review-focus-layout dd {
+  margin: 5px 0 0;
+  color: var(--plan-ink);
+  font-size: 23px;
+  font-weight: 720;
+}
+
+.review-focus-layout > footer {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  border-top: 1px solid var(--plan-line);
+  color: var(--plan-text);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.review-focus-layout > footer strong {
+  color: var(--plan-accent-strong);
+}
+
+/* Balanced: continuous workflow with a compact recording column. */
+body[data-density="balanced"] #today .today-workbench {
+  grid-template-columns: minmax(0, 1.62fr) minmax(330px, 0.78fr);
+  gap: 20px;
+  align-items: start;
+}
+
+body[data-density="balanced"] #today .today-plan-panel {
+  grid-column: 1;
+  grid-row: 1 / span 3;
+}
+
+body[data-density="balanced"] #today .today-entry-panel {
+  grid-column: 2;
+  grid-row: 1;
+  position: sticky;
+  top: 74px;
+}
+
+body[data-density="balanced"] #today .today-review-panel {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+body[data-density="balanced"] #today .task-flow-panel {
+  display: none !important;
+}
+
+body[data-density="balanced"] .operating-balanced,
+body[data-density="balanced"] .science-protocol,
+body[data-density="balanced"] .english-drip-card,
+body[data-density="balanced"] .daily-progress {
+  border-radius: var(--plan-radius);
+  background: var(--plan-surface-soft);
+  background-image: none;
+}
+
+body[data-density="balanced"] .operating-balanced {
+  box-shadow: var(--plan-inner-highlight), var(--plan-shadow);
+}
+
+body[data-density="balanced"] .operating-rail {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--plan-line);
+}
+
+body[data-density="balanced"] .operating-rail article,
+body[data-density="balanced"] .operating-rail article:last-child {
+  grid-column: auto;
+  min-height: 156px;
+  padding: 18px;
+  border: 0;
+  background: #ffffff;
+}
+
+body[data-density="balanced"] .operating-rail article:last-child {
+  grid-column: 1 / -1;
+  min-height: 112px;
+}
+
+body[data-density="balanced"] .daily-plan {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body[data-density="balanced"] :is(.phase-subject-board, .resource-operation-grid) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border-radius: var(--plan-radius);
+  background: var(--plan-line);
+}
+
+body[data-density="balanced"] :is(.phase-subject-board, .resource-operation-grid) article {
+  border-left-color: var(--plan-line);
+  background: #ffffff;
+}
+
+body[data-density="balanced"] :is(.phase-subject-board, .resource-operation-grid) :is(span, em) {
+  font-size: 12px;
+}
+
+body[data-density="balanced"] :is(.phase-subject-board, .resource-operation-grid) strong {
+  font-size: 15px;
+}
+
+body[data-density="balanced"] :is(.phase-subject-board, .resource-operation-grid) p {
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+body[data-density="balanced"] .plan-card.primary-task {
+  border-radius: var(--plan-radius);
+  background: var(--plan-navy);
+  background-image: none;
+}
+
+body[data-density="balanced"] .plan-card:not(.primary-task) {
+  min-height: 230px;
+  border-radius: var(--plan-radius);
+}
+
+body[data-density="balanced"] #week .week-planner {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+body[data-density="balanced"] #week .week-day-card {
+  min-height: 0;
+}
+
+body[data-density="balanced"] #foundation > .content-grid > .panel:nth-child(2) {
+  grid-column: span 8;
+}
+
+body[data-density="balanced"] #foundation > .content-grid > .panel:nth-child(3) {
+  grid-column: span 4;
+}
+
+body[data-density="balanced"] #resources > .content-grid > .panel:nth-child(2) {
+  grid-column: span 8 !important;
+}
+
+body[data-density="balanced"] #resources > .content-grid > .panel:nth-child(3) {
+  grid-column: span 4 !important;
+}
+
+body[data-density="balanced"] #resources .resource-grid,
+body[data-density="balanced"] #resources .resource-protocol-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+body[data-density="balanced"] #resources .resource-protocol-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  width: 100%;
+}
+
+.resource-subject-governance {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 14px;
+  border: 1px solid var(--plan-line);
+  border-radius: var(--plan-radius);
+  background: var(--plan-surface-soft);
+}
+
+.resource-subject-governance p {
+  margin: 0;
+  padding: 14px 16px;
+  border-left: 1px solid var(--plan-line);
+  color: var(--plan-text);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.resource-subject-governance p:first-child {
+  border-left: 0;
+}
+
+.resource-subject-governance strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--plan-accent-strong);
+}
+
+body[data-density="balanced"] #resources .resource-progress-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 14px 0;
+}
+
+body[data-density="balanced"] #resources .resource-progress-row input {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100%;
+}
+
+.review-operations-layout,
+.review-diagnostic-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.review-operations-layout > header,
+.review-diagnostic-layout > header,
+.oversight-roadmap > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--plan-accent);
+}
+
+.review-operations-layout header span,
+.review-diagnostic-layout header span,
+.oversight-roadmap header span {
+  color: var(--plan-muted);
+  font-size: 12px;
+}
+
+.review-operations-layout h3,
+.review-diagnostic-layout h3 {
+  margin: 4px 0 0;
+  color: var(--plan-ink);
+  font-size: 24px;
+}
+
+.review-operations-layout header > strong,
+.review-diagnostic-layout header > strong {
+  color: var(--plan-accent-strong);
+}
+
+.review-operation-grid,
+.review-diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--plan-line);
+  border-radius: var(--plan-radius);
+  overflow: hidden;
+}
+
+.review-operation-grid article,
+.review-diagnostic-grid article {
+  padding: 18px;
+  border-left: 1px solid var(--plan-line);
+  background: #ffffff;
+}
+
+.review-operation-grid article:first-child,
+.review-diagnostic-grid article:first-child {
+  border-left: 0;
+}
+
+.review-operation-grid span,
+.review-diagnostic-grid span {
+  color: var(--plan-accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.review-operation-grid strong,
+.review-diagnostic-grid strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--plan-ink);
+  font-size: 23px;
+}
+
+.review-operation-grid p,
+.review-diagnostic-grid p {
+  margin: 8px 0 0;
+  color: var(--plan-text);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.review-operations-layout > footer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px 16px;
+  border-left: 4px solid var(--plan-accent);
+  background: var(--plan-accent-soft);
+  color: var(--plan-text);
+}
+
+body[data-density="balanced"] #review > .content-grid > .review-command-panel,
+body[data-density="balanced"] #review > .content-grid > .panel:nth-child(4) {
+  grid-column: 1 / -1 !important;
+}
+
+body[data-density="balanced"] #review > .content-grid > .panel:nth-child(2) {
+  grid-column: span 8 !important;
+}
+
+body[data-density="balanced"] #review > .content-grid > .panel:nth-child(3) {
+  grid-column: span 4 !important;
+}
+
+/* Detail: audit views remain complete but are filtered into readable slices. */
+body[data-density="detail"] #today .today-workbench {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body[data-density="detail"] #today .today-plan-panel,
+body[data-density="detail"] #today .today-review-panel,
+body[data-density="detail"] #today .today-detail-panel,
+body[data-density="detail"] #today .today-reviewlog-panel {
+  grid-column: 1;
+  grid-row: auto;
+}
+
+body[data-density="detail"] #today .today-entry-panel,
+body[data-density="detail"] #today .task-flow-panel {
+  display: none !important;
+}
+
+body[data-density="detail"] .operating-detail,
+body[data-density="detail"] .startup-today-strip,
+body[data-density="detail"] .plan-card,
+body[data-density="detail"] .plan-card.primary-task {
+  border-radius: var(--plan-radius);
+  background-image: none;
+}
+
+body[data-density="detail"] .operating-table article {
+  grid-template-columns: 150px minmax(0, 1.2fr) minmax(0, 0.9fr);
+}
+
+body[data-density="detail"] .plan-diagnostic-grid span,
+body[data-density="detail"] .resource-stage-row span,
+body[data-density="detail"] .phase-file span {
+  font-size: 12px;
+}
+
+body[data-density="detail"] .plan-diagnostic-grid p,
+body[data-density="detail"] .plan-diagnostic-grid li,
+body[data-density="detail"] .resource-stage-row p,
+body[data-density="detail"] .resource-stage-row dd,
+body[data-density="detail"] .phase-file p,
+body[data-density="detail"] .phase-file dd {
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.startup-week-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.startup-week-tabs button {
+  min-height: 58px;
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--plan-line);
+  border-radius: 6px;
+  background: var(--plan-surface-soft);
+  color: var(--plan-text);
+  text-align: left;
+}
+
+.startup-week-tabs button.active,
+.startup-week-tabs button[aria-pressed="true"] {
+  border-color: var(--plan-accent);
+  background: var(--plan-accent-soft);
+  color: var(--plan-accent-strong);
+}
+
+.startup-week-tabs span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.startup-week-tabs small {
+  color: var(--plan-muted);
+  font-size: 12px;
+}
+
+body[data-density="detail"] .startup-week {
+  border: 1px solid var(--plan-line);
+  border-radius: var(--plan-radius);
+  overflow: hidden;
+}
+
+body[data-density="detail"] .startup-day-row {
+  grid-template-columns: 120px minmax(0, 1.6fr) minmax(260px, 0.8fr);
+}
+
+body[data-density="detail"] .startup-day-tasks p {
+  grid-template-columns: 105px minmax(0, 1fr) minmax(180px, 0.65fr);
+  gap: 12px;
+}
+
+.resource-dossier-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--plan-line);
+  border-radius: var(--plan-radius);
+  background: var(--plan-surface-soft);
+}
+
+.resource-dossier-toolbar > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.resource-dossier-toolbar span {
+  color: var(--plan-muted);
+  font-size: 12px;
+}
+
+.resource-dossier-toolbar strong {
+  color: var(--plan-ink);
+  font-size: 18px;
+}
+
+.resource-dossier-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--plan-line);
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.resource-dossier-tabs button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--plan-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.resource-dossier-tabs button.active,
+.resource-dossier-tabs button[aria-pressed="true"] {
+  background: var(--plan-navy);
+  color: #ffffff;
+}
+
+.resource-governance-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.resource-governance-summary article {
+  padding: 15px 16px;
+  border: 1px solid var(--plan-line);
+  border-radius: var(--plan-radius);
+  background: #ffffff;
+}
+
+.resource-governance-summary span,
+.resource-stage-evidence span {
+  color: var(--plan-accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.resource-governance-summary p {
+  margin: 6px 0 0;
+  color: var(--plan-text);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+body[data-density="detail"] .resource-stage-table {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  background: transparent;
+}
+
+body[data-density="detail"] .resource-stage-table .resource-stage-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--plan-line);
+  border-radius: var(--plan-radius);
+  background: #ffffff;
+}
+
+.resource-stage-identity,
+.resource-stage-core,
+.resource-stage-evidence {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 16px;
+  border-left: 1px solid var(--plan-line);
+}
+
+.resource-stage-identity {
+  border-left: 0;
+  background: var(--plan-surface-soft);
+}
+
+.resource-stage-identity strong,
+.resource-stage-core > strong {
+  color: var(--plan-accent-strong);
+  font-size: 15px;
+}
+
+.resource-stage-control {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--plan-line);
+}
+
+.resource-stage-control summary {
+  padding: 11px 16px;
+  color: var(--plan-accent-strong);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.resource-stage-control dl {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--plan-line);
+}
+
+.resource-stage-control dl > div {
+  padding: 13px 14px;
+  border-left: 1px solid var(--plan-line);
+}
+
+.resource-stage-control dl > div:first-child {
+  border-left: 0;
+}
+
+.resource-stage-control dt {
+  color: var(--plan-accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.resource-stage-control dd {
+  margin: 5px 0 0;
+  color: var(--plan-text);
+}
+
+.resource-governance-rules {
+  margin-top: 14px;
+  border: 1px solid var(--plan-line);
+  border-radius: var(--plan-radius);
+  background: #ffffff;
+}
+
+.resource-governance-rules summary {
+  padding: 14px 16px;
+  color: var(--plan-ink);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.resource-governance-rules > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  border-top: 1px solid var(--plan-line);
+  background: var(--plan-line);
+}
+
+.resource-governance-rules article {
+  padding: 14px 16px;
+  background: #ffffff;
+}
+
+.resource-governance-rules p {
+  margin: 5px 0 0;
+  color: var(--plan-text);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+body[data-density="detail"] #resources > .content-grid > .panel:nth-child(4),
+body[data-density="detail"] #resources > .content-grid > .panel:nth-child(5) {
+  grid-column: 1 / -1 !important;
+}
+
+body[data-density="detail"] #review > .content-grid > .panel:nth-child(n) {
+  grid-column: 1 / -1 !important;
+}
+
+.plan-correction-list {
+  display: grid;
+  gap: 8px;
+}
+
+.plan-correction-list article {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  border: 1px solid var(--plan-line);
+  border-radius: var(--plan-radius);
+  overflow: hidden;
+}
+
+.plan-correction-list article > span {
+  display: grid;
+  place-items: center;
+  background: var(--plan-navy);
+  color: #ffffff;
+  font-family: var(--workspace-mono);
+  font-size: 12px;
+}
+
+.plan-correction-list article > div {
+  padding: 14px 16px;
+}
+
+.plan-correction-list strong {
+  color: var(--plan-ink);
+  font-size: 14px;
+}
+
+.plan-correction-list p,
+.plan-correction-list em {
+  display: block;
+  margin: 5px 0 0;
+  color: var(--plan-text);
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.65;
+}
+
+.plan-correction-list em {
+  color: var(--plan-accent-strong);
+}
+
+.oversight-roadmap {
+  margin-top: 26px;
+}
+
+.oversight-roadmap > header p {
+  max-width: 64ch;
+  margin: 0;
+  color: var(--plan-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.oversight-roadmap > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.oversight-roadmap article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 10px;
+  padding: 16px;
+  border: 1px solid var(--plan-line);
+  border-radius: var(--plan-radius);
+  background: var(--plan-surface-soft);
+}
+
+.oversight-roadmap article > span {
+  grid-row: 1 / span 3;
+  color: var(--plan-accent-strong);
+  font-family: var(--workspace-mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.oversight-roadmap article strong {
+  color: var(--plan-ink);
+}
+
+.oversight-roadmap article p,
+.oversight-roadmap article em {
+  margin: 0;
+  color: var(--plan-text);
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.6;
+}
+
+.oversight-roadmap article em {
+  color: var(--plan-muted);
+}
+
+@media (max-width: 1180px) {
+  body[data-density="balanced"] #today .today-workbench,
+  body[data-density="balanced"] #foundation > .content-grid,
+  body[data-density="balanced"] #resources > .content-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-density="balanced"] #today .today-plan-panel,
+  body[data-density="balanced"] #today .today-entry-panel,
+  body[data-density="balanced"] #today .today-review-panel,
+  body[data-density="balanced"] #foundation > .content-grid > .panel:nth-child(n),
+  body[data-density="balanced"] #resources > .content-grid > .panel:nth-child(n) {
+    grid-column: 1 !important;
+    grid-row: auto;
+  }
+
+  body[data-density="balanced"] #today .today-entry-panel {
+    position: static;
+  }
+
+  .review-operation-grid,
+  .review-diagnostic-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .review-operation-grid article:nth-child(3),
+  .review-diagnostic-grid article:nth-child(3) {
+    border-top: 1px solid var(--plan-line);
+    border-left: 0;
+  }
+
+  .review-operation-grid article:nth-child(4),
+  .review-diagnostic-grid article:nth-child(4) {
+    border-top: 1px solid var(--plan-line);
+  }
+
+  .resource-stage-control dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .resource-stage-control dl > div:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .resource-stage-control dl > div:nth-child(n + 3) {
+    border-top: 1px solid var(--plan-line);
+  }
+}
+
+@media (max-width: 900px) {
+  body[data-density] :is(#week, #foundation, #review, #resources) > .content-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body[data-density="balanced"] :is(.phase-subject-board, .resource-operation-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body[data-density="focus"] #dashboard.view.active {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-density="focus"] #dashboard > :is(.command-panel, .focus-board, .target-lane, .metric-grid) {
+    grid-column: 1;
+  }
+
+  body[data-density="focus"] #dashboard > .focus-board {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+  }
+
+  body[data-density="focus"] #dashboard > .focus-board > .focus-primary,
+  body[data-density="focus"] #dashboard > .focus-board > .focus-card:nth-child(2) {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  body[data-density] :is(#week, #foundation, #review, #resources) > .content-grid > .panel {
+    grid-column: 1 !important;
+  }
+
+  body[data-density="focus"] #week .week-command-panel,
+  body[data-density="focus"] #resources .resource-command-panel,
+  body[data-density="focus"] #foundation .phase-command-panel,
+  body[data-density="focus"] #review .review-command-panel {
+    min-height: 0;
+    align-content: start;
+  }
+
+  body[data-density="focus"] .week-focus-slice,
+  body[data-density="focus"] .resource-focus-layout,
+  .review-focus-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-density="focus"] .week-focus-slice > div,
+  body[data-density="focus"] .resource-focus-layout > div,
+  .review-focus-layout > * {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  body[data-density="balanced"] #week .week-planner,
+  .resource-subject-governance,
+  .resource-governance-summary,
+  .oversight-roadmap > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .resource-subject-governance p,
+  .resource-subject-governance p:first-child {
+    border-top: 1px solid var(--plan-line);
+    border-left: 0;
+  }
+
+  .resource-subject-governance p:first-child {
+    border-top: 0;
+  }
+
+  body[data-density="detail"] .resource-stage-table .resource-stage-row,
+  body[data-density="detail"] .startup-day-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .resource-stage-identity,
+  .resource-stage-core,
+  .resource-stage-evidence {
+    border-top: 1px solid var(--plan-line);
+    border-left: 0;
+  }
+
+  .resource-stage-identity {
+    border-top: 0;
+  }
+
+  .resource-dossier-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .resource-dossier-tabs {
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 620px) {
+  body[data-density] {
+    --density-panel-padding: 18px;
+    --density-heading-size: 20px;
+    --density-copy-size: 14px;
+  }
+
+  body[data-density] .view {
+    padding-inline: 10px;
+    padding-bottom: 96px;
+  }
+
+  body[data-density="focus"] #today .today-plan-panel {
+    min-height: 0;
+  }
+
+  body[data-density="focus"] .operating-focus {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-density="focus"] .operating-focus > div,
+  body[data-density="focus"] .operating-focus > p,
+  body[data-density="focus"] .operating-focus > em {
+    grid-column: 1;
+    grid-row: auto;
+    min-height: 0;
+    padding: 18px;
+  }
+
+  body[data-density="focus"] .operating-focus > div strong {
+    font-size: 25px;
+  }
+
+  body[data-density="focus"] .operating-focus > p {
+    font-size: 15px;
+  }
+
+  body[data-density="focus"] .daily-plan .plan-card.primary-task {
+    min-height: 0;
+    grid-template-columns: 36px minmax(0, 1fr);
+    padding: 18px;
+  }
+
+  body[data-density="balanced"] .daily-plan {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-density="balanced"] .daily-plan .plan-card,
+  body[data-density="balanced"] .daily-plan .plan-card.primary-task,
+  body[data-density="balanced"] .daily-plan .plan-card:not(.primary-task) {
+    grid-column: 1;
+    min-height: 0;
+  }
+
+  body[data-density="balanced"] :is(.phase-subject-board, .resource-operation-grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-density="detail"] #dashboard .secondary-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-density="detail"] #dashboard .secondary-metrics .metric-card {
+    min-height: 0;
+    border-right: 0;
+    border-top: 1px solid var(--plan-line);
+  }
+
+  body[data-density="detail"] #dashboard .secondary-metrics .metric-card:first-child {
+    border-top: 0;
+  }
+
+  body[data-density="balanced"] .operating-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-density="balanced"] .operating-rail article,
+  body[data-density="balanced"] .operating-rail article:last-child {
+    grid-column: 1;
+    min-height: 0;
+    padding: 16px 18px;
+  }
+
+  body[data-density="balanced"] #resources .resource-protocol-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-density="focus"] .week-focus-slice > div,
+  .review-focus-layout > header,
+  .review-focus-action,
+  .review-focus-layout > footer {
+    padding: 18px;
+  }
+
+  .review-focus-layout > dl,
+  .review-operation-grid,
+  .review-diagnostic-grid,
+  .resource-focus-contract,
+  .startup-week-tabs,
+  .resource-stage-control dl,
+  .resource-governance-rules > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .review-focus-layout > dl div,
+  .review-operation-grid article,
+  .review-diagnostic-grid article,
+  .resource-stage-control dl > div {
+    border-top: 1px solid var(--plan-line);
+    border-left: 0;
+  }
+
+  .review-focus-layout > dl div:first-child,
+  .review-operation-grid article:first-child,
+  .review-diagnostic-grid article:first-child,
+  .resource-stage-control dl > div:first-child {
+    border-top: 0;
+  }
+
+  .review-focus-layout > footer,
+  .review-operations-layout > footer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .review-operations-layout > header,
+  .review-diagnostic-layout > header,
+  .oversight-roadmap > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .startup-week-tabs {
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scroll-snap-type: x mandatory;
+  }
+
+  .startup-week-tabs button {
+    min-width: 142px;
+    scroll-snap-align: start;
+  }
+
+  body[data-density="detail"] .startup-day-tasks p {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .resource-dossier-tabs button {
+    min-width: 72px;
+  }
+
+  .plan-correction-list article {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .oversight-roadmap article {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .oversight-roadmap article > span {
+    grid-row: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .startup-week-tabs button,
+  .resource-dossier-tabs button {
+    transition: none;
+  }
+}

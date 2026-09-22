@@ -1,17 +1,19 @@
-import { createClient } from "@supabase/supabase-js";
+import {
+  CLEAN_START_VERSION,
+  DEFAULT_EXAM_DATE as DEFAULT_TARGET_EXAM_DATE,
+  DELETED_TYPES,
+  PLAN_LOGIC_VERSION,
+  PLAN_START_DATE
+} from "../config/app-config.js";
+import { getSyncConflictKey } from "./sync-contract.js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
-const PLAN_LOGIC_VERSION = "3.7-jun15-clean-start-2026-06-15";
-const PLAN_START_DATE = "2026-06-15";
-const CLEAN_START_VERSION = "2026-06-15-from-zero-v1";
-const DELETED_TYPES = ["records", "scores", "tasks", "reviews"];
-const DEFAULT_TARGET_EXAM_DATE = "2027-12-25";
 const DEFAULT_REVIEW_DAYS = [1, 3, 7, 14, 30];
 const DEFAULT_RETRO_TIME = "22:00";
 const DEFAULT_PROFILE_NUMBERS = {
-  weekdayMinutes: 120,
-  weekendMinutes: 210,
+  weekdayMinutes: 180,
+  weekendMinutes: 300,
   taskCount: 3,
   coreRatio: 65
 };
@@ -32,7 +34,37 @@ const DEFAULT_PLAN_CONTROLS = {
 };
 
 export const supabaseConfigured = Boolean(supabaseUrl && supabaseKey);
-export const supabase = supabaseConfigured ? createClient(supabaseUrl, supabaseKey) : null;
+export let supabase = null;
+let supabaseClientPromise = null;
+
+async function getSupabaseClient() {
+  if (!supabaseConfigured) return null;
+  if (supabase) return supabase;
+  if (!supabaseClientPromise) {
+    supabaseClientPromise = import("@supabase/supabase-js")
+      .then(({ createClient }) => {
+        supabase = createClient(supabaseUrl, supabaseKey);
+        return supabase;
+      })
+      .catch((error) => {
+        supabaseClientPromise = null;
+        throw error;
+      });
+  }
+  return supabaseClientPromise;
+}
+
+export function hasPersistedCloudSession(storage) {
+  if (!supabaseConfigured) return false;
+  try {
+    const targetStorage = storage || globalThis.localStorage;
+    if (!targetStorage) return false;
+    const projectRef = new URL(supabaseUrl).hostname.split(".")[0];
+    return Boolean(projectRef && targetStorage.getItem(`sb-${projectRef}-auth-token`));
+  } catch {
+    return false;
+  }
+}
 
 function normalizeRatio(value) {
   const number = Number(value);
@@ -550,9 +582,10 @@ function deletedTombstoneBatches(ids = [], type, deletedMeta = {}, fallbackISO) 
 }
 
 export async function getCurrentUser() {
-  if (!supabase) return null;
+  const client = await getSupabaseClient();
+  if (!client) return null;
   try {
-    const { data, error } = await supabase.auth.getUser();
+    const { data, error } = await client.auth.getUser();
     if (error) return null;
     return data?.user || null;
   } catch {
@@ -560,9 +593,28 @@ export async function getCurrentUser() {
   }
 }
 
+/**
+ * Read the locally persisted session first. This keeps startup and auth
+ * redirects reliable without requiring an extra user lookup round trip.
+ */
+export async function getCurrentSession() {
+  const client = await getSupabaseClient();
+  if (!client?.auth) return { user: null, session: null };
+  if (typeof client.auth.getSession === "function") {
+    const { data, error } = await client.auth.getSession();
+    if (error) throw error;
+    return {
+      user: data?.session?.user || null,
+      session: data?.session || null
+    };
+  }
+  return { user: await getCurrentUser(), session: null };
+}
+
 export async function signInWithEmail(email, password) {
-  if (!supabase) throw new Error("Supabase is not configured.");
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const client = await getSupabaseClient();
+  if (!client) throw new Error("Supabase is not configured.");
+  const { data, error } = await client.auth.signInWithPassword({ email, password });
   if (error) throw error;
   return {
     user: data.user,
@@ -571,9 +623,10 @@ export async function signInWithEmail(email, password) {
 }
 
 export async function signUpWithEmail(email, password) {
-  if (!supabase) throw new Error("Supabase is not configured.");
+  const client = await getSupabaseClient();
+  if (!client) throw new Error("Supabase is not configured.");
   const redirectTo = typeof window === "undefined" ? undefined : window.location.origin;
-  const { data, error } = await supabase.auth.signUp({
+  const { data, error } = await client.auth.signUp({
     email,
     password,
     options: redirectTo ? { emailRedirectTo: redirectTo } : undefined
@@ -587,32 +640,44 @@ export async function signUpWithEmail(email, password) {
 }
 
 export async function signOut() {
-  if (!supabase) return;
-  const { error } = await supabase.auth.signOut();
+  const client = await getSupabaseClient();
+  if (!client) return;
+  const { error } = await client.auth.signOut();
   if (error) throw error;
 }
 
 export function onAuthChange(callback) {
-  if (!supabase || typeof callback !== "function") return () => {};
+  if (!supabaseConfigured || typeof callback !== "function") return () => {};
 
   let subscription = null;
-  try {
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      try {
-        const result = callback(session?.user || null);
-        if (result && typeof result.catch === "function") {
-          result.catch(() => {});
+  let active = true;
+  const subscribe = (client) => {
+    if (!active || !client) return;
+    try {
+      const { data } = client.auth.onAuthStateChange((_event, session) => {
+        try {
+          const result = callback(session?.user || null);
+          if (result && typeof result.catch === "function") {
+            result.catch(() => {});
+          }
+        } catch {
+          // Auth listeners should not break Supabase internals or later listeners.
         }
-      } catch {
-        // Auth listeners should not break Supabase internals or later listeners.
-      }
-    });
-    subscription = data?.subscription || null;
-  } catch {
-    return () => {};
+      });
+      subscription = data?.subscription || null;
+    } catch {
+      subscription = null;
+    }
+  };
+
+  if (supabase) {
+    subscribe(supabase);
+  } else {
+    getSupabaseClient().then(subscribe).catch(() => {});
   }
 
   return () => {
+    active = false;
     try {
       subscription?.unsubscribe?.();
     } catch {
@@ -1051,7 +1116,7 @@ export async function saveCloudState(state, options = {}) {
   const deletedTaskBatches = deletedTombstoneBatches(deletedTasks, "tasks", deletedMeta, now);
   const deletedReviewBatches = deletedTombstoneBatches(deletedReviews, "reviews", deletedMeta, now);
   const operations = [
-    ["profiles", supabase.from("profiles").upsert(profile, { onConflict: "user_id" })]
+    ["profiles", supabase.from("profiles").upsert(profile, { onConflict: getSyncConflictKey("profiles") })]
   ];
   operations.push(["daily_records.cleanStart", supabase.from("daily_records").delete().eq("user_id", user.id).lt("study_date", PLAN_START_DATE)]);
   operations.push(["study_tasks.cleanStart", supabase.from("study_tasks").update({ deleted_at: now, updated_at: now }).eq("user_id", user.id).lt("task_date", PLAN_START_DATE).is("deleted_at", null)]);
@@ -1061,12 +1126,12 @@ export async function saveCloudState(state, options = {}) {
     const cleanStartAppliedAt = asTimestamp(settingsState.cleanStartAppliedAt) || now;
     operations.push(["topic_progress.cleanStart", supabase.from("topic_progress").delete().eq("user_id", user.id).lt("updated_at", cleanStartAppliedAt)]);
   }
-  if (records.length) operations.push(["daily_records", supabase.from("daily_records").upsert(records, { onConflict: "user_id,study_date" })]);
-  if (tasks.length) operations.push(["study_tasks", supabase.from("study_tasks").upsert(tasks, { onConflict: "user_id,id" })]);
-  if (reviews.length) operations.push(["review_items", supabase.from("review_items").upsert(reviews, { onConflict: "user_id,id" })]);
-  if (topics.length) operations.push(["topic_progress", supabase.from("topic_progress").upsert(topics, { onConflict: "user_id,topic_id" })]);
-  if (scores.length) operations.push(["mock_scores", supabase.from("mock_scores").upsert(scores, { onConflict: "user_id,id" })]);
-  if (resources.length) operations.push(["resources", supabase.from("resources").upsert(resources, { onConflict: "user_id,resource_key" })]);
+  if (records.length) operations.push(["daily_records", supabase.from("daily_records").upsert(records, { onConflict: getSyncConflictKey("daily_records") })]);
+  if (tasks.length) operations.push(["study_tasks", supabase.from("study_tasks").upsert(tasks, { onConflict: getSyncConflictKey("study_tasks") })]);
+  if (reviews.length) operations.push(["review_items", supabase.from("review_items").upsert(reviews, { onConflict: getSyncConflictKey("review_items") })]);
+  if (topics.length) operations.push(["topic_progress", supabase.from("topic_progress").upsert(topics, { onConflict: getSyncConflictKey("topic_progress") })]);
+  if (scores.length) operations.push(["mock_scores", supabase.from("mock_scores").upsert(scores, { onConflict: getSyncConflictKey("mock_scores") })]);
+  if (resources.length) operations.push(["resources", supabase.from("resources").upsert(resources, { onConflict: getSyncConflictKey("resources") })]);
   deletedRecordBatches.forEach((batch) => {
     operations.push(["daily_records.delete", supabase.from("daily_records").delete().eq("user_id", user.id).in("study_date", batch.ids).lte("updated_at", batch.deletedAt)]);
   });
