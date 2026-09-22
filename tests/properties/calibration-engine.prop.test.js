@@ -3,7 +3,6 @@ import { test, fc } from '@fast-check/vitest';
 import {
   calibrate,
   getCheckpointThreshold,
-  generateTierFallback,
 } from '../../src/domain/calibration-engine.js';
 
 /**

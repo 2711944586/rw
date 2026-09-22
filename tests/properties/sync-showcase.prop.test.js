@@ -1,35 +1,16 @@
-import { describe, expect } from 'vitest';
+import { afterEach, beforeEach, describe, expect, vi } from 'vitest';
 import { test, fc } from '@fast-check/vitest';
 import {
   desensitizeData,
   validateShowcaseItem
 } from '../../src/domain/project-showcase.js';
+import { pushDirtyRecords, resolveConflict } from '../../src/infrastructure/sync-service.js';
+import { OfflineCache } from '../../src/infrastructure/offline-cache.js';
 
-// ─── Sync Helpers (inline pure functions since sync-service doesn't exist yet) ───
-
-/**
- * Last-write-wins conflict resolution.
- * Given two records with updated_at timestamps, the later one wins.
- */
-function resolveConflict(local, remote) {
-  const localTime = new Date(local.updated_at).getTime();
-  const remoteTime = new Date(remote.updated_at).getTime();
-  if (localTime >= remoteTime) {
-    return { winner: local, archived: remote };
-  }
-  return { winner: remote, archived: local };
-}
-
-/**
- * When sync fails, dirty records remain marked.
- * Returns the dirty set unchanged on error.
- */
-function syncWithErrorPreservesDirty(dirtyIds, syncError) {
-  if (syncError) {
-    return [...dirtyIds];
-  }
-  return [];
-}
+// Sync properties below run against the real sync-service implementation.
+// Earlier revisions of this file inlined local copies of resolveConflict and
+// "sync error preserves dirty" helpers and asserted against those copies,
+// which proved nothing about shipped code.
 
 // ─── Property 26: Sync conflict resolution — last write wins ───
 
@@ -38,7 +19,9 @@ function syncWithErrorPreservesDirty(dirtyIds, syncError) {
  * **Validates: Requirements 8.3**
  *
  * For any two records with different updated_at, the one with the later
- * timestamp wins.
+ * timestamp wins and the other is returned as the loser. Ties, and a local
+ * record whose updated_at cannot be parsed, resolve in favour of remote
+ * (server authority).
  */
 describe('Property 26: Sync conflict resolution — last write wins', () => {
   // Use integer timestamps to avoid Invalid Date issues
@@ -60,17 +43,17 @@ describe('Property 26: Sync conflict resolution — last write wins', () => {
       // Ensure they have different timestamps
       fc.pre(local.updated_at !== remote.updated_at);
 
-      const { winner, archived } = resolveConflict(local, remote);
+      const { winner, loser } = resolveConflict(local, remote);
 
       const localTime = new Date(local.updated_at).getTime();
       const remoteTime = new Date(remote.updated_at).getTime();
 
       if (localTime > remoteTime) {
-        expect(winner).toEqual(local);
-        expect(archived).toEqual(remote);
+        expect(winner).toBe(local);
+        expect(loser).toBe(remote);
       } else {
-        expect(winner).toEqual(remote);
-        expect(archived).toEqual(local);
+        expect(winner).toBe(remote);
+        expect(loser).toBe(local);
       }
     }
   );
@@ -78,7 +61,7 @@ describe('Property 26: Sync conflict resolution — last write wins', () => {
   const arbTimestampMs = fc.integer({ min: minTs, max: maxTs - 86400000 * 365 });
 
   test.prop([arbRecord, arbTimestampMs, fc.nat({ max: 86400000 * 365 })])(
-    'winner always has a timestamp >= archived timestamp',
+    'winner always has a timestamp >= loser timestamp',
     (baseRecord, baseTimestampMs, offsetMs) => {
       fc.pre(offsetMs > 0);
       const baseDate = new Date(baseTimestampMs);
@@ -88,10 +71,40 @@ describe('Property 26: Sync conflict resolution — last write wins', () => {
       const local = { ...baseRecord, updated_at: earlier };
       const remote = { ...baseRecord, id: baseRecord.id + '_r', updated_at: later };
 
-      const { winner, archived } = resolveConflict(local, remote);
+      const { winner, loser } = resolveConflict(local, remote);
+      expect(winner).toBe(remote);
+      expect(loser).toBe(local);
       expect(new Date(winner.updated_at).getTime()).toBeGreaterThanOrEqual(
-        new Date(archived.updated_at).getTime()
+        new Date(loser.updated_at).getTime()
       );
+    }
+  );
+
+  test.prop([arbRecord])(
+    'identical timestamps are a tie and remote wins by server authority',
+    (baseRecord) => {
+      const local = { ...baseRecord };
+      const remote = { ...baseRecord, id: `${baseRecord.id}_remote` };
+
+      const { winner, loser } = resolveConflict(local, remote);
+
+      expect(winner).toBe(remote);
+      expect(loser).toBe(local);
+    }
+  );
+
+  test.prop([
+    arbRecord,
+    fc.constantFrom(undefined, null, '', 'not-a-date', '2026-13-45T99:99:99Z')
+  ])(
+    'an unparseable local updated_at hands the win to remote',
+    (remoteRecord, brokenTimestamp) => {
+      const local = { ...remoteRecord, updated_at: brokenTimestamp };
+
+      const { winner, loser } = resolveConflict(local, remoteRecord);
+
+      expect(winner).toBe(remoteRecord);
+      expect(loser).toBe(local);
     }
   );
 });
@@ -102,42 +115,101 @@ describe('Property 26: Sync conflict resolution — last write wins', () => {
  * Property 27: Sync error preserves dirty state
  * **Validates: Requirements 8.8**
  *
- * When sync fails, dirty records remain marked (the dirty set is unchanged).
+ * When a push fails, dirty records remain marked. These properties drive the
+ * real pushDirtyRecords(): a failure must report the affected records as
+ * failed, must not report any of them as synced, and must not call
+ * OfflineCache.clearDirty — the only place a dirty flag is cleared — so every
+ * queued record survives for the next attempt.
+ *
+ * Scope: covers the failure paths reachable without a live Supabase session
+ * (entries that fail normalization, and a non-array payload). The
+ * not-configured / not-authenticated / upsert-error paths need a configured
+ * client; extend this block once the sync service is wired into production.
  */
 describe('Property 27: Sync error preserves dirty state', () => {
-  const arbDirtyIds = fc.array(fc.string({ minLength: 1 }), {
-    minLength: 1,
-    maxLength: 50
+  let clearDirty;
+
+  beforeEach(() => {
+    OfflineCache.clear();
+    clearDirty = vi.spyOn(OfflineCache, 'clearDirty');
   });
 
-  test.prop([arbDirtyIds])(
-    'dirty IDs remain unchanged after sync error',
-    (dirtyIds) => {
-      const result = syncWithErrorPreservesDirty(dirtyIds, new Error('Network failure'));
-      expect(result).toEqual(dirtyIds);
-      expect(result.length).toBe(dirtyIds.length);
+  afterEach(() => {
+    clearDirty.mockRestore();
+  });
+
+  // Entries pushDirtyRecords can never normalize into a valid push: not a
+  // plain object, unknown/blank table, blank id, or a record that fails the
+  // JSON clone.
+  const arbInvalidEntry = fc.oneof(
+    fc.constantFrom(undefined, null, true, 42, 'not-an-object', []),
+    fc.record({
+      table: fc.constantFrom('', '   ', 'not_a_table'),
+      id: fc.string({ minLength: 1 }),
+      record: fc.constant({})
+    }),
+    fc.record({
+      table: fc.constantFrom('daily_records', 'study_tasks'),
+      id: fc.constantFrom('', '   '),
+      record: fc.constant({})
+    }),
+    fc.record({
+      table: fc.constantFrom('daily_records', 'study_tasks'),
+      id: fc.string({ minLength: 1 }),
+      record: fc.constantFrom(null, 'text', 42, [])
+    })
+  );
+
+  test.prop([fc.array(arbInvalidEntry, { minLength: 1, maxLength: 20 })])(
+    'dirty records stay queued after a failed push',
+    async (entries) => {
+      // Seed a real dirty record. setDirty() reports false when localStorage is
+      // unavailable (as in this Node test env), so assert on the queue itself.
+      OfflineCache.setDirty('study_tasks', 'task-dirty-1', {
+        id: 'task-dirty-1',
+        note: 'unsynced local edit'
+      });
+      const queuedBefore = OfflineCache.getDirtyRecords();
+      expect(queuedBefore).toHaveLength(1);
+
+      const result = await pushDirtyRecords(entries);
+
+      expect(result.success).toBe(false);
+      expect(result.synced).toEqual([]);
+      expect(result.failed).toHaveLength(entries.length);
+      expect(result.error).toBeTruthy();
+      expect(result.localSaved).toBe(true);
+      expect(clearDirty).not.toHaveBeenCalled();
+      expect(OfflineCache.getDirtyRecords()).toEqual(queuedBefore);
     }
   );
 
-  test.prop([arbDirtyIds])(
-    'dirty set length is preserved on error',
-    (dirtyIds) => {
-      const result = syncWithErrorPreservesDirty(dirtyIds, { code: 'RLS_REJECTED' });
-      expect(result.length).toBe(dirtyIds.length);
-      // Every original ID is still present
-      for (const id of dirtyIds) {
-        expect(result).toContain(id);
-      }
+  test.prop([fc.constantFrom(null, undefined, 42, 'records', { table: 'study_tasks' })])(
+    'a non-array payload fails as one invalid key and clears nothing',
+    async (payload) => {
+      OfflineCache.setDirty('review_items', 'item-dirty-1', { id: 'item-dirty-1' });
+      const queuedBefore = OfflineCache.getDirtyRecords();
+
+      const result = await pushDirtyRecords(payload);
+
+      expect(result.success).toBe(false);
+      expect(result.synced).toEqual([]);
+      expect(result.failed).toEqual(['invalid_table:invalid_id']);
+      expect(clearDirty).not.toHaveBeenCalled();
+      expect(OfflineCache.getDirtyRecords()).toEqual(queuedBefore);
     }
   );
 
-  test.prop([arbDirtyIds])(
-    'on success (no error), dirty set is cleared',
-    (dirtyIds) => {
-      const result = syncWithErrorPreservesDirty(dirtyIds, null);
-      expect(result.length).toBe(0);
-    }
-  );
+  test('a push with nothing to send clears no dirty flags', async () => {
+    OfflineCache.setDirty('mock_scores', 'score-dirty-1', { id: 'score-dirty-1' });
+    const queuedBefore = OfflineCache.getDirtyRecords();
+
+    const result = await pushDirtyRecords([]);
+
+    expect(result).toEqual({ success: true, synced: [], failed: [], localSaved: true });
+    expect(clearDirty).not.toHaveBeenCalled();
+    expect(OfflineCache.getDirtyRecords()).toEqual(queuedBefore);
+  });
 });
 
 // ─── Property 28: Showcase data desensitization ───

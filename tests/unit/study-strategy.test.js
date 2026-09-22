@@ -77,7 +77,7 @@ describe('study-strategy', () => {
 
   it('falls back for prototype-like phase keys and syllabus keys', () => {
     const phase = getPhaseStrategy('constructor', 'constructor');
-    expect(phase.label).toBe('启动与补前置');
+    expect(phase.label).toBe('启动与负荷校准');
     expect(phase.trackText).toBe('');
     expect(getPhaseStrategy('A', { bad: true }).trackText).toBe('');
     expect(getSyllabusFramework('constructor')).toEqual([]);

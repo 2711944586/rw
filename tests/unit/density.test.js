@@ -1,10 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EventBus, EVENTS } from '../../src/core/event-bus.js';
-import { StateManager } from '../../src/core/state-manager.js';
-import { applyDensityMode, getDensityMode, initDensityMode, setDensityMode } from '../../src/density.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { applyDensityMode, densityModeMeta, normalizeDensityMode } from '../../src/ui/density-controller.js';
 
 describe('density mode utility', () => {
   beforeEach(() => {
@@ -14,14 +12,13 @@ describe('density mode utility', () => {
         <button type="button" data-density="balanced">Balanced</button>
         <button type="button" data-density="detail">Detail</button>
       </div>
+      <details data-density-expand="detail"><summary>Diagnostic</summary></details>
     `;
     document.body.removeAttribute('data-density');
-    StateManager.clear();
+    document.documentElement.removeAttribute('data-density');
   });
 
   afterEach(() => {
-    StateManager.clear();
-    vi.restoreAllMocks();
     document.body.innerHTML = '';
   });
 
@@ -29,61 +26,48 @@ describe('density mode utility', () => {
     applyDensityMode('detail');
 
     expect(document.body.getAttribute('data-density')).toBe('detail');
+    expect(document.body.getAttribute('data-density-level')).toBe('diagnostic');
+    expect(document.documentElement.getAttribute('data-density')).toBe('detail');
+    expect(document.documentElement.getAttribute('data-density-level')).toBe('diagnostic');
     expect(document.querySelector('button[data-density="detail"]').classList.contains('active')).toBe(true);
     expect(document.querySelector('button[data-density="detail"]').getAttribute('aria-pressed')).toBe('true');
     expect(document.querySelector('button[data-density="focus"]').getAttribute('aria-pressed')).toBe('false');
+    expect(document.querySelector('details[data-density-expand="detail"]').open).toBe(true);
   });
 
-  it('does not apply arbitrary density values to the DOM', () => {
-    StateManager.setState('profile.density_mode', 'balanced');
+  it('keeps diagnostic sections closed outside detail mode', () => {
+    const details = document.querySelector('details[data-density-expand="detail"]');
+    details.open = true;
 
+    applyDensityMode('balanced');
+
+    expect(document.body.getAttribute('data-density-level')).toBe('execution');
+    expect(details.open).toBe(false);
+  });
+
+  it('normalizes unknown modes to the default instead of applying them raw', () => {
     applyDensityMode('evil-mode');
 
-    expect(document.body.getAttribute('data-density')).toBe('balanced');
-    expect(document.querySelector('button[data-density="balanced"]').classList.contains('active')).toBe(true);
-    expect(document.querySelector('button[data-density="detail"]').getAttribute('aria-pressed')).toBe('false');
-  });
-
-  it('normalizes invalid density writes to the default mode', () => {
-    expect(setDensityMode('evil-mode')).toBe(true);
-
-    expect(StateManager.getState('profile.density_mode')).toBe('focus');
     expect(document.body.getAttribute('data-density')).toBe('focus');
+    expect(document.body.getAttribute('data-density-level')).toBe('action');
     expect(document.querySelector('button[data-density="focus"]').classList.contains('active')).toBe(true);
+    expect(document.querySelector('button[data-density="balanced"]').getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('returns false and emits localSaved=false when persistence fails', () => {
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
-      throw new Error('storage blocked');
-    });
-    const events = [];
-    const handler = (payload) => events.push(payload);
-    EventBus.on(EVENTS.STATE_CHANGED, handler);
+  it('falls back to the default when called without a mode', () => {
+    applyDensityMode();
 
-    try {
-      expect(setDensityMode('detail')).toBe(false);
-
-      expect(getDensityMode()).toBe('detail');
-      expect(document.body.getAttribute('data-density')).toBe('detail');
-      expect(events.some((event) =>
-        event.path === 'profile.density_mode' &&
-        event.value === 'detail' &&
-        event.localSaved === false
-      )).toBe(true);
-    } finally {
-      EventBus.off(EVENTS.STATE_CHANGED, handler);
-    }
+    expect(document.body.getAttribute('data-density')).toBe('focus');
   });
 
-  it('does not bind duplicate click handlers when initialized twice', () => {
-    const setState = vi.spyOn(StateManager, 'setState');
+  it('normalizes and describes modes without touching the DOM', () => {
+    expect(normalizeDensityMode('detail')).toBe('detail');
+    expect(normalizeDensityMode('nope')).toBe('focus');
+    expect(normalizeDensityMode('nope', 'balanced')).toBe('balanced');
+    expect(normalizeDensityMode(undefined)).toBe('focus');
 
-    initDensityMode();
-    initDensityMode();
-    document.querySelector('button[data-density="balanced"]').click();
-
-    const densityWrites = setState.mock.calls.filter(([path]) => path === 'profile.density_mode');
-    expect(densityWrites).toHaveLength(1);
-    expect(getDensityMode()).toBe('balanced');
+    expect(densityModeMeta('balanced')).toMatchObject({ level: 'execution' });
+    expect(densityModeMeta('detail').expand).toEqual(['detail']);
+    expect(densityModeMeta('nope').level).toBe('action');
   });
 });

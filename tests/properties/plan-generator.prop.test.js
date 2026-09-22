@@ -3,7 +3,6 @@ import { test, fc } from '@fast-check/vitest';
 import {
   generateDailyPlan,
   computeCoreRatio,
-  isRecoveryDay,
   prioritizeAndTrim,
   estimateTaskMinutes,
 } from '../../src/domain/plan-generator.js';
@@ -16,7 +15,6 @@ const ALL_SUBJECTS = [...CORE_SUBJECTS, ...NON_CORE_SUBJECTS];
 const PHASES = ['foundation', 'reinforcement', 'pastExam', 'sprint'];
 const CATEGORIES = ['review', 'phaseCore', 'mistakes', 'english', 'politics', 'project'];
 
-const arbSubject = fc.constantFrom(...ALL_SUBJECTS);
 const arbCoreSubject = fc.constantFrom(...CORE_SUBJECTS);
 const arbPhase = fc.constantFrom(...PHASES);
 
@@ -35,8 +33,6 @@ const arbNonCoreTopic = fc.record({
   isCore: fc.constant(false),
   estimatedMinutes: fc.integer({ min: 10, max: 60 }),
 });
-
-const arbCandidateTopic = fc.oneof(arbCoreTopic, arbNonCoreTopic);
 
 /**
  * Generate a valid PlanInput with at least one core-subject topic.

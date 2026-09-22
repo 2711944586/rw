@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect } from 'vitest';
 import { fc, test as fcTest } from '@fast-check/vitest';
 
 describe('Property test framework setup', () => {
