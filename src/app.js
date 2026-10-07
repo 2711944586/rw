@@ -3887,7 +3887,7 @@ function renderSubjectChart(week, phase) {
     const fill = target ? Math.min(100, hours / target * 100) : hours ? Math.min(100, hours / baseline * 100) : 0;
     const visualFill = fill ? Math.max(5, fill) : 0;
     return `
-      <div class="subject-bar">
+      <div class="subject-bar subject-${key}">
         <div class="subject-bar-track">
           <div class="subject-bar-fill" data-height="${visualFill}"></div>
         </div>

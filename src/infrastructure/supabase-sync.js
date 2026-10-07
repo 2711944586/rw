@@ -686,6 +686,19 @@ export function onAuthChange(callback) {
   };
 }
 
+const CLOUD_PAGE_SIZE = 500;
+
+async function loadAllCloudRows(buildPageQuery) {
+  const rows = [];
+  for (let from = 0; ; from += CLOUD_PAGE_SIZE) {
+    const { data, error } = await buildPageQuery(from, from + CLOUD_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = Array.isArray(data) ? data : [];
+    rows.push(...page);
+    if (page.length < CLOUD_PAGE_SIZE) return { data: rows, error: null };
+  }
+}
+
 export async function loadCloudState(baseState) {
   const user = await getCurrentUser();
   if (!supabase || !user) return null;
@@ -704,15 +717,15 @@ export async function loadCloudState(baseState) {
     snapshots
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
-    supabase.from("daily_records").select("*").eq("user_id", user.id).gte("study_date", PLAN_START_DATE),
-    supabase.from("study_tasks").select("*").eq("user_id", user.id).gte("task_date", PLAN_START_DATE).is("deleted_at", null),
-    supabase.from("review_items").select("*").eq("user_id", user.id).gte("due_date", PLAN_START_DATE).is("deleted_at", null),
-    supabase.from("study_tasks").select("id,source_task_id,task_date,deleted_at").eq("user_id", user.id).gte("task_date", PLAN_START_DATE).not("deleted_at", "is", null),
-    supabase.from("review_items").select("id,source_task_id,due_date,deleted_at").eq("user_id", user.id).gte("due_date", PLAN_START_DATE).not("deleted_at", "is", null),
-    supabase.from("topic_progress").select("*").eq("user_id", user.id),
-    supabase.from("mock_scores").select("*").eq("user_id", user.id).gte("mock_date", PLAN_START_DATE).is("deleted_at", null),
-    supabase.from("mock_scores").select("id,mock_date,deleted_at").eq("user_id", user.id).gte("mock_date", PLAN_START_DATE).not("deleted_at", "is", null),
-    supabase.from("resources").select("*").eq("user_id", user.id),
+    loadAllCloudRows((from, to) => supabase.from("daily_records").select("*").eq("user_id", user.id).gte("study_date", PLAN_START_DATE).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("study_tasks").select("*").eq("user_id", user.id).gte("task_date", PLAN_START_DATE).is("deleted_at", null).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("review_items").select("*").eq("user_id", user.id).gte("due_date", PLAN_START_DATE).is("deleted_at", null).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("study_tasks").select("id,source_task_id,task_date,deleted_at").eq("user_id", user.id).gte("task_date", PLAN_START_DATE).not("deleted_at", "is", null).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("review_items").select("id,source_task_id,due_date,deleted_at").eq("user_id", user.id).gte("due_date", PLAN_START_DATE).not("deleted_at", "is", null).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("topic_progress").select("*").eq("user_id", user.id).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("mock_scores").select("*").eq("user_id", user.id).gte("mock_date", PLAN_START_DATE).is("deleted_at", null).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("mock_scores").select("id,mock_date,deleted_at").eq("user_id", user.id).gte("mock_date", PLAN_START_DATE).not("deleted_at", "is", null).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("resources").select("*").eq("user_id", user.id).range(from, to)),
     supabase.from("snapshots").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(5)
   ]);
 

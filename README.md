@@ -110,6 +110,7 @@ npm run start:local
 │  ├─ REMEDIATION_2026-09-15.md     # 门禁回绿的收尾与交接记录
 │  ├─ AUDIT_2026-09-22.md           # 独立复核审计与 CSP 修复结果
 │  ├─ DESIGN_REVIEW_2026-09-22.md   # 内容/功能/界面/排版/质感评审与界面缺陷修复
+│  ├─ PLAN_REVIEW_2026-09-22.md     # 8 阶段备考计划的目标分与时间分配评审
 │  ├─ AUTO_DEPLOY.md                # 自动部署步骤
 │  └─ API_KEYS_CHECKLIST.md         # 密钥获取与填写清单
 ├─ .github/workflows/quality.yml    # CI：npm ci 后执行 npm run quality

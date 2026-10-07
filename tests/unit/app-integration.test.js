@@ -56,6 +56,19 @@ function submitForm(id) {
   document.getElementById(id).dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
 }
 
+async function selectImportFile(name, contents, type = 'application/json') {
+  const input = document.getElementById('importFile');
+  const file = new File([contents], name, { type });
+  Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (input.getAttribute('aria-busy') === 'false') return;
+  }
+  throw new Error('The import flow did not finish reading the selected file.');
+}
+
 describe('app integration: boot', () => {
   it('wires navigation, auth, workspace and density against the real markup', async () => {
     await mountProductionApp();
@@ -140,6 +153,17 @@ describe('app integration: account panel', () => {
   });
 
   afterEach(() => downloads.restore());
+
+  it('explains that manual cloud sync requires an account and keeps local data', async () => {
+    const entriesBefore = storedState().entries;
+
+    document.getElementById('syncNowBtn').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(document.getElementById('authResult').textContent).toContain('未登录');
+    expect(storedState().entries).toEqual(entriesBefore);
+    expect(storedState().sync).toMatchObject({ status: 'local', lastError: 'not-authenticated' });
+  });
 
   it('opens and closes the account dialog, returning focus to the trigger', async () => {
     const open = document.getElementById('authOpenBtn');
@@ -313,6 +337,69 @@ describe('app integration: export', () => {
     expect(payload.sync).toBeUndefined();
     expect(payload.entries).toBeTypeOf('object');
     expect(payload.snapshots).toBeTypeOf('object');
+  });
+});
+
+describe('app integration: import', () => {
+  let confirmSpy;
+
+  beforeEach(async () => {
+    await mountProductionApp();
+    await goToView('today');
+    fillEntry();
+    submitForm('entryForm');
+  });
+
+  afterEach(() => confirmSpy?.mockRestore());
+
+  it('imports a selected backup and snapshots the current local data first', async () => {
+    const imported = storedState();
+    imported.entries['2026-09-22'].math = 66;
+    confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    await selectImportFile('study-backup.json', JSON.stringify(imported));
+
+    const state = storedState();
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(state.entries['2026-09-22'].math).toBe(66);
+    expect(state.snapshots).toHaveLength(1);
+    expect(state.snapshots[0].payload.entries['2026-09-22'].math).toBe(120);
+    expect(document.getElementById('importFile').getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('leaves local data untouched when backup import is declined', async () => {
+    const before = storedState();
+    const imported = structuredClone(before);
+    imported.entries['2026-09-22'].math = 66;
+    confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    await selectImportFile('study-backup.json', JSON.stringify(imported));
+
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(storedState().entries['2026-09-22'].math).toBe(120);
+    expect(storedState().snapshots).toEqual(before.snapshots);
+  });
+});
+
+describe('app integration: week planning', () => {
+  beforeEach(async () => {
+    await mountProductionApp();
+    await goToView('week');
+  });
+
+  it('preserves a locked task when regenerating the seven-day plan', async () => {
+    const lockButton = document.querySelector('[data-lock-task]');
+    expect(lockButton).toBeTruthy();
+    const taskId = lockButton.dataset.lockTask;
+
+    lockButton.click();
+    expect(document.querySelector(`[data-lock-task="${taskId}"]`)?.textContent.trim()).toBe('解锁');
+
+    document.getElementById('generateWeekBtn').click();
+
+    expect(document.querySelector(`[data-lock-task="${taskId}"]`)?.textContent.trim()).toBe('解锁');
+    const savedTask = Object.values(storedState().weekPlans).flat().find((task) => task.id === taskId);
+    expect(savedTask?.locked).toBe(true);
   });
 });
 

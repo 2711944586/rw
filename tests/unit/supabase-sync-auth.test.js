@@ -37,12 +37,32 @@ function createQueryResult(data = [], error = null) {
     not: vi.fn(() => query),
     order: vi.fn(() => query),
     limit: vi.fn(() => query),
+    range: vi.fn(() => query),
     delete: vi.fn(() => query),
     update: vi.fn(() => query),
     upsert: vi.fn(() => query),
     insert: vi.fn(() => query),
     maybeSingle: vi.fn(() => Promise.resolve(result)),
     then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
+  };
+  return query;
+}
+
+function createPagedQuery(rows, ranges, failFrom = null) {
+  let pageStart = 0;
+  let pageEnd = 499;
+  const query = createQueryResult([]);
+  query.range.mockImplementation((from, to) => {
+    pageStart = from;
+    pageEnd = to;
+    ranges.push([from, to]);
+    return query;
+  });
+  query.then = (resolve, reject) => {
+    const result = pageStart >= failFrom && failFrom !== null
+      ? { data: null, error: new Error('second page failed') }
+      : { data: rows.slice(pageStart, pageEnd + 1), error: null };
+    return Promise.resolve(result).then(resolve, reject);
   };
   return query;
 }
@@ -185,6 +205,39 @@ describe('supabaseSync auth', () => {
       sync: { status: 'synced', pending: false },
     });
     expect(state.transient).toBeUndefined();
+  });
+
+  it('loads every cloud row across PostgREST pages', async () => {
+    const rows = Array.from({ length: 1001 }, (_, index) => {
+      const date = new Date(Date.UTC(2026, 8, 1 + index)).toISOString().slice(0, 10);
+      return { study_date: date, math_minutes: index };
+    });
+    const ranges = [];
+    const from = vi.fn((table) => table === 'daily_records'
+      ? createPagedQuery(rows, ranges)
+      : createQueryResult([]));
+    const { loadCloudState } = await importSupabaseSync({ from });
+
+    const state = await loadCloudState({ schemaVersion: 3, settings: {}, deleted: {}, deletedMeta: {} });
+
+    expect(Object.keys(state.entries)).toHaveLength(1001);
+    expect(ranges).toEqual([[0, 499], [500, 999], [1000, 1499]]);
+  });
+
+  it('fails the cloud load if a later page cannot be read', async () => {
+    const rows = Array.from({ length: 600 }, (_, index) => {
+      const date = new Date(Date.UTC(2026, 8, 1 + index)).toISOString().slice(0, 10);
+      return { study_date: date, math_minutes: index };
+    });
+    const ranges = [];
+    const from = vi.fn((table) => table === 'daily_records'
+      ? createPagedQuery(rows, ranges, 500)
+      : createQueryResult([]));
+    const { loadCloudState } = await importSupabaseSync({ from });
+
+    await expect(loadCloudState({ schemaVersion: 3, settings: {}, deleted: {}, deletedMeta: {} }))
+      .rejects.toThrow('second page failed');
+    expect(ranges).toEqual([[0, 499], [500, 999]]);
   });
 
   it('normalizes profile columns while loading cloud state', async () => {

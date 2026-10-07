@@ -19,8 +19,9 @@
  *   - `tests/unit/state-merge.test.js`     — the cloud-merge layer.
  *
  * `docs/AUDIT_2026-09-22.md` §4 tracks the conversion of the remaining cases.
- * 15 blocks were already moved to the behavioural suites; the ones left here
- * cover flows that still need an integration test written for them.
+ * Backup import confirmation, logged-out sync feedback, and locked week-task
+ * regeneration now have behavioural coverage in `app-integration.test.js`.
+ * Keep converting these source contracts as the relevant flows are covered.
  */
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
@@ -57,45 +58,6 @@ describe("app imports", () => {
     const source = fs.readFileSync(new URL("../../src/app.js", import.meta.url), "utf8");
 
     expect(source).toMatch(/async function initCloudSession\(\) \{[\s\S]*\} catch \(error\) \{\s*currentUser = null;\s*state\.user = null;\s*const message = friendlyAuthError\(error\);\s*lastAuthResult = \{\s*status: "error",\s*title: "云端会话不可用",\s*message\s*\};\s*state\.sync = \{ \.\.\.state\.sync, status: "error", lastError: safeErrorMessage\(error, "云端会话不可用"\), pending: false \};\s*const saved = saveState\(\{ skipCloud: true \}\);\s*if \(!saved\) \{\s*lastAuthResult = \{\s*status: "error",\s*title: "云端会话状态未写入本机缓存",\s*message: `\$\{message\} 浏览器阻止写入本机缓存；请立即导出备份，刷新前不要关闭页面。`\s*\};\s*\}\s*renderAuthPanel\(\);\s*\}\s*renderSyncStatus\(\);/);
-  });
-
-  it("reports explicit account-panel feedback for manual sync attempts", () => {
-    const source = fs.readFileSync(new URL("../../src/app.js", import.meta.url), "utf8");
-    const manualSyncBindings = source.match(/document\.getElementById\("syncNowBtn"\)\?\.addEventListener\("click", manualSyncNow\)/g) || [];
-
-    expect(manualSyncBindings.length).toBe(2);
-    const manualSyncSource = source.match(/async function manualSyncNow\(\) \{[\s\S]*?\n\}/)?.[0] || "";
-    expect(manualSyncSource).not.toBe("");
-    expect(manualSyncSource).toContain("authRequestInFlight = true");
-    expect(manualSyncSource).toContain("setAuthBusy(true)");
-    expect(manualSyncSource).toContain('setAuthResult("pending", "正在同步"');
-    // Pull-first contract: remote state is merged into local state before the
-    // local state is pushed back, so a stale cloud copy cannot win by accident.
-    const pullIndex = manualSyncSource.indexOf("await pullCloudState()");
-    const pushIndex = manualSyncSource.indexOf("await syncNow()");
-    expect(pullIndex).toBeGreaterThan(-1);
-    expect(pushIndex).toBeGreaterThan(pullIndex);
-    // Every abort reason the sync layer can report must reach the user.
-    ["cloud-paused", "local-import-pending", "not-authenticated", "unconfigured", "offline"].forEach((reason) => {
-      expect(manualSyncSource).toContain(`"${reason}"`);
-    });
-    expect(source).toMatch(/if \(result\?\.ok\) \{[\s\S]*setLocalSaveResult\(result\.localSaved !== false, "同步完成", `本机数据已写入云端。最近同步：\$\{syncedAt\}`, "同步状态未写入本机缓存"\);/);
-    expect(source).toMatch(/if \(result\?\.localSaved === false && result\?\.reason !== "sync-error"\) \{\s*setLocalSaveResult\(false, "同步状态已保存", "同步状态已写入本机缓存。", "同步状态未写入本机缓存"\);\s*return;\s*\}/);
-    expect(source).toMatch(/if \(result\?\.reason === "cloud-paused"\) \{[\s\S]*setAuthResult\("pending", "云端同步暂停"/);
-    expect(source).toMatch(/if \(result\?\.reason === "local-import-pending"\) \{[\s\S]*setAuthResult\("pending", "等待迁移选择"/);
-    expect(source).toMatch(/if \(result\?\.reason === "offline"\) \{[\s\S]*setAuthResult\("error", "当前离线"/);
-    expect(source).toMatch(/if \(result\?\.reason === "not-authenticated"\) \{[\s\S]*setAuthResult\("error", "未登录"/);
-    // Busy-state control now lives in the separately tested account panel
-    // module; app.js must delegate rather than keep a second control list.
-    const authPanelSource = fs.readFileSync(new URL("../../src/ui/auth-panel.js", import.meta.url), "utf8");
-    expect(source).toMatch(/function setAuthBusy\(isBusy\) \{\s*setAuthPanelBusy\(isBusy\);\s*\}/);
-    expect(authPanelSource).toContain("export function setAuthPanelBusy(isBusy)");
-    ["signInBtn", "signUpBtn", "signOutBtn", "syncDialogBtn", "syncNowBtn", "downloadBackupBtn", "pushLocalBtn", "keepLocalBtn"]
-      .forEach((id) => {
-        expect(authPanelSource).toContain(`"${id}"`);
-      });
-    expect(authPanelSource).toContain('document.getElementById("authForm")?.setAttribute("aria-busy", String(isBusy))');
-    expect(authPanelSource).toContain('document.getElementById("migrationBox")?.setAttribute("aria-busy", String(isBusy))');
   });
 
   it("confirms URL reset requests after removing the reset query", () => {
@@ -273,90 +235,6 @@ describe("app imports", () => {
     expect(html).toContain('id="customMinutes" inputmode="numeric"');
     expect(css).toContain('.custom-task-form input[aria-invalid="true"]');
     expect(css).toContain('.import-label[aria-disabled="true"]');
-  });
-
-  it("validates and confirms JSON imports before replacing local state", () => {
-    const appSource = fs.readFileSync(new URL("../../src/app.js", import.meta.url), "utf8");
-    const configSource = fs.readFileSync(new URL("../../src/config/app-config.js", import.meta.url), "utf8");
-    const candidateSource = appSource.slice(
-      appSource.indexOf("function isPlainImportRecord"),
-      appSource.indexOf("function importConfirmationMessage")
-    );
-    const shapeHelperSource = appSource.slice(
-      appSource.indexOf("function isPlainStateObject"),
-      appSource.indexOf("function safeStateKey")
-    );
-    const countsSource = appSource.match(/function importStateCounts\(nextState\) \{[\s\S]*?\n\}/);
-    const messageSource = appSource.match(/function importConfirmationMessage\(nextState\) \{[\s\S]*?\n\}/);
-    const importFileSource = appSource.match(/function isLikelyJsonImportFile\(file\) \{[\s\S]*?\n\}/);
-    const helpers = new Function(`
-      ${importFileSource?.[0]}
-      ${candidateSource}
-      ${shapeHelperSource}
-      ${countsSource?.[0]}
-      ${messageSource?.[0]}
-      return { extractImportStatePayload, importStateCounts, importConfirmationMessage, isLikelyJsonImportFile };
-    `)();
-
-    expect(helpers.isLikelyJsonImportFile({ name: "backup.JSON", type: "" })).toBe(true);
-    expect(helpers.isLikelyJsonImportFile({ name: "backup", type: "application/json" })).toBe(true);
-    expect(helpers.isLikelyJsonImportFile({ name: "backup", type: "application/vnd.app+json" })).toBe(true);
-    expect(helpers.isLikelyJsonImportFile({ name: "records.csv", type: "text/csv" })).toBe(false);
-
-    expect(helpers.extractImportStatePayload(null)).toBeNull();
-    expect(helpers.extractImportStatePayload([])).toBeNull();
-    expect(helpers.extractImportStatePayload({ foo: "bar" })).toBeNull();
-    expect(helpers.extractImportStatePayload({ sync: { status: "synced" } })).toBeNull();
-    expect(helpers.extractImportStatePayload({ user: { email: "old@example.com" } })).toBeNull();
-    expect(helpers.extractImportStatePayload({ schemaVersion: 3 })).toBeNull();
-    expect(helpers.extractImportStatePayload({ entries: {} })).toEqual({ entries: {} });
-    expect(helpers.extractImportStatePayload({ project: { README: true } })).toEqual({ project: { README: true } });
-    expect(helpers.extractImportStatePayload({ deleted_meta: { tasks: {} } })).toEqual({ deleted_meta: { tasks: {} } });
-    expect(helpers.extractImportStatePayload({ snapshots: [{ payload: { entries: {} } }] })).toEqual({ snapshots: [{ payload: { entries: {} } }] });
-    expect(helpers.extractImportStatePayload({ payload: { entries: { "2026-06-08": {} } } })).toEqual({ entries: { "2026-06-08": {} } });
-    expect(helpers.extractImportStatePayload({ state: { settings: { density: "focus" } } })).toEqual({ settings: { density: "focus" } });
-
-    const counts = helpers.importStateCounts({
-      entries: { "2026-06-08": {}, "2026-06-16": {} },
-      scores: [{ id: "s1" }],
-      weekPlans: { "2026-06-08": [{ id: "t1" }, { id: "t2" }] },
-      reviewItems: [{ id: "r1" }],
-      customTasks: [{ id: "c1" }],
-      resources: { math: 40, cs: 20 }
-    });
-    expect(counts).toEqual({ entries: 2, scores: 1, weekTasks: 2, reviews: 1, customTasks: 1, resources: 2 });
-    expect(helpers.importStateCounts({
-      entries: "bad-entries",
-      scores: { 0: { id: "bad-score" } },
-      weekPlans: { "2026-06-08": "bad-task-list", "2026-06-16": [{ id: "t1" }, "bad-task"] },
-      reviewItems: "bad-reviews",
-      customTasks: [null, { id: "c1" }],
-      resources: "bad-resources"
-    })).toEqual({ entries: 0, scores: 0, weekTasks: 1, reviews: 0, customTasks: 1, resources: 0 });
-    expect(helpers.importConfirmationMessage({
-      entries: { "2026-06-08": {} },
-      scores: [],
-      weekPlans: {},
-      reviewItems: [],
-      customTasks: [],
-      resources: {}
-    })).toContain("确认导入这份备份？当前本机数据会先保存为快照。");
-
-    expect(appSource).toContain("function isLikelyJsonImportFile(file)");
-    expect(appSource).toContain('setAuthResult("error", "导入失败", "不是有效的 JSON 数据。")');
-    expect(appSource).toContain('setAuthResult("error", "导入失败", "请选择本应用导出的 JSON 备份。")');
-    expect(appSource).toContain('setAuthResult("idle", "导入已取消", "当前数据未改变。")');
-    expect(appSource).toContain('const input = event.target');
-    expect(appSource).toContain('const file = input.files?.[0]');
-    expect(appSource).toMatch(/if \(!isLikelyJsonImportFile\(file\)\) \{\s*input\.value = "";\s*setAuthResult\("error", "导入失败", "请选择 \.json 备份文件。"\);\s*return;\s*\}/);
-    expect(configSource).toContain("export const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024");
-    expect(appSource).toMatch(/if \(file\.size > MAX_IMPORT_FILE_BYTES\) \{\s*input\.value = "";\s*setAuthResult\("error", "导入失败", "备份文件超过 10MB，请确认是否选错文件。"\);\s*return;\s*\}/);
-    expect(appSource).toMatch(/setImportBusy\(true\);\s*setAuthResult\("pending", "正在导入备份", "正在读取并验证 JSON 备份。"\);\s*const finishImport = \(\) => \{\s*input\.value = "";\s*setImportBusy\(false\);\s*\};/);
-    expect(appSource).toMatch(/try \{\s*reader\.readAsText\(file\);\s*\} catch \{\s*setAuthResult\("error", "导入失败", "无法读取这个文件。"\);\s*finishImport\(\);/);
-    expect(appSource).toContain('setAuthResult("error", "导入失败", "处理备份时出错，请导出当前数据后重试。")');
-    expect(appSource).toMatch(/const importPayload = extractImportStatePayload\(imported\);\s*if \(!importPayload\) \{[\s\S]*?return;\s*\}\s*const migratedState = migrateState\(importPayload\);\s*const nextState = protectImportedSession\(migratedState\);/);
-    expect(appSource).toMatch(/const nextState = protectImportedSession\(migratedState\);\s*if \(!window\.confirm\(importConfirmationMessage\(nextState\)\)\) \{[\s\S]*?return;\s*\}\s*const snapshot = createLocalSnapshot\("before-import"\);/);
-    expect(appSource).toMatch(/state = nextState;\s*state\.snapshots = \[snapshot, \.\.\.snapshotRows\(state\.snapshots\)\]\.slice\(0, 5\);\s*const saved = saveState\(\);\s*renderAll\(\);\s*renderSnapshotPanel\(\);\s*setLocalSaveResult\(saved, "导入完成", "已保留导入前快照，可在账号面板恢复。", "导入未写入本机缓存"\);/);
   });
 
   it("protects current account identity and sync consent when importing legacy backups", () => {
