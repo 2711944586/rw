@@ -154,6 +154,12 @@
   border-radius: 8px;
 }
 
+.auth-reset-password {
+  margin-left: auto;
+  border: 0;
+  color: var(--workspace-accent-dark);
+}
+
 .auth-actions .primary-button svg {
   width: 15px;
   height: 15px;
@@ -266,5 +272,9 @@
 
   .auth-actions button {
     width: 100%;
+  }
+
+  .auth-reset-password {
+    margin-left: 0;
   }
 }

@@ -1,3 +1,10 @@
+/**
+ * Production application. `src/main.js` imports this module after local recovery.
+ *
+ * This file still owns state, routing, forms and most rendering. The modules
+ * listed in `scripts/verify-module-boundaries.mjs` are the tested replacement
+ * and must not be started beside this file.
+ */
 import {
   designReferences,
   executionBoundaries,
@@ -59,10 +66,12 @@ import {
   onAuthChange,
   saveCloudSnapshot,
   saveCloudState,
+  sendPasswordRecoveryEmail,
   signInWithEmail,
   signOut,
   signUpWithEmail,
-  supabaseConfigured
+  supabaseConfigured,
+  updateRecoveredPassword
 } from "./infrastructure/supabase-sync.js";
 
 import {
@@ -74,6 +83,7 @@ import {
 import { STORAGE_KEYS } from "./core/storage-contract.js";
 import { DEFAULT_VIEW_ID, isKnownViewId } from "./core/route-contract.js";
 import { createBrowserStorage } from "./infrastructure/browser-storage.js";
+import { clearRecoveryCopy, persistRecoveryCopy } from "./infrastructure/recovery-store.js";
 import {
   APP_BUILD,
   CLEAN_START_VERSION,
@@ -159,6 +169,7 @@ const browserStorage = createBrowserStorage(window.localStorage);
 const { read: readStorage, write: writeStorage } = browserStorage;
 
 function clearAppLocalStorage() {
+  void clearRecoveryCopy();
   return browserStorage.removeMany([
     STORAGE_KEY,
     LEGACY_STORAGE_KEY,
@@ -199,6 +210,7 @@ let appStarted = false;
 let workspaceRenderer = null;
 let stopCloudAuthListener = null;
 let authRequestInFlight = false;
+let passwordRecoveryPending = false;
 let legacyImportPending = Boolean(readStorage(LEGACY_STORAGE_KEY) && !readStorage(STORAGE_KEY));
 let lastStorageFailureNoticeAt = 0;
 let selectedResourceSubject = "math";
@@ -1193,7 +1205,9 @@ function saveState(options = {}) {
   state.schemaVersion = SCHEMA_VERSION;
   ensureRuntimeContainers();
   state.settings.lastSavedAt = new Date().toISOString();
-  const saved = writeStorage(STORAGE_KEY, JSON.stringify(state));
+  const payload = JSON.stringify(state);
+  const saved = writeStorage(STORAGE_KEY, payload);
+  void persistRecoveryCopy(payload);
   if (!saved) {
     state.sync = { ...state.sync, status: "local", lastError: "local-storage-unavailable", pending: false };
     notifyStorageWriteFailure();
@@ -1220,11 +1234,22 @@ function setLocalSaveResult(saved, successTitle, successMessage, failureTitle) {
 
 function bindCloudAuthListener() {
   if (stopCloudAuthListener) return;
-  stopCloudAuthListener = onAuthChange((user) => {
+  stopCloudAuthListener = onAuthChange((user, event) => {
     // Login and logout actions perform their own pull/cleanup. Ignore the
     // matching Supabase event while that request is still settling to avoid a
     // second concurrent merge that can overwrite the visible state.
     if (authRequestInFlight) return;
+    if (event === "PASSWORD_RECOVERY") {
+      passwordRecoveryPending = true;
+      currentUser = user;
+      state.user = user ? { id: user.id, email: user.email || "" } : null;
+      renderSyncStatus();
+      renderAuthPanel();
+      openAuthDialog();
+      setAuthResult("pending", "验证已通过", "请为当前账号设置新密码。");
+      focusAuthPanel(user, true);
+      return;
+    }
     return handleCloudAuthChange(user);
   });
 }
@@ -1735,7 +1760,10 @@ async function syncNow(options = {}) {
     state = enforceCleanStartState(state);
     state.sync = { ...state.sync, status: "syncing", lastError: "" };
     renderSyncStatus();
-    const result = await saveCloudState(state, { force: Boolean(options.force) });
+    const result = await saveCloudState(state, {
+      force: Boolean(options.force),
+      expectedUserId: currentUser?.id || ""
+    });
     if (result?.skipped) {
       const reason = result.reason || "sync-skipped";
       if (reason === "not-authenticated") {
@@ -2606,7 +2634,8 @@ function clearCustomTaskValidation() {
 function bindAuth() {
   document.getElementById("authForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
-    authAction("login");
+    if (passwordRecoveryPending) updatePasswordFromRecovery();
+    else authAction("login");
   });
   document.getElementById("authOpenBtn")?.addEventListener("click", () => {
     openAuthDialog();
@@ -2616,6 +2645,8 @@ function bindAuth() {
   });
   document.getElementById("signInBtn")?.addEventListener("click", () => authAction("login"));
   document.getElementById("signUpBtn")?.addEventListener("click", () => authAction("signup"));
+  document.getElementById("resetPasswordBtn")?.addEventListener("click", requestPasswordReset);
+  document.getElementById("cancelPasswordRecoveryBtn")?.addEventListener("click", cancelPasswordRecovery);
   document.getElementById("signOutBtn")?.addEventListener("click", signOutAction);
   document.getElementById("syncDialogBtn")?.addEventListener("click", manualSyncNow);
   document.getElementById("syncNowBtn")?.addEventListener("click", manualSyncNow);
@@ -2632,8 +2663,8 @@ function bindAuth() {
 
 function openAuthDialog(dialog = document.getElementById("authDialog")) {
   renderAuthPanel();
-  dialog?.showModal();
-  focusAuthPanel(currentUser);
+  if (dialog && !dialog.open) dialog.showModal();
+  focusAuthPanel(currentUser, passwordRecoveryPending);
 }
 
 function closeAuthDialog(dialog = document.getElementById("authDialog")) {
@@ -2832,6 +2863,73 @@ async function authAction(mode) {
   }
 }
 
+async function requestPasswordReset() {
+  const email = document.getElementById("authEmail")?.value.trim() || "";
+  const emailInput = document.getElementById("authEmail");
+  const emailValid = isLikelyEmail(email);
+  emailInput?.setAttribute("aria-invalid", String(!emailValid));
+  if (!emailValid) {
+    emailInput?.focus();
+    setAuthResult("error", "邮箱格式不正确", "请先填写注册账号使用的邮箱地址。");
+    return;
+  }
+  if (!supabaseConfigured) {
+    setAuthResult("error", "云端未配置", "当前环境还没有配置 Supabase Auth。");
+    return;
+  }
+
+  try {
+    authRequestInFlight = true;
+    setAuthBusy(true);
+    setAuthResult("pending", "正在发送恢复邮件", "正在向该邮箱发送密码恢复链接。");
+    await sendPasswordRecoveryEmail(email);
+    setAuthResult("success", "请检查邮箱", "如果该邮箱已注册，密码恢复链接已发送。打开链接后可在此设置新密码。");
+  } catch (error) {
+    setAuthResult("error", "恢复邮件发送失败", friendlyAuthError(error));
+  } finally {
+    authRequestInFlight = false;
+    setAuthBusy(false);
+  }
+}
+
+async function updatePasswordFromRecovery() {
+  const password = document.getElementById("authPassword")?.value || "";
+  const passwordInput = document.getElementById("authPassword");
+  const passwordValid = password.length >= 6;
+  passwordInput?.setAttribute("aria-invalid", String(!passwordValid));
+  if (!passwordValid) {
+    passwordInput?.focus();
+    setAuthResult("error", "密码太短", "新密码至少需要 6 位。建议使用字母、数字和符号组合。");
+    return;
+  }
+
+  try {
+    authRequestInFlight = true;
+    setAuthBusy(true);
+    setAuthResult("pending", "正在更新密码", "正在为当前账号保存新密码。");
+    await updateRecoveredPassword(password);
+    passwordRecoveryPending = false;
+    if (passwordInput) passwordInput.value = "";
+    renderAuthPanel();
+    setAuthResult("success", "密码已更新", "现在可以使用新密码登录。当前账号会话仍保持连接。");
+  } catch (error) {
+    setAuthResult("error", "密码更新失败", friendlyAuthError(error));
+  } finally {
+    authRequestInFlight = false;
+    setAuthBusy(false);
+    renderAuthPanel();
+  }
+}
+
+function cancelPasswordRecovery() {
+  passwordRecoveryPending = false;
+  const passwordInput = document.getElementById("authPassword");
+  if (passwordInput) passwordInput.value = "";
+  renderAuthPanel();
+  setAuthResult("idle", "已取消密码重置", "当前账号会话仍保持连接。");
+  focusAuthPanel(currentUser);
+}
+
 function validateAuthForm({ email, password }) {
   const emailInput = document.getElementById("authEmail");
   const passwordInput = document.getElementById("authPassword");
@@ -2868,6 +2966,7 @@ function renderAuthPanel() {
   ensureSyncContainer();
   renderAuthPanelState({
     user: currentUser,
+    passwordRecoveryPending,
     configured: supabaseConfigured,
     storageAvailable: browserStorage.available,
     syncLabel: syncStatusLabel(),
@@ -7064,7 +7163,8 @@ function bindRecoveryAuthControls() {
   const dialog = document.getElementById("authDialog");
   document.getElementById("authForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
-    authAction("login");
+    if (passwordRecoveryPending) updatePasswordFromRecovery();
+    else authAction("login");
   });
   document.getElementById("authOpenBtn")?.addEventListener("click", () => {
     openAuthDialog(dialog);
@@ -7074,6 +7174,8 @@ function bindRecoveryAuthControls() {
   });
   document.getElementById("signInBtn")?.addEventListener("click", () => authAction("login"));
   document.getElementById("signUpBtn")?.addEventListener("click", () => authAction("signup"));
+  document.getElementById("resetPasswordBtn")?.addEventListener("click", requestPasswordReset);
+  document.getElementById("cancelPasswordRecoveryBtn")?.addEventListener("click", cancelPasswordRecovery);
   document.getElementById("signOutBtn")?.addEventListener("click", signOutAction);
   document.getElementById("syncNowBtn")?.addEventListener("click", manualSyncNow);
   document.getElementById("downloadBackupBtn")?.addEventListener("click", () => downloadStateBackup("manual-backup"));
@@ -7083,6 +7185,7 @@ function bindRecoveryAuthControls() {
   document.querySelectorAll("#authEmail, #authPassword").forEach((input) => {
     input.addEventListener("input", clearAuthValidation);
   });
+  bindPasswordVisibility(hydrateIcons);
   document.documentElement.dataset.authBound = "1";
 }
 

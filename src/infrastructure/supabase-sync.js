@@ -1,3 +1,7 @@
+/**
+ * Production Supabase sync. The page imports this module from `src/app.js`.
+ * `sync-service.js` is the tested replacement and is not started from `main.js`.
+ */
 import {
   CLEAN_START_VERSION,
   DEFAULT_EXAM_DATE as DEFAULT_TARGET_EXAM_DATE,
@@ -36,6 +40,7 @@ const DEFAULT_PLAN_CONTROLS = {
 export const supabaseConfigured = Boolean(supabaseUrl && supabaseKey);
 export let supabase = null;
 let supabaseClientPromise = null;
+let cloudSaveQueue = Promise.resolve();
 
 async function getSupabaseClient() {
   if (!supabaseConfigured) return null;
@@ -639,6 +644,21 @@ export async function signUpWithEmail(email, password) {
   };
 }
 
+export async function sendPasswordRecoveryEmail(email) {
+  const client = await getSupabaseClient();
+  if (!client) throw new Error("Supabase is not configured.");
+  const redirectTo = typeof window === "undefined" ? undefined : window.location.origin;
+  const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo });
+  if (error) throw error;
+}
+
+export async function updateRecoveredPassword(password) {
+  const client = await getSupabaseClient();
+  if (!client) throw new Error("Supabase is not configured.");
+  const { error } = await client.auth.updateUser({ password });
+  if (error) throw error;
+}
+
 export async function signOut() {
   const client = await getSupabaseClient();
   if (!client) return;
@@ -654,15 +674,16 @@ export function onAuthChange(callback) {
   const subscribe = (client) => {
     if (!active || !client) return;
     try {
-      const { data } = client.auth.onAuthStateChange((_event, session) => {
-        try {
-          const result = callback(session?.user || null);
-          if (result && typeof result.catch === "function") {
-            result.catch(() => {});
+      const { data } = client.auth.onAuthStateChange((event, session) => {
+        const user = session?.user || null;
+        globalThis.setTimeout(() => {
+          if (!active) return;
+          try {
+            Promise.resolve(callback(user, event)).catch(() => {});
+          } catch {
+            // Auth listeners should not break Supabase internals or later listeners.
           }
-        } catch {
-          // Auth listeners should not break Supabase internals or later listeners.
-        }
+        }, 0);
       });
       subscription = data?.subscription || null;
     } catch {
@@ -717,15 +738,15 @@ export async function loadCloudState(baseState) {
     snapshots
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
-    loadAllCloudRows((from, to) => supabase.from("daily_records").select("*").eq("user_id", user.id).gte("study_date", PLAN_START_DATE).range(from, to)),
-    loadAllCloudRows((from, to) => supabase.from("study_tasks").select("*").eq("user_id", user.id).gte("task_date", PLAN_START_DATE).is("deleted_at", null).range(from, to)),
-    loadAllCloudRows((from, to) => supabase.from("review_items").select("*").eq("user_id", user.id).gte("due_date", PLAN_START_DATE).is("deleted_at", null).range(from, to)),
-    loadAllCloudRows((from, to) => supabase.from("study_tasks").select("id,source_task_id,task_date,deleted_at").eq("user_id", user.id).gte("task_date", PLAN_START_DATE).not("deleted_at", "is", null).range(from, to)),
-    loadAllCloudRows((from, to) => supabase.from("review_items").select("id,source_task_id,due_date,deleted_at").eq("user_id", user.id).gte("due_date", PLAN_START_DATE).not("deleted_at", "is", null).range(from, to)),
-    loadAllCloudRows((from, to) => supabase.from("topic_progress").select("*").eq("user_id", user.id).range(from, to)),
-    loadAllCloudRows((from, to) => supabase.from("mock_scores").select("*").eq("user_id", user.id).gte("mock_date", PLAN_START_DATE).is("deleted_at", null).range(from, to)),
-    loadAllCloudRows((from, to) => supabase.from("mock_scores").select("id,mock_date,deleted_at").eq("user_id", user.id).gte("mock_date", PLAN_START_DATE).not("deleted_at", "is", null).range(from, to)),
-    loadAllCloudRows((from, to) => supabase.from("resources").select("*").eq("user_id", user.id).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("daily_records").select("*").eq("user_id", user.id).gte("study_date", PLAN_START_DATE).order("study_date", { ascending: true }).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("study_tasks").select("*").eq("user_id", user.id).gte("task_date", PLAN_START_DATE).is("deleted_at", null).order("task_date", { ascending: true }).order("id", { ascending: true }).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("review_items").select("*").eq("user_id", user.id).gte("due_date", PLAN_START_DATE).is("deleted_at", null).order("due_date", { ascending: true }).order("id", { ascending: true }).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("study_tasks").select("id,source_task_id,task_date,deleted_at").eq("user_id", user.id).gte("task_date", PLAN_START_DATE).not("deleted_at", "is", null).order("task_date", { ascending: true }).order("id", { ascending: true }).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("review_items").select("id,source_task_id,due_date,deleted_at").eq("user_id", user.id).gte("due_date", PLAN_START_DATE).not("deleted_at", "is", null).order("due_date", { ascending: true }).order("id", { ascending: true }).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("topic_progress").select("*").eq("user_id", user.id).order("topic_id", { ascending: true }).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("mock_scores").select("*").eq("user_id", user.id).gte("mock_date", PLAN_START_DATE).is("deleted_at", null).order("mock_date", { ascending: true }).order("id", { ascending: true }).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("mock_scores").select("id,mock_date,deleted_at").eq("user_id", user.id).gte("mock_date", PLAN_START_DATE).not("deleted_at", "is", null).order("mock_date", { ascending: true }).order("id", { ascending: true }).range(from, to)),
+    loadAllCloudRows((from, to) => supabase.from("resources").select("*").eq("user_id", user.id).order("resource_key", { ascending: true }).range(from, to)),
     supabase.from("snapshots").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(5)
   ]);
 
@@ -943,11 +964,20 @@ export async function loadCloudState(baseState) {
   return state;
 }
 
-export async function saveCloudState(state, options = {}) {
+export function saveCloudState(state, options = {}) {
+  const operation = cloudSaveQueue.then(() => performCloudSave(state, options));
+  cloudSaveQueue = operation.catch(() => undefined);
+  return operation;
+}
+
+async function performCloudSave(state, options = {}) {
   if (asBoolean(state?.sync?.cloudPaused) && !options.force) return { skipped: true, reason: "cloud-paused" };
   if (asBoolean(state?.sync?.localImportPending) && !options.force) return { skipped: true, reason: "local-import-pending" };
   const user = await getCurrentUser();
   if (!supabase || !user) return { skipped: true, reason: "not-authenticated" };
+  if (options.expectedUserId && options.expectedUserId !== user.id) {
+    return { skipped: true, reason: "auth-changed" };
+  }
   const now = new Date().toISOString();
   const sourceState = isPlainCloudObject(state) ? state : {};
   const settingsState = cloudObject(sourceState.settings);

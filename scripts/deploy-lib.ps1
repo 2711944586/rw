@@ -35,7 +35,7 @@ function Import-DotEnv {
     if ($Optional) {
       return
     }
-    Fail "Missing config file: $Path. Copy .env.deploy.example to .env.deploy and fill it first."
+    Fail "Missing config file: $Path. Copy scripts/env.deploy.example to .env.deploy and fill it first."
   }
 
   $lineNo = 0

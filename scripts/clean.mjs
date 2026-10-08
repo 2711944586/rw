@@ -7,6 +7,7 @@ const projectRoot = resolve(scriptDirectory, '..');
 const generatedPaths = [
   'dist',
   'output',
+  'coverage',
   'test-results',
   'playwright-report',
   '.playwright-cli',

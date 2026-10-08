@@ -12,13 +12,13 @@
  * It is the wrong place for anything that can be asserted behaviourally. Before
  * adding a case here, put it in one of these instead:
  *
- *   - `tests/unit/app-integration.test.js` — mounts the real `index.html`, runs
+ *   - `tests/integration/app-integration.test.js` — mounts the real `index.html`, runs
  *     the real `bootstrapApp()` and drives the page. Use this for DOM wiring,
  *     form validation, routing, dialogs and export flows.
  *   - `tests/unit/state-rules.test.js`     — the exported pure state layer.
  *   - `tests/unit/state-merge.test.js`     — the cloud-merge layer.
  *
- * `docs/AUDIT_2026-09-22.md` §4 tracks the conversion of the remaining cases.
+ * `docs/history/AUDIT_2026-09-22.md` §4 tracks the conversion of the remaining cases.
  * Backup import confirmation, logged-out sync feedback, and locked week-task
  * regeneration now have behavioural coverage in `app-integration.test.js`.
  * Keep converting these source contracts as the relevant flows are covered.
@@ -107,7 +107,7 @@ describe("app imports", () => {
 
     expect(configSource).toContain("export const STORAGE_FAILURE_NOTICE_INTERVAL_MS = 30_000");
     expect(source).toContain("let lastStorageFailureNoticeAt = 0");
-    expect(source).toMatch(/function saveState\(options = \{\}\) \{[\s\S]*const saved = writeStorage\(STORAGE_KEY, JSON\.stringify\(state\)\);\s*if \(!saved\) \{\s*state\.sync = \{ \.\.\.state\.sync, status: "local", lastError: "local-storage-unavailable", pending: false \};\s*notifyStorageWriteFailure\(\);\s*\}[\s\S]*return saved;\s*\}/);
+    expect(source).toMatch(/function saveState\(options = \{\}\) \{[\s\S]*const payload = JSON\.stringify\(state\);\s*const saved = writeStorage\(STORAGE_KEY, payload\);\s*void persistRecoveryCopy\(payload\);\s*if \(!saved\) \{\s*state\.sync = \{ \.\.\.state\.sync, status: "local", lastError: "local-storage-unavailable", pending: false \};\s*notifyStorageWriteFailure\(\);\s*\}[\s\S]*return saved;\s*\}/);
     expect(source).toMatch(/function notifyStorageWriteFailure\(\) \{\s*const now = Date\.now\(\);\s*if \(now - lastStorageFailureNoticeAt < STORAGE_FAILURE_NOTICE_INTERVAL_MS\) return;\s*lastStorageFailureNoticeAt = now;\s*setAuthResult\("error", "本机缓存不可用", "浏览器阻止写入本机缓存，请先导出备份；刷新后本次更改可能不会保留。"\);\s*renderStorageStatus\(\);\s*renderAuthPanel\(\);\s*\}/);
     expect(source).toMatch(/function setLocalSaveResult\(saved, successTitle, successMessage, failureTitle\) \{\s*setAuthResult\(saved \? "success" : "error", saved \? successTitle : failureTitle, saved[\s\S]*浏览器阻止写入本机缓存；本次更改只保留在当前页面。请立即导出备份，刷新前不要关闭页面。/);
     expect(source).toContain("function renderStorageHealthText()");
@@ -141,11 +141,13 @@ describe("app imports", () => {
     expect(appSource).toMatch(/async function syncNow\(options = \{\}\) \{[\s\S]*if \(state\.sync\?\.localImportPending && !options\.force\) \{\s*state\.sync = \{ \.\.\.state\.sync, status: "pending", pending: true \};\s*const localSaved = saveState\(\{ skipCloud: true \}\);\s*renderSyncStatus\(\);\s*renderAuthPanel\(\);\s*showToast\("检测到旧版本地数据。请在账号面板选择导入云端或保留本机。"\);\s*return \{ ok: false, reason: "local-import-pending", localSaved \};\s*\}/);
     expect(appSource).toMatch(/async function syncNow\(options = \{\}\) \{[\s\S]*if \(state\.sync\?\.cloudPaused && !options\.force\) \{\s*state\.sync = \{ \.\.\.state\.sync, status: "paused", pending: false \};\s*const localSaved = saveState\(\{ skipCloud: true \}\);[\s\S]*return \{ ok: false, reason: "cloud-paused", localSaved \};/);
     expect(appSource).toMatch(/async function syncNow\(options = \{\}\) \{[\s\S]*if \(navigator && navigator\.onLine === false\) \{\s*state\.sync = \{ \.\.\.state\.sync, status: "offline", pending: true \};\s*const localSaved = saveState\(\{ skipCloud: true \}\);\s*renderAuthPanel\(\);\s*return \{ ok: false, reason: "offline", localSaved \};\s*\}/);
-    expect(appSource).toContain("const result = await saveCloudState(state, { force: Boolean(options.force) })");
+    expect(appSource).toContain("const result = await saveCloudState(state, {");
+    expect(appSource).toContain("expectedUserId: currentUser?.id || \"\"");
     expect(appSource).toMatch(/if \(result\?\.skipped\) \{\s*const reason = result\.reason \|\| "sync-skipped";[\s\S]*if \(reason === "not-authenticated"\) \{\s*currentUser = null;\s*state\.user = null;\s*\}[\s\S]*status: reason === "cloud-paused" \? "paused" : \(reason === "local-import-pending" \? "pending" : "local"\),\s*pending: reason === "local-import-pending",[\s\S]*const localSaved = saveState\(\{ skipCloud: true \}\);[\s\S]*return \{ ok: false, reason, localSaved \};\s*\}/);
     expect(appSource).toMatch(/state\.sync = \{\s*status: "synced",\s*lastSyncAt: result\?\.syncedAt \|\| new Date\(\)\.toISOString\(\),\s*lastError: "",\s*pending: false,\s*localImportPending: false,\s*cloudPaused: false\s*\};\s*legacyImportPending = false;\s*const localSaved = saveState\(\{ skipCloud: true \}\);\s*renderSyncStatus\(\);\s*renderAuthPanel\(\);\s*return \{ ok: true, syncedAt: state\.sync\.lastSyncAt, localSaved \};/);
     expect(appSource).toMatch(/\} catch \(error\) \{\s*const message = safeErrorMessage\(error, "同步失败"\);\s*state\.sync = \{ \.\.\.state\.sync, status: "error", lastError: message, pending: true \};\s*const localSaved = saveState\(\{ skipCloud: true \}\);\s*const syncError = friendlySyncError\(message\);\s*setAuthResult\("error", localSaved \? "同步失败" : "同步状态未写入本机缓存", localSaved[\s\S]*return \{ ok: false, reason: "sync-error", error: message, localSaved \};\s*\}/);
-    expect(syncSource).toMatch(/export async function saveCloudState\(state, options = \{\}\) \{\s*if \(asBoolean\(state\?\.sync\?\.cloudPaused\) && !options\.force\) return \{ skipped: true, reason: "cloud-paused" \};\s*if \(asBoolean\(state\?\.sync\?\.localImportPending\) && !options\.force\) return \{ skipped: true, reason: "local-import-pending" \};\s*const user = await getCurrentUser\(\);\s*if \(!supabase \|\| !user\) return \{ skipped: true, reason: "not-authenticated" \};/);
+    expect(syncSource).toMatch(/export function saveCloudState\(state, options = \{\}\) \{\s*const operation = cloudSaveQueue\.then\(\(\) => performCloudSave\(state, options\)\);\s*cloudSaveQueue = operation\.catch\(\(\) => undefined\);\s*return operation;\s*\}/);
+    expect(syncSource).toMatch(/async function performCloudSave\(state, options = \{\}\) \{\s*if \(asBoolean\(state\?\.sync\?\.cloudPaused\) && !options\.force\) return \{ skipped: true, reason: "cloud-paused" \};\s*if \(asBoolean\(state\?\.sync\?\.localImportPending\) && !options\.force\) return \{ skipped: true, reason: "local-import-pending" \};\s*const user = await getCurrentUser\(\);\s*if \(!supabase \|\| !user\) return \{ skipped: true, reason: "not-authenticated" \};\s*if \(options\.expectedUserId && options\.expectedUserId !== user\.id\) \{\s*return \{ skipped: true, reason: "auth-changed" \};\s*\}/);
     expect(appSource).toContain('paused: "云端暂停"');
     expect(syncDisplayStatus({ cloudPaused: true, status: "paused" })).toBe("paused");
     expect(syncDisplayStatus({ cloudPaused: true, status: "syncing" })).toBe("syncing");

@@ -1,4 +1,7 @@
 /**
+ * Migration Supabase client. Tested, but not reachable from `src/main.js`.
+ * Production sync creates its own client inside `supabase-sync.js`.
+ *
  * Supabase Client — thin wrapper exporting the configured Supabase client instance.
  *
  * Centralizes Supabase initialization so all infrastructure modules

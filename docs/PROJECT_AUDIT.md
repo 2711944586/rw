@@ -4,16 +4,18 @@
 
 本文记录当前代码边界、已经完成的清理、暂不删除的迁移代码，以及后续架构和产品改进顺序。它用于避免维护者再次并行扩展两套实现。
 
-2026-09-15 备注：本文数字已按当日代码校正，架构结论与迁移顺序仍然有效；门禁现状与技术栈成熟度见 [TECH_AUDIT_2026-09-15.md](TECH_AUDIT_2026-09-15.md)，本轮修复项与验收记录见 [REMEDIATION_2026-09-15.md](REMEDIATION_2026-09-15.md)。
+2026-09-15 备注：本文数字已按当日代码校正，架构结论与迁移顺序仍然有效；门禁现状与技术栈成熟度见 [TECH_AUDIT_2026-09-15.md](history/TECH_AUDIT_2026-09-15.md)，本轮修复项与验收记录见 [REMEDIATION_2026-09-15.md](history/REMEDIATION_2026-09-15.md)。
+
+2026-10-08 备注：时点审计已移入 `docs/history/`，不作为当前契约。当前规模是 `src` 下 44 个 JavaScript 模块，`src/app.js` 7306 行，`src/styles/base.css` 9180 行。生产入口仍是 `index.html -> src/main.js -> src/app.js`。
 
 ## 当前结论
 
 - 当前生产入口为 `index.html -> src/main.js -> src/app.js`。
-- `src` 下现有 43 个 JavaScript 模块；当前生产链路与已测试的渐进模块化层仍同时存在，未接管模块不能按“未引用”直接删除。
-- `src/app.js` 7,132 行，仍同时负责状态迁移、同步编排、表单绑定、路由和大部分渲染，是最高风险文件。
-- `src/styles/base.css` 约 9,151 行；`src/styles/workspace.css` 和 `src/styles/components/toolbar.css` 是后置视觉层。三者的加载顺序目前属于运行契约。
+- `src` 下现有 44 个 JavaScript 模块；当前生产链路与已测试的渐进模块化层仍同时存在，未接管模块不能按“未引用”直接删除。
+- `src/app.js` 7,306 行，仍同时负责状态迁移、同步编排、表单绑定、路由和大部分渲染，是最高风险文件。
+- `src/styles/base.css` 9,180 行；`src/styles/workspace.css` 与 `src/styles/components/`、`src/styles/views/` 是后置视觉层。加载顺序属于运行契约：`base.css`、`workspace.css`、组件样式、页面样式。
 - `index.html` 同时承载全部页面骨架，页面新增字段会跨 HTML、`app.js` 和 CSS 三处修改。
-- 现有 39 个测试文件、679 项测试和五档宽度 Chromium 冒烟测试可作为渐进迁移的回归基线。
+- 2026-10-08 实测 `npm test` 为 44 个测试文件、748 项通过。再加上五档宽度 Chromium 冒烟测试，这是渐进迁移的回归基线。
 
 ## 本轮已完成
 
@@ -30,7 +32,7 @@
 - 移动端主内容改为独立滚动视口，固定底栏不再覆盖页面末尾的表单或操作按钮。
 - 移动端专注模式减少重复周状态、校准与策略信息，只保留行动区、今日检查和一个风险信号。
 - Chromium 门禁覆盖 `320 / 390 / 768 / 1024 / 1440`，检查弹层、底栏、全部路由、横向溢出和桌面分组导航；每个路由另保存 `390px` 与 `1440px` 截图供复核。
-- 桌面导航使用石墨色侧栏和清晰的分组入口，阶段、本周等数据留给总览与对应页面承载。
+- 桌面导航是暖白浮卡片侧栏：品牌在上，导航在剩余高度里居中。阶段、本周等旁注留给总览与对应页面。
 - 顶栏操作改为图标与 tooltip，官方边界说明回收到“资料核验”，默认专注模式隐藏重复的卡片解释文字。
 - 字体切换为项目内打包的 Geist Variable 与 Noto Sans SC Variable，统一中文、拉丁字符和数字的字重与节奏。
 - 应用常量集中到 `config/app-config.js`，阶段、考纲、学习路径、验收规则和资料配置迁入 `data/study-content.js`，`app.js` 不再保存大段纯内容数据。
@@ -66,7 +68,7 @@
 > 使这两个模块连同 `utils/number.js` 一起进了 `app` chunk。`density-controller.js` 里
 > 依赖 `StateManager` 的三个函数（`getDensityMode` / `setDensityMode` / `initDensityMode`）
 > 当时只被一个单元测试调用，生产与迁移层都不用它们（各视图有自己的本地实现），已删除。
-> 现在这三个模块确实不在生产包中，并由上述门禁锁定。详见 [AUDIT_2026-09-22.md](AUDIT_2026-09-22.md)。
+> 现在这三个模块确实不在生产包中，并由上述门禁锁定。详见 [AUDIT_2026-09-22.md](history/AUDIT_2026-09-22.md)。
 
 ## 建议的迁移顺序
 
@@ -83,7 +85,7 @@
 
 - JavaScript 文件继续使用 kebab-case；模块导出使用动作或领域名，避免 `utils2`、`new-*`、`legacy-*` 这类临时命名。
 - 一个状态键、同步表名或路由 ID 只能有一个权威定义文件。
-- 不再向 `base.css` 末尾追加“最终覆盖”。迁移页面时，把对应规则移入 `styles/views/<route>.css`，共享控件移入 `styles/components/`。
+- 不再向 `base.css` 末尾追加“最终覆盖”。页面样式放在 `styles/views/<route>.css`，共享控件放在 `styles/components/`。学习计划页已经使用 `styles/views/study-plan.css`。
 - CSS 拆分前不要批量删除看似重复的规则。当前部分相同规则用于在后置位置重新建立层叠优先级，必须按页面截图回归后逐段移除。
 - 建议逐步引入 CSS cascade layers：tokens、base、layout、components、views、utilities、overrides；完成迁移后删除 overrides 层。
 - 对新增模块设体积提醒：页面模块超过约 300 行、控制器超过约 200 行时，应检查是否混入数据转换、模板和事件三种职责。

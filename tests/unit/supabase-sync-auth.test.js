@@ -4,6 +4,7 @@ afterEach(() => {
   vi.doUnmock('@supabase/supabase-js');
   vi.resetModules();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 async function importSupabaseSync({
@@ -11,17 +12,22 @@ async function importSupabaseSync({
   key = 'publishable-key',
   getUser = vi.fn().mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null }),
   onAuthStateChange = vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
+  resetPasswordForEmail = vi.fn().mockResolvedValue({ error: null }),
+  updateUser = vi.fn().mockResolvedValue({ error: null }),
   from = vi.fn(() => createQueryResult([])),
 } = {}) {
   vi.resetModules();
   vi.stubEnv('VITE_SUPABASE_URL', url);
   vi.stubEnv('VITE_SUPABASE_PUBLISHABLE_KEY', key);
 
-  const createClient = vi.fn(() => ({ auth: { getUser, onAuthStateChange }, from }));
+  const createClient = vi.fn(() => ({
+    auth: { getUser, onAuthStateChange, resetPasswordForEmail, updateUser },
+    from
+  }));
   vi.doMock('@supabase/supabase-js', () => ({ createClient }));
 
   const syncModule = await import('../../src/infrastructure/supabase-sync.js');
-  return { ...syncModule, createClient, getUser, onAuthStateChange, from };
+  return { ...syncModule, createClient, getUser, onAuthStateChange, resetPasswordForEmail, updateUser, from };
 }
 
 function createQueryResult(data = [], error = null) {
@@ -141,11 +147,25 @@ describe('supabaseSync auth', () => {
     await vi.waitFor(() => expect(onAuthStateChange).toHaveBeenCalledTimes(1));
     authHandler('SIGNED_IN', { user: { id: 'user-1' } });
     authHandler('SIGNED_OUT', null);
+    await vi.waitFor(() => expect(callback).toHaveBeenCalledTimes(2));
     cleanup();
 
-    expect(callback).toHaveBeenCalledWith({ id: 'user-1' });
-    expect(callback).toHaveBeenCalledWith(null);
+    expect(callback).toHaveBeenCalledWith({ id: 'user-1' }, 'SIGNED_IN');
+    expect(callback).toHaveBeenCalledWith(null, 'SIGNED_OUT');
     expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends password recovery to the app origin and updates the recovery session password', async () => {
+    vi.stubGlobal('window', { location: { origin: 'https://study.example.test' } });
+    const { sendPasswordRecoveryEmail, updateRecoveredPassword, resetPasswordForEmail, updateUser } = await importSupabaseSync();
+
+    await expect(sendPasswordRecoveryEmail('student@example.test')).resolves.toBeUndefined();
+    await expect(updateRecoveredPassword('new-secure-password')).resolves.toBeUndefined();
+
+    expect(resetPasswordForEmail).toHaveBeenCalledWith('student@example.test', {
+      redirectTo: 'https://study.example.test'
+    });
+    expect(updateUser).toHaveBeenCalledWith({ password: 'new-secure-password' });
   });
 
   it('isolates auth listener and unsubscribe failures', async () => {
@@ -169,6 +189,27 @@ describe('supabaseSync auth', () => {
     expect(() => cleanup()).not.toThrow();
   });
 
+  it('runs auth listeners after the Supabase callback has returned', async () => {
+    let authHandler;
+    let insideSdkCallback = false;
+    const onAuthStateChange = vi.fn((handler) => {
+      authHandler = handler;
+      return { data: { subscription: { unsubscribe: vi.fn() } } };
+    });
+    const callback = vi.fn(() => {
+      expect(insideSdkCallback).toBe(false);
+    });
+    const { onAuthChange } = await importSupabaseSync({ onAuthStateChange });
+    const cleanup = onAuthChange(callback);
+    await vi.waitFor(() => expect(onAuthStateChange).toHaveBeenCalledTimes(1));
+
+    insideSdkCallback = true;
+    authHandler('SIGNED_IN', { user: { id: 'user-1' } });
+    insideSdkCallback = false;
+    await vi.waitFor(() => expect(callback).toHaveBeenCalledWith({ id: 'user-1' }, 'SIGNED_IN'));
+    cleanup();
+  });
+
   it('returns a no-op cleanup when auth subscription setup fails', async () => {
     const onAuthStateChange = vi.fn(() => {
       throw new Error('subscribe failed');
@@ -176,6 +217,58 @@ describe('supabaseSync auth', () => {
     const { onAuthChange } = await importSupabaseSync({ onAuthStateChange });
 
     expect(() => onAuthChange(vi.fn())()).not.toThrow();
+  });
+
+  it('does not write local records under an account that replaced the one starting sync', async () => {
+    const getUser = vi.fn().mockResolvedValue({ data: { user: { id: 'user-2' } }, error: null });
+    const from = vi.fn(() => createQueryResult([]));
+    const { saveCloudState } = await importSupabaseSync({ getUser, from });
+
+    await expect(saveCloudState({ settings: {} }, { expectedUserId: 'user-1' })).resolves.toEqual({
+      skipped: true,
+      reason: 'auth-changed',
+    });
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('serializes overlapping cloud saves so an older write cannot finish last', async () => {
+    const profileQueries = [];
+    let releaseFirst;
+    let markFirstStarted;
+    const firstStarted = new Promise((resolve) => {
+      markFirstStarted = resolve;
+    });
+    const from = vi.fn((table) => {
+      const query = createQueryResult([]);
+      if (table === 'profiles') {
+        profileQueries.push(query);
+        if (profileQueries.length === 1) {
+          query.then = (resolve, reject) => {
+            const blocked = new Promise((resume) => {
+              releaseFirst = () => resume({ data: [], error: null });
+              markFirstStarted();
+            });
+            return blocked.then(resolve, reject);
+          };
+        }
+      }
+      return query;
+    });
+    const { saveCloudState } = await importSupabaseSync({ from });
+
+    const olderSave = saveCloudState({ settings: { marker: 'older' } });
+    await firstStarted;
+    const newerSave = saveCloudState({ settings: { marker: 'newer' } });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(profileQueries).toHaveLength(1);
+    releaseFirst();
+    await expect(Promise.all([olderSave, newerSave])).resolves.toEqual([
+      { syncedAt: expect.any(String) },
+      { syncedAt: expect.any(String) },
+    ]);
+    expect(profileQueries).toHaveLength(2);
   });
 
   it('loads cloud state when structuredClone cannot clone the local state object', async () => {
@@ -222,6 +315,33 @@ describe('supabaseSync auth', () => {
 
     expect(Object.keys(state.entries)).toHaveLength(1001);
     expect(ranges).toEqual([[0, 499], [500, 999], [1000, 1499]]);
+  });
+
+  it('sorts each paged table by stable owner-scoped keys', async () => {
+    const orderings = [];
+    const from = vi.fn((table) => {
+      const query = createQueryResult([]);
+      query.order.mockImplementation((column, options) => {
+        orderings.push([table, column, options]);
+        return query;
+      });
+      return query;
+    });
+    const { loadCloudState } = await importSupabaseSync({ from });
+
+    await loadCloudState({ schemaVersion: 3, settings: {}, deleted: {}, deletedMeta: {} });
+
+    expect(orderings).toEqual(expect.arrayContaining([
+      ['daily_records', 'study_date', { ascending: true }],
+      ['study_tasks', 'task_date', { ascending: true }],
+      ['study_tasks', 'id', { ascending: true }],
+      ['review_items', 'due_date', { ascending: true }],
+      ['review_items', 'id', { ascending: true }],
+      ['topic_progress', 'topic_id', { ascending: true }],
+      ['mock_scores', 'mock_date', { ascending: true }],
+      ['mock_scores', 'id', { ascending: true }],
+      ['resources', 'resource_key', { ascending: true }],
+    ]));
   });
 
   it('fails the cloud load if a later page cannot be read', async () => {

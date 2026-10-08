@@ -1,4 +1,7 @@
 /**
+ * Migration sync service. Tested, but not reachable from `src/main.js`.
+ * Production sync is `supabase-sync.js`. Do not start both.
+ *
  * Sync Service — Supabase push/pull, conflict detection, and optimistic updates.
  *
  * Responsibilities:

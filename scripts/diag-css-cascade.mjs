@@ -4,7 +4,7 @@
  * When a layout rule "should" apply but does not, the reason is almost always
  * another rule winning the cascade. This prints, in cascade order, every
  * declaration that actually applies to one element — which is how the two
- * mobile-layout defects in `docs/DESIGN_REVIEW_2026-09-22.md` were traced:
+ * mobile-layout defects in `docs/history/DESIGN_REVIEW_2026-09-22.md` were traced:
  *
  *   - `.focus-board` was reset to two columns by a `max-width: 620px` block in
  *     `workspace.css` that sits *after* the `max-width: 760px` block which

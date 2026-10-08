@@ -1,6 +1,9 @@
 const BUSY_CONTROL_IDS = Object.freeze([
   "signInBtn",
   "signUpBtn",
+  "resetPasswordBtn",
+  "updatePasswordBtn",
+  "cancelPasswordRecoveryBtn",
   "signOutBtn",
   "syncDialogBtn",
   "syncNowBtn",
@@ -33,6 +36,7 @@ export function bindPasswordVisibility(hydrateIcons) {
 
 export function renderAuthPanelState({
   user,
+  passwordRecoveryPending = false,
   configured,
   storageAvailable,
   syncLabel,
@@ -48,19 +52,34 @@ export function renderAuthPanelState({
   setText("authAccountText", accountLabel);
   setText("authSyncText", syncLabel);
   setText("authHelp", user
-    ? "当前账号已连接。手动同步会先拉取云端更新，再合并本机记录。"
+    ? passwordRecoveryPending
+      ? "为当前账号设置一个新密码。完成后此恢复链接即失效。"
+      : "当前账号已连接。手动同步会先拉取云端更新，再合并本机记录。"
     : "首次使用请注册账号。如果邮箱确认已开启，请先打开确认邮件，再回到这里登录。");
 
   const credentials = document.getElementById("authCredentials");
   const signedOutActions = document.getElementById("authSignedOutActions");
   const signedInActions = document.getElementById("authSignedInActions");
-  if (credentials) credentials.hidden = Boolean(user);
-  if (signedOutActions) signedOutActions.hidden = Boolean(user);
-  if (signedInActions) signedInActions.hidden = !user;
+  const recoveryActions = document.getElementById("authRecoveryActions");
+  const emailInput = document.getElementById("authEmail");
+  const passwordInput = document.getElementById("authPassword");
+  if (credentials) credentials.hidden = Boolean(user) && !passwordRecoveryPending;
+  if (signedOutActions) signedOutActions.hidden = Boolean(user) || passwordRecoveryPending;
+  if (signedInActions) signedInActions.hidden = !user || passwordRecoveryPending;
+  if (recoveryActions) recoveryActions.hidden = !passwordRecoveryPending;
+  if (emailInput) {
+    emailInput.readOnly = passwordRecoveryPending;
+    if (passwordRecoveryPending && user?.email) emailInput.value = user.email;
+  }
+  if (passwordInput) {
+    passwordInput.autocomplete = passwordRecoveryPending ? "new-password" : "current-password";
+    passwordInput.setAttribute("aria-label", passwordRecoveryPending ? "新密码" : "密码");
+  }
+  setText("authPasswordLabel", passwordRecoveryPending ? "新密码" : "密码");
 }
 
-export function focusAuthPanel(user) {
-  document.getElementById(user ? "syncDialogBtn" : "authEmail")?.focus();
+export function focusAuthPanel(user, passwordRecoveryPending = false) {
+  document.getElementById(passwordRecoveryPending ? "authPassword" : user ? "syncDialogBtn" : "authEmail")?.focus();
 }
 
 export function setAuthPanelBusy(isBusy) {

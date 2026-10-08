@@ -1,7 +1,7 @@
 # 收尾、验收与交接记录
 
 记录日期：2026-09-15
-对应审计：[TECH_AUDIT_2026-09-15.md](TECH_AUDIT_2026-09-15.md)（技术栈与门禁实测）、[PROJECT_AUDIT.md](PROJECT_AUDIT.md)（架构边界与迁移顺序）
+对应审计：[TECH_AUDIT_2026-09-15.md](TECH_AUDIT_2026-09-15.md)（技术栈与门禁实测）、[PROJECT_AUDIT.md](../PROJECT_AUDIT.md)（架构边界与迁移顺序）
 本轮范围：把 `TECH_AUDIT_2026-09-15.md` 提出的修复建议执行到「门禁回绿 + 可复核 + 可交接」的闭环。
 
 ---

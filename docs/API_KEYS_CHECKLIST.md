@@ -9,7 +9,7 @@
 创建方式：
 
 ```powershell
-Copy-Item .env.deploy.example .env.deploy
+Copy-Item scripts/env.deploy.example .env.deploy
 notepad .env.deploy
 ```
 

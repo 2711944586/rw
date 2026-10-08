@@ -16,6 +16,7 @@ const vitestGlobals = {
 export default [
   {
     ignores: [
+      'coverage/**',
       'dist/**',
       'node_modules/**',
       'output/**',

@@ -1,7 +1,7 @@
 /**
  * CSS debt ratchet.
  *
- * `docs/AUDIT_2026-09-22.md` records 75 `!important` declarations across
+ * `docs/history/AUDIT_2026-09-22.md` records 75 `!important` declarations across
  * `src/styles/`, most of them in the 5,978-line `workspace.css` override layer
  * that exists to re-establish cascade priority on top of `base.css`. Removing
  * them safely needs per-segment screenshot regression — it cannot be done in
@@ -25,7 +25,7 @@ const STYLE_ROOT = path.resolve('src/styles');
  */
 const CEILINGS = Object.freeze({
   'base.css': 12,
-  'study-plan.css': 13,
+  'views/study-plan.css': 13,
   'workspace.css': 40,
   'components/auth.css': 1,
   'components/toolbar.css': 9,
@@ -83,7 +83,7 @@ if (total > TOTAL_CEILING) {
 if (failures.length > 0) {
   console.error('\nCSS debt ratchet FAILED:');
   for (const failure of failures) console.error(`  - ${failure}`);
-  console.error('\nIf the increase is intentional, lower another file\'s ceiling or record why in CHANGELOG.md.');
+  console.error('\nIf the increase is intentional, lower another file\'s ceiling or record why in docs/CHANGELOG.md.');
   process.exit(1);
 }
 

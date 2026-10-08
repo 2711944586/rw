@@ -6,7 +6,7 @@
  * `npm run build` first — `npm run quality` chains them in that order.
  *
  * Sizes are printed as decimal KB (1 KB = 1000 bytes) to match the figures
- * quoted in README.md and docs/TECH_AUDIT_2026-09-15.md.
+ * quoted in README.md and docs/history/TECH_AUDIT_2026-09-15.md.
  */
 import fs from 'node:fs';
 import path from 'node:path';

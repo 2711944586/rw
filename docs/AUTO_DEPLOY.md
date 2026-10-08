@@ -145,7 +145,7 @@ rw
 在项目根目录运行：
 
 ```powershell
-Copy-Item .env.deploy.example .env.deploy
+Copy-Item scripts/env.deploy.example .env.deploy
 notepad .env.deploy
 ```
 
@@ -287,7 +287,7 @@ node scripts/verify-production.mjs https://你的生产域名
 运行：
 
 ```powershell
-Copy-Item .env.deploy.example .env.deploy
+Copy-Item scripts/env.deploy.example .env.deploy
 notepad .env.deploy
 ```
 

@@ -603,12 +603,6 @@ export const subjectAcceptanceRules = {
   }
 };
 
-export const resourceUsageRules = [
-  "每科只保留一条主线资料，先完成 70% 再决定是否补充第二套。",
-  "新增资料必须说明解决什么问题：概念不清、题量不足、真题表达弱或错题回炉不足。",
-  "资料进度不能替代掌握证据；完成率高但错题回炉低时，优先停新资料。"
-];
-
 export const taskBlueprints = {
   "数学": {
     output: "交付：基础题 15-25 道 + 错题原因 3 条以内 + 关键公式闭卷默写。",

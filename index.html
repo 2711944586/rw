@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="./src/styles/workspace.css">
   <link rel="stylesheet" href="./src/styles/components/toolbar.css">
   <link rel="stylesheet" href="./src/styles/components/auth.css">
-  <link rel="stylesheet" href="./src/styles/study-plan.css">
+  <link rel="stylesheet" href="./src/styles/views/study-plan.css">
 </head>
 <body data-density="focus">
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -1065,7 +1065,7 @@
 
       <div class="auth-credentials" id="authCredentials">
         <label>邮箱<input type="email" id="authEmail" autocomplete="email" placeholder="you@example.com" aria-describedby="authResult"></label>
-        <label>密码
+        <label><span id="authPasswordLabel">密码</span>
           <span class="auth-password-field">
             <input type="password" id="authPassword" autocomplete="current-password" placeholder="至少 6 位" aria-describedby="authResult">
             <button class="auth-password-toggle" id="authPasswordToggle" type="button" aria-label="显示密码" title="显示密码">
@@ -1078,10 +1078,15 @@
       <div class="auth-actions" id="authSignedOutActions">
         <button class="primary-button" id="signInBtn" type="button">登录并同步</button>
         <button class="ghost-button" id="signUpBtn" type="button">注册新账号</button>
+        <button class="ghost-button auth-reset-password" id="resetPasswordBtn" type="button">忘记密码</button>
       </div>
       <div class="auth-actions" id="authSignedInActions" hidden>
         <button class="primary-button" id="syncDialogBtn" type="button"><i data-lucide="refresh-cw" aria-hidden="true"></i>立即同步</button>
         <button class="ghost-button" id="signOutBtn" type="button">退出账号</button>
+      </div>
+      <div class="auth-actions" id="authRecoveryActions" hidden>
+        <button class="primary-button" id="updatePasswordBtn" type="submit">设置新密码</button>
+        <button class="ghost-button" id="cancelPasswordRecoveryBtn" type="button">取消</button>
       </div>
       <div class="auth-result" id="authResult" role="status" aria-live="polite">
         <strong>账号状态</strong>

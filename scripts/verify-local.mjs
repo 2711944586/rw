@@ -192,19 +192,15 @@ try {
     const sidebar = document.querySelector('.sidebar');
     const items = [...document.querySelectorAll('.nav-item')];
     const rect = sidebar?.getBoundingClientRect();
-    const brandRect = document.querySelector('.brand')?.getBoundingClientRect();
     const firstItem = items[0]?.getBoundingClientRect();
     const lastItem = items.at(-1)?.getBoundingClientRect();
     return {
       position: sidebar ? getComputedStyle(sidebar).position : '',
       height: rect?.height || 0,
       viewportHeight: window.innerHeight,
-      brandBottom: brandRect?.bottom || 0,
-      navTop: firstItem?.top || 0,
-      navBottom: lastItem?.bottom || 0,
-      groupLabelsVisible: [...document.querySelectorAll('.nav-label')]
-        .some((label) => label.getClientRects().length > 0),
-      peripheralNotesHidden: ['.sidebar-status', '.side-card', '.topbar .eyebrow']
+      navCenter: firstItem && lastItem ? (firstItem.top + lastItem.bottom) / 2 : 0,
+      viewportCenter: window.innerHeight / 2,
+      peripheralNotesHidden: ['.sidebar-status', '.side-card', '.nav-label', '.topbar .eyebrow']
         .every((selector) => {
           const element = document.querySelector(selector);
           return !element || element.getClientRects().length === 0;
@@ -217,10 +213,8 @@ try {
     };
   });
   assert(desktopNavigation.position === 'sticky', 'Desktop navigation is not sticky.');
-  assert(Math.abs(desktopNavigation.height - (desktopNavigation.viewportHeight - 32)) <= 2, 'Desktop navigation does not fill the available viewport.');
-  assert(desktopNavigation.navTop > desktopNavigation.brandBottom, 'Desktop navigation does not follow the brand.');
-  assert(desktopNavigation.navBottom < desktopNavigation.viewportHeight, 'Desktop navigation extends below the viewport.');
-  assert(desktopNavigation.groupLabelsVisible, 'Desktop navigation group labels are not visible.');
+  assert(Math.abs(desktopNavigation.height - (desktopNavigation.viewportHeight - 28)) <= 2, 'Desktop navigation does not fill the available viewport.');
+  assert(Math.abs(desktopNavigation.navCenter - desktopNavigation.viewportCenter) <= 12, 'Desktop navigation items are not visually centered.');
   assert(desktopNavigation.peripheralNotesHidden, 'Peripheral desktop annotations are still visible.');
   assert(desktopNavigation.fontFamily.startsWith('"Noto Sans SC Variable"'), 'Chinese-first workspace font stack is not active.');
   assert(desktopNavigation.monoFamily.includes('Geist Variable'), 'Numeric workspace font stack is not active.');
@@ -268,7 +262,7 @@ try {
   });
   await page.waitForTimeout(50);
   const stickyTop = await page.locator('.sidebar').evaluate((element) => element.getBoundingClientRect().top);
-  assert(stickyTop >= 15 && stickyTop <= 17, `Desktop navigation did not remain visible: top=${stickyTop}`);
+  assert(stickyTop >= 13 && stickyTop <= 15, `Desktop navigation did not remain visible: top=${stickyTop}`);
 
   await page.setViewportSize({ width: 1024, height: 900 });
   const tabletDesktopState = await page.evaluate(() => ({

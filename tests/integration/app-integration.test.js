@@ -244,6 +244,56 @@ describe('app integration: account panel', () => {
   });
 });
 
+describe('app integration: password recovery', () => {
+  afterEach(() => {
+    vi.doUnmock('@supabase/supabase-js');
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('opens the recovery form on Supabase callback and updates the password', async () => {
+    let authHandler;
+    const updateUser = vi.fn().mockResolvedValue({ error: null });
+    const createClient = vi.fn(() => ({
+      auth: {
+        getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+        onAuthStateChange: vi.fn((handler) => {
+          authHandler = handler;
+          return { data: { subscription: { unsubscribe: vi.fn() } } };
+        }),
+        resetPasswordForEmail: vi.fn().mockResolvedValue({ error: null }),
+        updateUser
+      }
+    }));
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://example.supabase.co');
+    vi.stubEnv('VITE_SUPABASE_PUBLISHABLE_KEY', 'publishable-test-key');
+    vi.doMock('@supabase/supabase-js', () => ({ createClient }));
+    window.history.replaceState(null, '', '/#access_token=recovery-token&type=recovery');
+
+    await mountProductionApp();
+    await vi.waitFor(() => expect(authHandler).toBeTypeOf('function'));
+    authHandler('PASSWORD_RECOVERY', {
+      user: { id: 'user-recovery', email: 'student@example.test' }
+    });
+
+    await vi.waitFor(() => expect(document.getElementById('authDialog').open).toBe(true));
+    expect(document.getElementById('authRecoveryActions').hidden).toBe(false);
+    expect(document.getElementById('authEmail')).toMatchObject({
+      value: 'student@example.test',
+      readOnly: true
+    });
+
+    document.getElementById('authPassword').value = 'new-secure-password';
+    submitForm('authForm');
+    await vi.waitFor(() => expect(updateUser).toHaveBeenCalledWith({ password: 'new-secure-password' }));
+
+    expect(document.getElementById('authRecoveryActions').hidden).toBe(true);
+    expect(document.getElementById('authSignedInActions').hidden).toBe(false);
+    expect(document.getElementById('authResult').textContent).toContain('密码已更新');
+  });
+});
+
 describe('app integration: form validation', () => {
   let downloads;
 

@@ -3,10 +3,23 @@
 本文件记录本项目的显著变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Changed
+
+- 工作台视觉回到 2026-09-22 的暖白侧栏和藏青主行动卡。模块拆分、已修复的同步与登录行为、Supabase 结构保持不动。
+- 本地审核入口固定为 `scripts/start-local.bat` 与 `npm run start:local`。服务已在 `5173` 运行时只打开浏览器。
+- 根目录只保留工具会自己发现的文件。启动脚本、部署模板和变更记录留在 `scripts/` 与 `docs/`。
+
+### Added
+
+- `supabase/migrations/016_sync_query_indexes_and_data_checks.sql`：同步分页索引与 `NOT VALID` 写入检查。同一语句已并入 `supabase/schema.sql`。
+- `src/infrastructure/recovery-store.js`：本机 IndexedDB 恢复镜像。
+
 ## [4.1.2] - 2026-09-22
 
 本轮主题：**界面缺陷修复**。评审方式与完整结论见
-[`docs/DESIGN_REVIEW_2026-09-22.md`](docs/DESIGN_REVIEW_2026-09-22.md)——先构建产物、灌入 23 天真实数据、
+[`docs/history/DESIGN_REVIEW_2026-09-22.md`](docs/history/DESIGN_REVIEW_2026-09-22.md)——先构建产物、灌入 23 天真实数据、
 在 3 种视口逐页截图阅读，再用浏览器实测判定每一处"是缺陷还是数据问题"。
 
 ### Fixed
@@ -107,7 +120,7 @@
   `bindSyllabusTabs → renderSyllabus`）末尾调用。
 - `index.css` 产物由 370.91 KB / gzip 86.55 KB 降到 358.60 KB / **gzip 75.18 KB**（预算余量
   由 8.45 KB 扩大到 19.82 KB）。
-- `docs/AUDIT_2026-09-22.md` 补充本轮复核结论与修复结果。
+- `docs/history/AUDIT_2026-09-22.md` 补充本轮复核结论与修复结果。
 - `src/ui/density-controller.js`：删除 `StateManager` 导入与 `getDensityMode` / `setDensityMode` /
   `initDensityMode`。三者在生产与迁移层都无人调用（各视图有自己的本地实现），唯一消费者是一个
   单元测试，却因此把 `state-manager.js`（605 行）与 `event-bus.js`（139 行）拖进了生产包——
@@ -172,7 +185,7 @@
 - `package.json` 增加 `engines: { node: "^20.19.0 || >=22.12.0" }`，让 README 口述的 Node 要求变成机器约束。
 - `vercel.json` 增加 `/(.*)` 全路径安全响应头：CSP、`X-Content-Type-Options`、`Referrer-Policy`、
   `X-Frame-Options`、HSTS、`Permissions-Policy`。
-- 文档：`docs/PROJECT_AUDIT.md`、`docs/STUDY_PLAN.md`、`docs/TECH_AUDIT_2026-09-15.md`。
+- 文档：`docs/PROJECT_AUDIT.md`、`docs/STUDY_PLAN.md`、`docs/history/TECH_AUDIT_2026-09-15.md`。
 
 ### Changed
 

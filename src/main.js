@@ -1,5 +1,6 @@
 import "@fontsource-variable/geist/wght.css";
 import "@fontsource-variable/noto-sans-sc/wght.css";
+import { restoreLocalState } from "./infrastructure/recovery-store.js";
 
 function installShellFallback(error) {
   console.error("[rw] main module fallback", error);
@@ -65,6 +66,7 @@ function installShellFallback(error) {
 }
 
 try {
+  await restoreLocalState();
   await import("./app.js");
 } catch (error) {
   if (document.readyState === "loading") {
