@@ -3585,7 +3585,7 @@ function renderWeekPulse() {
   const maxMinutes = Math.max(60, ...days.map((day) => day.minutes));
   container.innerHTML = days.map((day) => {
     const height = day.minutes ? Math.max(8, Math.round(day.minutes / maxMinutes * 100)) : 0;
-    return `<span class="pulse-day" title="${day.iso} · ${day.minutes} 分钟"><i style="--pulse:${height}%"></i><em>${day.label}</em></span>`;
+    return `<span class="pulse-day" title="${day.iso} · ${day.minutes} 分钟"><i data-height="${height}"></i><em>${day.label}</em></span>`;
   }).join("");
   if (caption) {
     caption.textContent = recorded >= 3
@@ -7109,7 +7109,7 @@ function renderScores() {
     trend.innerHTML = chronological.length ? chronological.map((score) => {
       const total = Number(score.total) || 0;
       const height = Math.max(6, Math.round(total / maxTotal * 100));
-      return `<span class="score-trend-bar" title="${escapeAttr(score.date)} · ${escapeAttr(score.name)} · ${total}"><i style="--score:${height}%"></i><em>${total}</em></span>`;
+      return `<span class="score-trend-bar" title="${escapeAttr(score.date)} · ${escapeAttr(score.name)} · ${total}"><i data-height="${height}"></i><em>${total}</em></span>`;
     }).join("") : `<p class="score-trend-empty">保存两套以上模考后，这里显示总分走向。</p>`;
   }
 
