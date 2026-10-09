@@ -4464,35 +4464,6 @@ function regenerateTodayPlan() {
   return { saved, message: `${summary}。今日任务已保存到本机。` };
 }
 
-function applyTaskToEntry(task) {
-  const date = task.date || planTodayISO();
-  ensureLearningContainers();
-  const entry = entryRow(date) || {};
-  const key = subjectToEntryKey(task.subject);
-  const changes = [];
-
-  const applyNumericChange = (field, nextValue) => {
-    const before = sanitizeNumber(entry[field]);
-    const after = sanitizeNumber(nextValue);
-    if (before === after) return;
-    changes.push({ field, before, after });
-    entry[field] = after;
-  };
-
-  if (key) applyNumericChange(key, sanitizeNumber(entry[key]) + (task.minutes || 0));
-  if (task.subject === "数学") applyNumericChange("mathProblems", Math.max(sanitizeNumber(entry.mathProblems), 15));
-  if (task.subject === "408") applyNumericChange("csProblems", Math.max(sanitizeNumber(entry.csProblems), 20));
-  if (task.subject === "英语") applyNumericChange("reading", Math.max(sanitizeNumber(entry.reading), 1));
-  entry.quality = entry.quality || 3;
-  entry.nextTask = entry.nextTask || "";
-  entry.note = entry.note || "";
-  entry.updatedAt = new Date().toISOString();
-  unmarkDeleted("records", date);
-  state.entries[date] = entry;
-  if (date === (document.getElementById("entryDate")?.value || planTodayISO())) loadEntryForm();
-  return normalizeTaskRecordImpact({ date, changes });
-}
-
 function revertTaskFromEntry(task) {
   const impact = normalizeTaskRecordImpact(task.recordImpact);
   if (!impact) return false;
@@ -4515,23 +4486,10 @@ function revertTaskFromEntry(task) {
   return true;
 }
 
-function subjectToEntryKey(subject) {
-  return {
-    "数学": "math",
-    "408": "cs408",
-    "英语": "english",
-    "政治": "politics",
-    "项目": "project",
-    "补弱": "math",
-    "复盘": null
-  }[subject] || null;
-}
-
 /**
  * Task and review subjects are stored as Chinese labels (数学 / 408 / 英语 …),
- * not as the internal keys. `subjectToEntryKey` only understands labels, so a
- * payload carrying `subject: "math"` would both render the raw key in the UI and
- * silently fail to map a completed task onto a record field.
+ * not as the internal keys. A payload carrying `subject: "math"` would render the
+ * raw key in the UI and miss the daily record field for that subject.
  *
  * Cloud rows and pre-rename local payloads can carry either form, so normalise
  * at the sanitising boundary. Values that are neither a known label nor a known
