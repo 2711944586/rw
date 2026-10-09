@@ -134,7 +134,7 @@ describe("app imports", () => {
     expect(appSource).toMatch(/async function pullCloudState\(\) \{[\s\S]*if \(state\.sync\?\.cloudPaused\) \{\s*state\.sync = \{ \.\.\.state\.sync, status: "paused", pending: false \};\s*const localSaved = saveState\(\{ skipCloud: true \}\);\s*renderSyncStatus\(\);\s*renderAuthPanel\(\);\s*return \{ ok: false, reason: "cloud-paused", localSaved \};\s*\}[\s\S]*if \(state\.sync\?\.localImportPending\) \{\s*state\.sync = \{ \.\.\.state\.sync, status: "pending", pending: true \};\s*const localSaved = saveState\(\{ skipCloud: true \}\);\s*renderSyncStatus\(\);\s*renderAuthPanel\(\);\s*return \{ ok: false, reason: "local-import-pending", localSaved \};\s*\}/);
     expect(appSource).toMatch(/async function pullCloudState\(\) \{\s*if \(!currentUser \|\| !supabaseConfigured\) \{\s*const reason = currentUser && !supabaseConfigured \? "unconfigured" : "not-authenticated";\s*if \(!currentUser\) state\.user = null;\s*state\.sync = \{[\s\S]*status: state\.sync\?\.cloudPaused \? "paused" : \(currentUser \? "unconfigured" : "local"\),\s*pending: false,\s*lastError: reason[\s\S]*const localSaved = saveState\(\{ skipCloud: true \}\);\s*renderSyncStatus\(\);\s*renderAuthPanel\(\);\s*return \{ ok: false, reason, localSaved \};\s*\}/);
     expect(appSource).toMatch(/async function pullCloudState\(\) \{[\s\S]*const cloudState = await loadCloudState\(state\);\s*if \(!cloudState\) \{\s*currentUser = null;\s*state\.user = null;\s*state\.sync = \{ \.\.\.state\.sync, status: "local", pending: false, lastError: "not-authenticated" \};\s*const localSaved = saveState\(\{ skipCloud: true \}\);\s*renderSyncStatus\(\);\s*renderAuthPanel\(\);\s*return \{ ok: false, reason: "not-authenticated", localSaved \};\s*\}\s*if \(cloudState\) \{\s*state = migrateState\(mergeStateByUpdatedAt\(state, cloudState\)\);\s*state\.sync = \{\s*status: "synced",\s*lastSyncAt: new Date\(\)\.toISOString\(\),\s*lastError: "",\s*pending: false,\s*localImportPending: false,\s*cloudPaused: false\s*\};\s*legacyImportPending = false;\s*const localSaved = saveState\(\{ skipCloud: true \}\);\s*return \{ ok: true, pulled: true, localSaved \};\s*\}\s*return \{ ok: true, pulled: true, localSaved: true \};/);
-    expect(appSource).toMatch(/async function pullCloudState\(\) \{[\s\S]*\} catch \(error\) \{\s*const message = safeErrorMessage\(error, "拉取云端失败"\);\s*state\.sync = \{ \.\.\.state\.sync, status: "error", lastError: message, pending: true \};\s*const localSaved = saveState\(\{ skipCloud: true \}\);\s*renderSyncStatus\(\);\s*renderAuthPanel\(\);\s*return \{ ok: false, reason: "pull-failed", error: message, localSaved \};\s*\}/);
+    expect(appSource).toMatch(/async function pullCloudState\(\) \{[\s\S]*\} catch \(error\) \{\s*const message = safeErrorMessage\(error, "拉取云端失败"\);\s*state\.sync = \{ \.\.\.state\.sync, status: conflictSyncStatus\(message\), lastError: message, pending: true \};\s*const localSaved = saveState\(\{ skipCloud: true \}\);\s*renderSyncStatus\(\);\s*renderAuthPanel\(\);\s*return \{ ok: false, reason: "pull-failed", error: message, localSaved \};\s*\}/);
     expect(appSource).toMatch(/function queueCloudSync\(\) \{[\s\S]*status: state\.sync\?\.cloudPaused \? "paused" : \(currentUser \? "unconfigured" : "local"\),[\s\S]*if \(state\.sync\?\.localImportPending\)[\s\S]*if \(state\.sync\?\.cloudPaused\) \{\s*state\.sync = \{ \.\.\.state\.sync, status: "paused", pending: false \};/);
     expect(appSource).toMatch(/function queueCloudSync\(\) \{[\s\S]*if \(!currentUser \|\| !supabaseConfigured\) \{[\s\S]*saveState\(\{ skipCloud: true \}\);\s*return;[\s\S]*if \(state\.sync\?\.localImportPending\) \{[\s\S]*saveState\(\{ skipCloud: true \}\);\s*return;[\s\S]*if \(state\.sync\?\.cloudPaused\) \{[\s\S]*saveState\(\{ skipCloud: true \}\);\s*return;[\s\S]*if \(navigator && navigator\.onLine === false\) \{[\s\S]*saveState\(\{ skipCloud: true \}\);\s*return;[\s\S]*state\.sync = \{ \.\.\.state\.sync, status: "pending", pending: true \};\s*saveState\(\{ skipCloud: true \}\);\s*window\.clearTimeout\(syncTimer\);/);
     expect(appSource).toMatch(/async function syncNow\(options = \{\}\) \{\s*if \(!currentUser \|\| !supabaseConfigured\) \{\s*const reason = currentUser && !supabaseConfigured \? "unconfigured" : "not-authenticated";\s*if \(!currentUser\) state\.user = null;\s*state\.sync = \{[\s\S]*status: state\.sync\?\.cloudPaused \? "paused" : \(currentUser \? "unconfigured" : "local"\),\s*pending: false,\s*lastError: reason[\s\S]*const localSaved = saveState\(\{ skipCloud: true \}\);[\s\S]*renderAuthPanel\(\);[\s\S]*return \{ ok: false, reason, localSaved \};\s*\}/);
@@ -145,15 +145,15 @@ describe("app imports", () => {
     expect(appSource).toContain("expectedUserId: currentUser?.id || \"\"");
     expect(appSource).toMatch(/if \(result\?\.skipped\) \{\s*const reason = result\.reason \|\| "sync-skipped";[\s\S]*if \(reason === "not-authenticated"\) \{\s*currentUser = null;\s*state\.user = null;\s*\}[\s\S]*status: reason === "cloud-paused" \? "paused" : \(reason === "local-import-pending" \? "pending" : "local"\),\s*pending: reason === "local-import-pending",[\s\S]*const localSaved = saveState\(\{ skipCloud: true \}\);[\s\S]*return \{ ok: false, reason, localSaved \};\s*\}/);
     expect(appSource).toMatch(/state\.sync = \{\s*status: "synced",\s*lastSyncAt: result\?\.syncedAt \|\| new Date\(\)\.toISOString\(\),\s*lastError: "",\s*pending: false,\s*localImportPending: false,\s*cloudPaused: false\s*\};\s*legacyImportPending = false;\s*const localSaved = saveState\(\{ skipCloud: true \}\);\s*renderSyncStatus\(\);\s*renderAuthPanel\(\);\s*return \{ ok: true, syncedAt: state\.sync\.lastSyncAt, localSaved \};/);
-    expect(appSource).toMatch(/\} catch \(error\) \{\s*const message = safeErrorMessage\(error, "同步失败"\);\s*state\.sync = \{ \.\.\.state\.sync, status: "error", lastError: message, pending: true \};\s*const localSaved = saveState\(\{ skipCloud: true \}\);\s*const syncError = friendlySyncError\(message\);\s*setAuthResult\("error", localSaved \? "同步失败" : "同步状态未写入本机缓存", localSaved[\s\S]*return \{ ok: false, reason: "sync-error", error: message, localSaved \};\s*\}/);
+    expect(appSource).toMatch(/\} catch \(error\) \{\s*const message = safeErrorMessage\(error, "同步失败"\);\s*state\.sync = \{ \.\.\.state\.sync, status: conflictSyncStatus\(message\), lastError: message, pending: true \};\s*const localSaved = saveState\(\{ skipCloud: true \}\);\s*const syncError = friendlySyncError\(message\);\s*setAuthResult\("error", localSaved \? "同步失败" : "同步状态未写入本机缓存", localSaved[\s\S]*return \{ ok: false, reason: "sync-error", error: message, localSaved \};\s*\}/);
     expect(syncSource).toMatch(/export function saveCloudState\(state, options = \{\}\) \{\s*const operation = cloudSaveQueue\.then\(\(\) => performCloudSave\(state, options\)\);\s*cloudSaveQueue = operation\.catch\(\(\) => undefined\);\s*return operation;\s*\}/);
     expect(syncSource).toMatch(/async function performCloudSave\(state, options = \{\}\) \{\s*if \(asBoolean\(state\?\.sync\?\.cloudPaused\) && !options\.force\) return \{ skipped: true, reason: "cloud-paused" \};\s*if \(asBoolean\(state\?\.sync\?\.localImportPending\) && !options\.force\) return \{ skipped: true, reason: "local-import-pending" \};\s*const user = await getCurrentUser\(\);\s*if \(!supabase \|\| !user\) return \{ skipped: true, reason: "not-authenticated" \};\s*if \(options\.expectedUserId && options\.expectedUserId !== user\.id\) \{\s*return \{ skipped: true, reason: "auth-changed" \};\s*\}/);
-    expect(appSource).toContain('paused: "云端暂停"');
+    expect(appSource).toContain('function conflictSyncStatus(message)');
     expect(syncDisplayStatus({ cloudPaused: true, status: "paused" })).toBe("paused");
     expect(syncDisplayStatus({ cloudPaused: true, status: "syncing" })).toBe("syncing");
     expect(syncDisplayStatus({ cloudPaused: true, status: "error" })).toBe("error");
-    expect(appSource).toContain("const status = syncDisplayStatus()");
-    expect(appSource).toContain('if (pill) pill.dataset.status = status || "local"');
+    expect(appSource).toContain("const presented = presentSyncStatus(state.sync");
+    expect(appSource).toContain('if (pill) pill.dataset.status = presented.key || status || "local"');
     expect(appSource).toContain("state.sync?.localImportPending || legacyImportPending || state.sync?.cloudPaused");
     expect(appSource).toContain("已选择保留本机，云端同步暂停。要恢复同步，请先下载备份，再点击“导入云端”。");
     expect(appSource).toMatch(/function keepLocalOnly\(dialog\) \{\s*state\.sync = \{ \.\.\.state\.sync, localImportPending: false, cloudPaused: true, status: "paused", pending: false \};\s*legacyImportPending = false;\s*const saved = saveState\(\{ skipCloud: true \}\);\s*renderSyncStatus\(\);\s*renderAuthPanel\(\);\s*setLocalSaveResult\(saved, "已保留本机数据", "云端同步已暂停。", "保留本机选择未写入本机缓存"\);\s*if \(saved\) closeAuthDialog\(dialog\);\s*\}/);
@@ -1371,9 +1371,11 @@ describe("app imports", () => {
     expect(appSource).toContain("function firstTaskRecordImpact(values)");
     expect(appSource).toContain("recordImpact: firstTaskRecordImpact([row.recordImpact, row.record_impact])");
     expect(appSource).toContain("recordImpact: normalizeTaskRecordImpact(task.recordImpact)");
-    expect(appSource).toMatch(/const impact = applyTaskToEntry\(task\);\s*task\.recordApplied = true;\s*task\.recordImpact = impact;/);
-    expect(appSource).toMatch(/else if \(!checkbox\.checked && task\.recordApplied\) \{\s*revertTaskFromEntry\(task\);\s*task\.recordApplied = false;\s*task\.recordImpact = null;/);
-    expect(appSource).toMatch(/const saved = saveState\(\);\s*renderDailyTaskProgress\(tasks\);\s*renderReviewQueue\(\);\s*renderDashboard\(\);\s*renderFocusBoard\(tasks\);\s*renderWeekPlanner\(\);\s*if \(!saved\) \{\s*setLocalSaveResult\(false, "任务状态已保存", "任务状态已写入本机缓存。", checkbox\.checked \? "任务完成状态未写入本机缓存" : "任务取消完成未写入本机缓存"\);/);
+    expect(appSource).toMatch(/task\.recordApplied = true;\s*task\.recordImpact = applied\.impact;/);
+    expect(appSource).toMatch(/if \(task\.recordApplied\) \{\s*revertTaskFromEntry\(task\);\s*task\.recordApplied = false;\s*task\.recordImpact = null;/);
+    expect(appSource).toMatch(/setLocalSaveResult\(false, "任务状态已保存", "任务状态已写入本机缓存。", "任务完成状态未写入本机缓存"\);/);
+    expect(appSource).toContain("function commitTaskCompletion(task, evidence)");
+    expect(appSource).toContain("validateCompletionEvidence");
     expect(appSource).toContain("function revertTaskFromEntry(task)");
     expect(appSource).toContain("if (sanitizeNumber(entry[change.field]) !== change.after) return;");
   });
@@ -1587,7 +1589,7 @@ describe("app imports", () => {
     expect(appSource).not.toContain("recordApplied: Boolean(task.recordApplied)");
     expect(appSource).toMatch(/const shouldPersist = options\.persist === true;\s*ensurePlanContainers\(\);\s*const hasPlannedDate = Object\.prototype\.hasOwnProperty\.call\(state\.weekPlans, date\);\s*const existing = planTasksForDate\(date\);\s*if \(hasPlannedDate && !existing\.length && !force\) return taskBuildResult\(\[\], true, options\);/);
     expect(appSource).toMatch(/function renderTasks\(force = false, date = planTodayISO\(\)\) \{[\s\S]*const result = buildDailyTasks\(force, date, \{ persist: force, withSaveResult: true \}\);\s*const tasks = result\.tasks;[\s\S]*return result;\s*\}/);
-    expect(appSource).toMatch(/document\.getElementById\("generatePlanBtn"\)\?\.addEventListener\("click", \(\) => \{\s*const result = renderTasks\(true\);\s*setLocalSaveResult\(result\?\.saved !== false, "今日计划已重新生成", "今日任务已保存到本机。", "今日计划未写入本机缓存"\);/);
+    expect(appSource).toMatch(/document\.getElementById\("generatePlanBtn"\)\?\.addEventListener\("click", \(\) => \{\s*const result = regenerateTodayPlan\(\);\s*if \(!result\) return;\s*setLocalSaveResult\(result\?\.saved !== false, "今日计划已重新生成", result\.message, "今日计划未写入本机缓存"\);/);
     expect(appSource).toContain("function taskBuildResult(tasks, saved = true, options = {})");
     expect(appSource).toContain("function previewDailyTasks(date = planTodayISO())");
     expect(appSource).toMatch(/function previewDailyTasks\(date = planTodayISO\(\)\) \{\s*ensurePlanContainers\(\);[\s\S]*weekPlans: clonePlainState\(state\.weekPlans\),[\s\S]*tasks: clonePlainState\(state\.tasks\),[\s\S]*deleted: clonePlainState\(stateObject\(state\.deleted\)\),[\s\S]*deletedMeta: clonePlainState\(stateObject\(state\.deletedMeta\)\)[\s\S]*return buildDailyTasks\(false, date\);[\s\S]*state\.weekPlans = previous\.weekPlans;[\s\S]*state\.tasks = previous\.tasks;[\s\S]*state\.deleted = previous\.deleted;[\s\S]*state\.deletedMeta = previous\.deletedMeta;/);
@@ -1659,12 +1661,12 @@ describe("app imports", () => {
     expect(isValidReviewFailureReason("   ")).toBe(false);
 
     expect(appSource).toContain("function isValidReviewFailureReason(reason)");
-    expect(appSource).toMatch(/document\.querySelectorAll\("\[data-review-fail\]"\)[\s\S]*if \(!failReview\(button\.dataset\.reviewFail\)\) return;[\s\S]*setLocalSaveResult\(saved, "失败已记录", "已安排短复盘，并保留失败原因。", "复盘失败记录未写入本机缓存"\)/);
-    expect(appSource).toMatch(/if \(reason === null\) return false;/);
+    expect(appSource).toMatch(/document\.querySelectorAll\("\[data-review-fail\]"\)[\s\S]*if \(!failReview\(button\.dataset\.reviewFail, reason\)\) return;[\s\S]*setLocalSaveResult\(saved, "失败已记录", "已安排短复盘，并保留失败原因。", "复盘失败记录未写入本机缓存"\)/);
+    expect(appSource).toContain("function gradeReview(id, grade, reason = \"\")");
     expect(appSource).toContain('setAuthResult("error", "失败原因无效", "请写明需要回炉的原因。")');
     expect(appSource).toMatch(/if \(!isReviewDue\(item\)\) return false;/);
-    expect(appSource).toMatch(/const timestamp = stampReviewResult\(item, "fail"\);[\s\S]*item\.done = true;[\s\S]*item\.failureReason = nextReason;/);
-    expect(appSource).toMatch(/item\.status = "failed";[\s\S]*item\.completedAt = timestamp;[\s\S]*item\.failStreak = \(item\.failStreak \|\| 0\) \+ 1;[\s\S]*cloneShortReview\(item, item\.failureReason\);[\s\S]*return true;/);
+    expect(appSource).toMatch(/const timestamp = stampReviewResult\(item, effect\.passed \? "pass" : "fail"\);[\s\S]*item\.failureReason = String\(reason \|\| item\.failureReason \|\| "需要回炉"\)\.trim\(\);/);
+    expect(appSource).toMatch(/item\.status = "failed";[\s\S]*item\.leech = effect\.leech;[\s\S]*cloneShortReview\(item, item\.failureReason\);[\s\S]*return true;/);
     expect(appSource).toMatch(/function cloneShortReview\(item, reason\) \{[\s\S]*updatedAt: now/);
   });
 
@@ -1691,9 +1693,10 @@ describe("app imports", () => {
     expect(appSource).toContain("function isValidTopicEvidenceText(text)");
     expect(appSource).toContain("function parseTopicEvidenceMetrics(text, existing = {})");
     expect(appSource).toContain('showToast("掌握证据不能为空，请补充题量、正确率或可交付结果。")');
-    expect(appSource).toMatch(/let capturedEvidence = false;[\s\S]*capturedEvidence = captureTopicEvidence\(id\);[\s\S]*if \(next === 1 && capturedEvidence\) showToast/);
-    expect(appSource).toMatch(/const saved = saveState\(\);\s*renderSyllabus\(selected\);\s*renderSyllabusMini\(\);\s*renderDashboard\(\);\s*if \(capturedEvidence\) \{\s*setLocalSaveResult\(saved, "掌握证据已记录", "考点已标为掌握，证据已保存。", "掌握证据未写入本机缓存"\);\s*\} else if \(!saved\) \{\s*setLocalSaveResult\(false, "考点状态已保存", "考点状态已写入本机缓存。", "考点状态未写入本机缓存"\);/);
-    expect(appSource).toMatch(/if \(text === null\) return false;[\s\S]*const evidenceText = text\.trim\(\);[\s\S]*if \(!isValidTopicEvidenceText\(evidenceText\)\)/);
+    expect(appSource).toMatch(/if \(next === 2 && !hasTopicEvidence\(id\)\) \{\s*openTopicEvidenceForm\(id\);\s*showToast\("补充题量、正确率或可交付结果后再标已掌握。"\);\s*return;\s*\}/);
+    expect(appSource).toMatch(/const capturedEvidence = captureTopicEvidence\(id, new FormData\(form\)\.get\("evidence"\)\);[\s\S]*setLocalSaveResult\(saved, "掌握证据已记录", "考点已标为掌握，证据已保存。", "掌握证据未写入本机缓存"\);/);
+    expect(appSource).toMatch(/const saved = saveState\(\);\s*renderSyllabus\(selected\);\s*renderSyllabusMini\(\);\s*renderDashboard\(\);\s*if \(!saved\) \{\s*setLocalSaveResult\(false, "考点状态已保存", "考点状态已写入本机缓存。", "考点状态未写入本机缓存"\);/);
+    expect(appSource).toMatch(/if \(text === null \|\| text === undefined\) return false;[\s\S]*const evidenceText = String\(text\)\.trim\(\);[\s\S]*if \(!isValidTopicEvidenceText\(evidenceText\)\)/);
     expect(appSource).toMatch(/problems: metrics\.problems,[\s\S]*accuracy: metrics\.accuracy,[\s\S]*evidence: evidenceText/);
     expect(appSource).not.toContain('showToast("已记录掌握证据。")');
   });

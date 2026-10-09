@@ -104,6 +104,18 @@ function asInteger(value, min = 0, max = Number.POSITIVE_INFINITY) {
   return Math.round(Math.min(max, Math.max(min, number)));
 }
 
+function decodedDailyLoad(note) {
+  const text = asString(note);
+  const tier = (text.match(/\[负荷 (bottomline|normal|strong)\]/) || [])[1] || "";
+  const sleep = Number((text.match(/\[睡眠 (\d+(?:\.\d)?)h\]/) || [])[1] || 0);
+  const fatigue = Number((text.match(/\[疲劳 ([1-5])\]/) || [])[1] || 3);
+  return {
+    sleepHours: Number.isFinite(sleep) ? sleep : 0,
+    fatigue: fatigue >= 1 && fatigue <= 5 ? fatigue : 3,
+    loadTier: tier
+  };
+}
+
 function asString(value, fallback = "") {
   const type = typeof value;
   const text = value == null || !["string", "number", "bigint"].includes(type) ? fallback : String(value);
@@ -441,6 +453,13 @@ function sanitizeCloudProfileSettings(value) {
   if (Object.prototype.hasOwnProperty.call(source, "planControls")) settings.planControls = normalizePlanControlsSetting(source.planControls);
   if (Object.prototype.hasOwnProperty.call(source, "efficiencyModeApplied")) settings.efficiencyModeApplied = asBoolean(source.efficiencyModeApplied);
   if (Object.prototype.hasOwnProperty.call(source, "rampSettingsApplied")) settings.rampSettingsApplied = asBoolean(source.rampSettingsApplied);
+  if (Object.prototype.hasOwnProperty.call(source, "notificationsEnabled")) settings.notificationsEnabled = asBoolean(source.notificationsEnabled);
+  if (Array.isArray(source.officialChecksDone)) {
+    settings.officialChecksDone = source.officialChecksDone
+      .map((item) => asString(item).trim())
+      .filter(Boolean)
+      .slice(0, 12);
+  }
   return settings;
 }
 
@@ -817,6 +836,7 @@ export async function loadCloudState(baseState) {
       quality: firstCloudInteger([row.quality_score, 3], 1, 5, 3),
       nextTask: asString(row.next_task),
       note: asString(row.note),
+      ...decodedDailyLoad(asString(row.note)),
       updatedAt: asTimestamp(row.updated_at, "")
     }]];
   }));

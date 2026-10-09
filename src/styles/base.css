@@ -898,9 +898,8 @@ a:focus-visible,
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--primary), #4f72a8);
-  background-size: 200% 100%;
-  animation: progressShimmer 3s ease infinite;
-  transition: width 600ms var(--ease);
+  background-size: 100% 100%;
+  transition: width 180ms var(--ease);
 }
 
 @keyframes progressShimmer {
@@ -1984,7 +1983,7 @@ a:focus-visible,
   font-family: var(--mono);
   font-size: 14px;
   font-weight: 800;
-  transition: all 600ms var(--ease);
+  transition: background 180ms var(--ease);
 }
 
 .syllabus-hero strong,

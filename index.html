@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="./src/styles/components/toolbar.css">
   <link rel="stylesheet" href="./src/styles/components/auth.css">
   <link rel="stylesheet" href="./src/styles/views/study-plan.css">
+  <link rel="stylesheet" href="./src/styles/views/execution.css">
 </head>
 <body data-density="focus">
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -411,6 +412,7 @@
                 </div>
               </div>
               <div class="heatmap" id="heatmap"></div>
+              <div class="execution-signals" id="executionSignals" hidden></div>
             </section>
           </div>
         </details>
@@ -473,6 +475,16 @@
               <label>政治分钟<input type="number" min="0" id="polMin" inputmode="numeric"></label>
               <label>项目分钟<input type="number" min="0" id="projectMin" inputmode="numeric"></label>
               <label>质量评分<input type="number" min="1" max="5" id="qualityScore" inputmode="numeric" placeholder="1-5"></label>
+              <label>睡眠小时<input type="number" min="0" max="14" step="0.1" id="sleepHours" inputmode="decimal" placeholder="7.5"></label>
+              <label>疲劳 1-5<input type="number" min="1" max="5" id="fatigueScore" inputmode="numeric" placeholder="3"></label>
+              <label>当日档位
+                <select id="loadTier">
+                  <option value="">未记录</option>
+                  <option value="bottomline">底线日</option>
+                  <option value="normal">正常日</option>
+                  <option value="strong">加强日</option>
+                </select>
+              </label>
               <label>数学题数<input type="number" min="0" id="mathProblems" inputmode="numeric"></label>
               <label>408 题数<input type="number" min="0" id="csProblems" inputmode="numeric"></label>
               <label>阅读篇数<input type="number" min="0" id="readingCount" inputmode="numeric"></label>
@@ -895,6 +907,7 @@
               <label>滚动窗口天数<input type="number" min="7" max="60" id="settingRollingWindowDays"></label>
               <label>推算排程日期<input type="date" id="settingTargetExamDate"><span class="field-hint" id="settingsExamDateStatus">推算排程日，非官方初试日期</span></label>
               <label class="span-2">复盘间隔天数<input type="text" id="settingReviewDays" placeholder="1,3,7,14,30"></label>
+              <label class="span-2 notify-setting"><input type="checkbox" id="settingNotifications"> 今日开始与到期复盘提醒。默认关闭，打开后才向浏览器申请通知权限。</label>
               <fieldset class="span-2 subject-toggle-field" id="settingEnabledSubjects">
                 <legend>参与自动排程的科目</legend>
                 <label><input type="checkbox" value="math">数学</label>

@@ -123,6 +123,21 @@ import {
   isTaskDone,
   markCarriedSourceTasks
 } from "./domain/task-carryover.js";
+import {
+  applyCompletionEvidence,
+  diffPlan,
+  decodeLoadNote,
+  dueOfficialChecks,
+  encodeLoadNote,
+  mergeRegeneratedTasks,
+  presentSyncStatus,
+  reviewGradeEffect,
+  sanitizeLoadTier,
+  sanitizeSleepHours,
+  shouldUseBottomLine,
+  validateCompletionEvidence,
+  weeklyReviewPrompt
+} from "./domain/execution-loop.js";
 
 import {
   DEFAULT_PLAN_CONTROLS,
@@ -162,7 +177,9 @@ const defaultSettings = {
   lastExportDate: "",
   targetExamDate: DEFAULT_EXAM_DATE,
   reviewDays: [1, 3, 7, 14, 30],
-  planControls: { ...DEFAULT_PLAN_CONTROLS }
+  planControls: { ...DEFAULT_PLAN_CONTROLS },
+  notificationsEnabled: false,
+  officialChecksDone: []
 };
 
 const browserStorage = createBrowserStorage(window.localStorage);
@@ -343,6 +360,8 @@ function migrateState(parsed) {
       ? [...new Set(settings.reviewDays.map((day) => sanitizeInteger(day, 1, 365)).filter(Boolean))].sort((a, b) => a - b)
       : [...defaultSettings.reviewDays];
     settings.planControls = normalizePlanControls(settings.planControls);
+    settings.notificationsEnabled = sanitizeBoolean(settings.notificationsEnabled);
+    settings.officialChecksDone = sanitizeStringList(settings.officialChecksDone, 12, 80);
     const rawEntries = sanitizeEntries(source.entries || {});
     const rawScores = sanitizeScores(source.scores || []);
     const rawWeekPlans = sanitizeWeekPlans(source.weekPlans || {});
@@ -675,6 +694,15 @@ function firstIntegerValue(values, min = 0, max = Number.POSITIVE_INFINITY, fall
   return Math.round(firstNumberValue(values, min, max, fallback));
 }
 
+function statedFatigue(values) {
+  for (const value of stateArray(values)) {
+    if (value == null || value === "" || value === 0) continue;
+    const number = Number(value);
+    if (Number.isInteger(number) && number >= 1 && number <= 5) return number;
+  }
+  return null;
+}
+
 function sanitizeText(value, fallback = "", maxLength = 2000) {
   return safeScalarText(value, fallback, maxLength);
 }
@@ -730,6 +758,7 @@ function sanitizeEntries(entries) {
     const date = sanitizeDateKey(rawDate);
     if (!date) return [];
     const row = isPlainStateObject(entry) ? entry : {};
+    const decodedLoad = decodeLoadNote(row.note);
     return [[date, {
       math: sanitizeNumber(row.math),
       cs408: sanitizeNumber(row.cs408),
@@ -743,7 +772,14 @@ function sanitizeEntries(entries) {
       fixedMistakes: sanitizeNumber(row.fixedMistakes),
       quality: firstIntegerValue([row.quality, row.quality_score, 3], 1, 5, 3),
       nextTask: sanitizeText(row.nextTask, "", 1000),
-      note: sanitizeText(row.note, "", 2000),
+      note: encodeLoadNote(decodedLoad.note, {
+        loadTier: sanitizeLoadTier(row.loadTier ?? row.load_tier, decodedLoad.loadTier),
+        sleepHours: sanitizeSleepHours(row.sleepHours ?? row.sleep_hours ?? decodedLoad.sleepHours),
+        fatigue: statedFatigue([row.fatigue, decodedLoad.fatigue])
+      }),
+      sleepHours: sanitizeSleepHours(row.sleepHours ?? row.sleep_hours ?? decodedLoad.sleepHours),
+      fatigue: statedFatigue([row.fatigue, decodedLoad.fatigue]),
+      loadTier: sanitizeLoadTier(row.loadTier ?? row.load_tier, decodedLoad.loadTier),
       updatedAt: sanitizeText(row.updatedAt, "", 80)
     }]];
   }));
@@ -902,7 +938,8 @@ function sanitizeReviewItems(items) {
       completedAt: firstTextValue([item.completedAt, item.completed_at], "", 80),
       intervalIndex: firstIntegerValue([item.intervalIndex, item.interval_index], 0, 99),
       failStreak: firstIntegerValue([item.failStreak, item.fail_streak], 0, 99),
-      lastResult: firstEnumValue([item.lastResult, item.last_result], ["pass", "fail", "delay"], ""),
+      leech: sanitizeBoolean(item.leech),
+      lastResult: firstEnumValue([item.lastResult, item.last_result], ["pass", "fail", "delay", "again", "hard", "good", "easy"], ""),
       lastSubmittedDate: firstDateKey([item.lastSubmittedDate, item.last_submitted_date]),
       topicId: firstSafeStateKey([item.topicId, item.topic_id]),
       updatedAt: firstTextValue([item.updatedAt, item.updated_at], "", 80)
@@ -1404,7 +1441,7 @@ async function pullCloudState() {
     return { ok: true, pulled: true, localSaved: true };
   } catch (error) {
     const message = safeErrorMessage(error, "拉取云端失败");
-    state.sync = { ...state.sync, status: "error", lastError: message, pending: true };
+    state.sync = { ...state.sync, status: conflictSyncStatus(message), lastError: message, pending: true };
     const localSaved = saveState({ skipCloud: true });
     renderSyncStatus();
     renderAuthPanel();
@@ -1796,7 +1833,7 @@ async function syncNow(options = {}) {
     return { ok: true, syncedAt: state.sync.lastSyncAt, localSaved };
   } catch (error) {
     const message = safeErrorMessage(error, "同步失败");
-    state.sync = { ...state.sync, status: "error", lastError: message, pending: true };
+    state.sync = { ...state.sync, status: conflictSyncStatus(message), lastError: message, pending: true };
     const localSaved = saveState({ skipCloud: true });
     const syncError = friendlySyncError(message);
     setAuthResult("error", localSaved ? "同步失败" : "同步状态未写入本机缓存", localSaved
@@ -1808,33 +1845,32 @@ async function syncNow(options = {}) {
   }
 }
 
+function conflictSyncStatus(message) {
+  return /duplicate key|conflict|42P10/i.test(String(message || "")) ? "conflict" : "error";
+}
+
 function syncDisplayStatus(sync = state.sync) {
   const status = sync?.status;
-  if (sync?.cloudPaused && !["pending", "syncing", "offline", "error"].includes(status)) return "paused";
+  if (sync?.cloudPaused && !["pending", "syncing", "offline", "error", "conflict"].includes(status)) return "paused";
   return status;
 }
 
 function renderSyncStatus() {
   ensureSyncContainer();
-  const localLabel = supabaseConfigured ? "未登录" : "仅本机保存";
-  const status = syncDisplayStatus();
-  const label = {
-    local: localLabel,
-    unconfigured: "未配置云端",
-    pending: "待同步",
-    syncing: "同步中",
-    synced: "已同步",
-    error: "同步失败",
-    offline: "离线草稿",
-    paused: "云端暂停"
-  }[status] || localLabel;
-  const errorSuffix = state.sync?.status === "error" && state.sync?.lastError
+  const presented = presentSyncStatus(state.sync, {
+    configured: supabaseConfigured,
+    signedIn: Boolean(currentUser)
+  });
+  const status = presented.key === "local" ? syncDisplayStatus() : presented.key;
+  const label = presented.label;
+  const syncedAt = state.sync?.lastSyncAt ? state.sync.lastSyncAt.slice(5, 16).replace("T", " ") : "";
+  const errorSuffix = presented.key === "conflict" && state.sync?.lastError
     ? ` · ${shortSyncError(state.sync.lastError)}`
-    : "";
+    : (presented.key === "synced" && syncedAt ? ` · ${syncedAt}` : "");
   setText("syncStatusText", `${label}${errorSuffix}`);
   const pill = document.getElementById("syncPill");
-  if (pill) pill.dataset.status = status || "local";
-  setText("sideDataSave", state.sync?.lastSyncAt ? `同步 ${state.sync.lastSyncAt.slice(5, 16).replace("T", " ")}` : label);
+  if (pill) pill.dataset.status = presented.key || status || "local";
+  setText("sideDataSave", syncedAt ? `同步 ${syncedAt}` : label);
   const authButton = document.getElementById("authOpenBtn");
   if (authButton) {
     const labelNode = authButton.querySelector("span");
@@ -2002,8 +2038,15 @@ function bindForms() {
       reading: entry.reading,
       newMistakes: entry.newMistakes,
       fixedMistakes: entry.fixedMistakes,
+      sleepHours: sanitizeSleepHours(entry.sleepHours),
+      fatigue: statedFatigue([document.getElementById("fatigueScore")?.value]),
+      loadTier: sanitizeLoadTier(document.getElementById("loadTier")?.value, ""),
       nextTask: document.getElementById("nextTask").value.trim(),
-      note: document.getElementById("note").value.trim(),
+      note: encodeLoadNote(document.getElementById("note").value.trim(), {
+        loadTier: sanitizeLoadTier(document.getElementById("loadTier")?.value, ""),
+        sleepHours: sanitizeSleepHours(entry.sleepHours),
+        fatigue: statedFatigue([document.getElementById("fatigueScore")?.value])
+      }),
       updatedAt: new Date().toISOString()
     };
     const saved = saveState();
@@ -2050,8 +2093,9 @@ function bindForms() {
 
   document.getElementById("regenTasks").addEventListener("click", () => renderTasks());
   document.getElementById("generatePlanBtn")?.addEventListener("click", () => {
-    const result = renderTasks(true);
-    setLocalSaveResult(result?.saved !== false, "今日计划已重新生成", "今日任务已保存到本机。", "今日计划未写入本机缓存");
+    const result = regenerateTodayPlan();
+    if (!result) return;
+    setLocalSaveResult(result?.saved !== false, "今日计划已重新生成", result.message, "今日计划未写入本机缓存");
   });
 
   document.querySelectorAll("#scorePol, #scoreEng, #scoreMath, #scoreCs").forEach((input) => {
@@ -2075,7 +2119,9 @@ function readEntryFormValues() {
     csProblems: readOptionalEntryNumber("csProblems", 0),
     reading: readOptionalEntryNumber("readingCount", 0),
     newMistakes: readOptionalEntryNumber("newMistakes", 0),
-    fixedMistakes: readOptionalEntryNumber("fixedMistakes", 0)
+    fixedMistakes: readOptionalEntryNumber("fixedMistakes", 0),
+    sleepHours: readOptionalEntryNumber("sleepHours", 0),
+    fatigue: readOptionalEntryNumber("fatigueScore", null)
   };
 }
 
@@ -2090,7 +2136,7 @@ function validateEntryForm(entry) {
   const fields = entryFieldRules(entry).map((field) => ({
     ...field,
     input: document.getElementById(field.id),
-    valid: isValidEntryValue(field.value, field.min, field.max)
+    valid: isValidEntryValue(field.value, field.min, field.max, { optional: field.optional, decimal: field.decimal })
   }));
   const invalidField = fields.find((field) => !field.valid);
   fields.forEach((field) => field.input?.setAttribute("aria-invalid", String(!field.valid)));
@@ -2112,16 +2158,21 @@ function entryFieldRules(entry) {
     { id: "csProblems", value: entry.csProblems, min: 0 },
     { id: "readingCount", value: entry.reading, min: 0 },
     { id: "newMistakes", value: entry.newMistakes, min: 0 },
-    { id: "fixedMistakes", value: entry.fixedMistakes, min: 0 }
+    { id: "fixedMistakes", value: entry.fixedMistakes, min: 0 },
+    { id: "sleepHours", value: entry.sleepHours, min: 0, max: 14, decimal: true },
+    { id: "fatigueScore", value: entry.fatigue, min: 1, max: 5, optional: true }
   ];
 }
 
-function isValidEntryValue(value, min, max = Infinity) {
-  return Number.isInteger(value) && value >= min && value <= max;
+function isValidEntryValue(value, min, max = Infinity, options = {}) {
+  if (options.optional && (value == null || value === "")) return true;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) return false;
+  if (options.decimal) return Math.round(value * 10) === value * 10;
+  return Number.isInteger(value);
 }
 
 function entryFieldSelector() {
-  return "#mathMin, #csMin, #engMin, #polMin, #projectMin, #qualityScore, #mathProblems, #csProblems, #readingCount, #newMistakes, #fixedMistakes";
+  return "#mathMin, #csMin, #engMin, #polMin, #projectMin, #qualityScore, #mathProblems, #csProblems, #readingCount, #newMistakes, #fixedMistakes, #sleepHours, #fatigueScore";
 }
 
 function clearEntryValidation() {
@@ -2506,12 +2557,16 @@ function bindSettings() {
         reviewLoad: numericSettings.reviewLoad,
         rollingWindowDays: numericSettings.rollingWindowDays,
         enabledSubjects: Array.from(document.querySelectorAll("#settingEnabledSubjects input:checked")).map((input) => input.value),
-      })
+      }),
+      notificationsEnabled: Boolean(document.getElementById("settingNotifications")?.checked)
     };
     state.settings = nextSettings;
     const saved = saveState();
     renderAll();
     setLocalSaveResult(saved, "设置已保存", "新的计划参数已应用。", "设置未写入本机缓存");
+    if (nextSettings.notificationsEnabled && typeof Notification !== "undefined" && Notification.permission === "default") {
+      void Notification.requestPermission();
+    }
   });
 
   document.getElementById("customTaskForm")?.addEventListener("submit", (event) => {
@@ -3355,8 +3410,12 @@ function loadEntryForm() {
   setValue("readingCount", entry.reading);
   setValue("newMistakes", entry.newMistakes);
   setValue("fixedMistakes", entry.fixedMistakes);
+  setValue("sleepHours", entry.sleepHours);
+  setValue("fatigueScore", statedFatigue([entry.fatigue]));
+  const loadTier = document.getElementById("loadTier");
+  if (loadTier) loadTier.value = sanitizeLoadTier(entry.loadTier, "");
   document.getElementById("nextTask").value = entry.nextTask || "";
-  document.getElementById("note").value = entry.note || "";
+  document.getElementById("note").value = decodeLoadNote(entry.note).note || "";
   clearEntryValidation();
 }
 
@@ -3463,6 +3522,48 @@ function lastDaysEntries(days) {
     const date = parseDate(entry.date);
     return date >= start && date <= today;
   });
+}
+
+function renderExecutionSignals() {
+  const host = document.getElementById("executionSignals");
+  if (!host) return;
+  const signals = shouldUseBottomLine(entriesArray().slice(-3).map((entry) => ({
+    plannedMinutes: entry.loadTier === "bottomline" ? 90 : 150,
+    doneMinutes: entry.total || 0,
+    sleepHours: entry.sleepHours || 0
+  })));
+  const sunday = weeklyReviewPrompt(new Date());
+  const checks = dueOfficialChecks(planTodayISO(), state.settings.officialChecksDone || []);
+  const leechCount = reviewRows().filter((item) => item.leech).length;
+  const trend = lastDaysEntries(7);
+  const parts = [];
+  if (signals.active) {
+    parts.push(`<p class="signal-warning">${signals.shortSleep ? "最近两晚睡眠不足 7 小时。" : ""}${signals.lowCompletion ? "最近三天完成时间低于底线档预算的 60%。" : ""}次日使用底线日，不补夜间时长。</p>`);
+  }
+  if (sunday) parts.push(`<p>${escapeHtml(sunday.text)}可选变量：${sunday.choices.join("、")}。</p>`);
+  if (leechCount) parts.push(`<p>${leechCount} 条复盘已连续失败 3 次。先减少新内容，再处理这些回炉。</p>`);
+  checks.forEach((item) => parts.push(`<p class="official-check"><span>${escapeHtml(item.text)}</span><button type="button" data-official-check="${escapeAttr(item.id)}">已核验</button></p>`));
+  if (trend.length) {
+    parts.push(`<div class="trend-row" aria-label="最近 7 天分钟">${trend.map((entry) => {
+      const height = Math.min(100, Math.round((entry.total || 0) / 3));
+      const sleep = entry.sleepHours ? ` · 睡眠 ${entry.sleepHours}h` : "";
+      return `<span class="trend-col" title="${escapeAttr(entry.date)} · ${entry.total || 0} 分钟${escapeAttr(sleep)}"><i data-height="${height}"></i></span>`;
+    }).join("")}</div>`);
+  }
+  host.hidden = parts.length === 0;
+  host.innerHTML = parts.join("");
+  host.querySelectorAll("[data-official-check]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.officialCheck;
+      const done = new Set(state.settings.officialChecksDone || []);
+      done.add(id);
+      state.settings.officialChecksDone = sanitizeStringList([...done], 12, 80);
+      const saved = saveState();
+      renderExecutionSignals();
+      setLocalSaveResult(saved, "核验已记录", "这条官方提醒已从总览收起。", "核验记录未写入本机缓存");
+    });
+  });
+  applyDeferredStyles(host);
 }
 
 function renderDashboard() {
@@ -4085,18 +4186,21 @@ function renderTasks(force = false, date = planTodayISO()) {
     const subject = escapeHtml(task.subject);
     const text = escapeHtml(task.text);
     return `
-      <label class="task-item task-prescription">
-        <input type="checkbox" data-task="${taskId}" ${checked}>
-        <span>
-          <strong>${subject}<em>${escapeHtml(blueprint.metric)}</em></strong>
-          <span class="task-topic">${text}</span>
-          <span class="task-output">${escapeHtml(blueprint.output)}</span>
-          <span class="task-steps">学法：${escapeHtml(method.learn)}</span>
-          <span class="task-steps">练习：${escapeHtml(method.practice)}</span>
-          <span class="task-steps">验收：${escapeHtml(method.check)}</span>
-        </span>
-        <em class="task-time">${Number(task.minutes) || 0}m</em>
-      </label>
+      <div class="task-block ${checked ? "done" : ""}">
+        <label class="task-item task-prescription">
+          <input type="checkbox" data-task="${taskId}" ${checked}>
+          <span>
+            <strong>${subject}<em>${escapeHtml(blueprint.metric)}</em></strong>
+            <span class="task-topic">${text}</span>
+            <span class="task-output">${escapeHtml(blueprint.output)}</span>
+            <span class="task-steps">学法：${escapeHtml(method.learn)}</span>
+            <span class="task-steps">练习：${escapeHtml(method.practice)}</span>
+            <span class="task-steps">验收：${escapeHtml(method.check)}</span>
+          </span>
+          <em class="task-time">${Number(task.minutes) || 0}m</em>
+        </label>
+        ${renderCaptureForm(task)}
+      </div>
     `;
   }).join("");
 
@@ -4127,49 +4231,237 @@ function renderTasks(force = false, date = planTodayISO()) {
   renderFocusBoard(tasks);
   renderAcceptance(tasks);
 
-  document.querySelectorAll("[data-task]").forEach((checkbox) => {
+  document.querySelectorAll("#todayTasks [data-task]").forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
       const task = tasks.find((item) => item.id === checkbox.dataset.task);
-      state.tasks[checkbox.dataset.task] = checkbox.checked;
-      if (task) {
-        task.status = checkbox.checked ? "done" : "todo";
-        task.completedAt = checkbox.checked ? new Date().toISOString() : "";
-        if (checkbox.checked && !task.recordApplied) {
-          const impact = applyTaskToEntry(task);
-          task.recordApplied = true;
-          task.recordImpact = impact;
-        } else if (!checkbox.checked && task.recordApplied) {
-          revertTaskFromEntry(task);
-          task.recordApplied = false;
-          task.recordImpact = null;
+      if (!checkbox.checked) {
+        state.tasks[checkbox.dataset.task] = false;
+        if (task) markTaskTodo(task);
+        const saved = saveState();
+        renderTasks();
+        renderReviewQueue();
+        renderDashboard();
+        renderWeekPlanner();
+        if (!saved) {
+          setLocalSaveResult(false, "任务状态已保存", "任务状态已写入本机缓存。", "任务取消完成未写入本机缓存");
         }
+        return;
       }
-      document.querySelectorAll("[data-task]").forEach((item) => {
-        if (item.dataset.task !== checkbox.dataset.task) return;
-        item.checked = checkbox.checked;
-        item.closest(".plan-card")?.classList.toggle("done", checkbox.checked);
-      });
-      if (checkbox.checked && task?.reviewItemId) {
-        const item = reviewRows().find((review) => review.id === task.reviewItemId);
-        if (item) item.done = true;
-      } else if (checkbox.checked) {
-        scheduleReviewForTask(checkbox.dataset.task, task);
+      checkbox.checked = false;
+      if (task) task.status = task.status === "done" ? "done" : "todo";
+      openTaskCapture(checkbox.dataset.task);
+    });
+  });
+  document.querySelectorAll("#todayTasksPreview [data-task], #dailyPlan [data-task]").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const task = tasks.find((item) => item.id === checkbox.dataset.task);
+      if (!task) return;
+      if (checkbox.checked) {
+        checkbox.checked = false;
+        openTaskCapture(task.id);
+        return;
       }
+      state.tasks[task.id] = false;
+      markTaskTodo(task);
       const saved = saveState();
-      renderDailyTaskProgress(tasks);
+      renderTasks();
       renderReviewQueue();
       renderDashboard();
-      renderFocusBoard(tasks);
       renderWeekPlanner();
       if (!saved) {
-        setLocalSaveResult(false, "任务状态已保存", "任务状态已写入本机缓存。", checkbox.checked ? "任务完成状态未写入本机缓存" : "任务取消完成未写入本机缓存");
+        setLocalSaveResult(false, "任务状态已保存", "任务状态已写入本机缓存。", "任务取消完成未写入本机缓存");
       }
     });
   });
+  bindTaskCapture(tasks);
   // `renderTasks` is also reached from the form submit handler in `bindForms`,
   // which bypasses the render coordinator's `renderAfter` hook.
   applyDeferredStyles();
   return result;
+}
+
+function markTaskTodo(task) {
+  const now = new Date().toISOString();
+  weekPlanEntries().forEach(([, tasks]) => {
+    tasks.filter((item) => item.id === task.id).forEach((item) => {
+      item.status = "todo";
+      item.completedAt = "";
+      item.updatedAt = now;
+      item.recordApplied = false;
+      item.recordImpact = null;
+    });
+  });
+  task.status = "todo";
+  task.completedAt = "";
+  task.updatedAt = now;
+  unmarkDeleted("tasks", task.id);
+  if (task.recordApplied) {
+    revertTaskFromEntry(task);
+    task.recordApplied = false;
+    task.recordImpact = null;
+  }
+}
+
+function renderCaptureForm(task) {
+  const taskId = escapeAttr(task.id);
+  const open = taskCaptureId === task.id;
+  return `
+    <form class="task-capture" data-capture-for="${taskId}" ${open ? "" : "hidden"}>
+      <label>有效分钟<input name="minutes" type="number" min="1" max="240" inputmode="numeric" value="${Number(task.minutes) || 25}" required></label>
+      <label>题量<input name="problems" type="number" min="0" max="999" inputmode="numeric" value="0" required></label>
+      <label class="span-2">错因或收获<input name="mistake" type="text" maxlength="300" required placeholder="例如：左右极限条件漏了"></label>
+      <label class="span-2">明日第一任务<input name="nextTask" type="text" maxlength="300" required placeholder="例如：闭卷重做两道变式"></label>
+      <div class="task-capture-actions">
+        <button type="button" data-session-start="${taskId}">开始 45 分钟</button>
+        <button type="submit" class="primary-button">保存并完成</button>
+        <button type="button" data-capture-cancel="${taskId}">取消</button>
+      </div>
+      <p class="task-session" data-session-for="${taskId}" hidden></p>
+    </form>
+  `;
+}
+
+let taskCaptureId = "";
+let activeSession = null;
+
+function openTaskCapture(taskId) {
+  taskCaptureId = taskId;
+  document.querySelectorAll("[data-capture-for]").forEach((form) => {
+    form.hidden = form.dataset.captureFor !== taskId;
+  });
+  document.querySelector(`[data-capture-for="${CSS.escape(taskId)}"] [name="mistake"]`)?.focus();
+}
+
+function bindTaskCapture(tasks) {
+  document.querySelectorAll("[data-capture-for]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const task = tasks.find((item) => item.id === form.dataset.captureFor);
+      if (!task) return;
+      const evidence = validateCompletionEvidence({
+        minutes: Number(new FormData(form).get("minutes")),
+        problems: Number(new FormData(form).get("problems")),
+        mistake: new FormData(form).get("mistake"),
+        nextTask: new FormData(form).get("nextTask")
+      });
+      if (!evidence.ok) {
+        showToast(evidence.message);
+        return;
+      }
+      commitTaskCompletion(task, evidence.evidence);
+    });
+  });
+  document.querySelectorAll("[data-capture-cancel]").forEach((button) => {
+    button.addEventListener("click", () => {
+      taskCaptureId = "";
+      const form = button.closest("[data-capture-for]");
+      if (form) form.hidden = true;
+    });
+  });
+  document.querySelectorAll("[data-session-start]").forEach((button) => {
+    button.addEventListener("click", () => startTaskSession(button.dataset.sessionStart));
+  });
+  paintTaskSession();
+}
+
+function commitTaskCompletion(task, evidence) {
+  const date = task.date || planTodayISO();
+  ensureLearningContainers();
+  const current = entryRow(date) || {};
+  const applied = applyCompletionEvidence(current, { ...task, date }, evidence);
+  applied.entry.note = encodeLoadNote(applied.entry.note, {
+    loadTier: applied.entry.loadTier,
+    sleepHours: applied.entry.sleepHours,
+    fatigue: statedFatigue([applied.entry.fatigue])
+  });
+  applied.entry.updatedAt = new Date().toISOString();
+  unmarkDeleted("records", date);
+  state.entries[date] = applied.entry;
+  task.status = "done";
+  task.completedAt = new Date().toISOString();
+  task.actualMinutes = evidence.minutes;
+  task.actualProblems = evidence.problems;
+  task.evidenceSubmitted = true;
+  task.recordApplied = true;
+  task.recordImpact = applied.impact;
+  task.updatedAt = task.completedAt;
+  state.tasks[task.id] = true;
+  if (task.reviewItemId) {
+    const item = reviewRows().find((review) => review.id === task.reviewItemId);
+    if (item) item.done = true;
+  } else {
+    scheduleReviewForTask(task.id, task);
+  }
+  taskCaptureId = "";
+  stopTaskSession(false);
+  const saved = saveState();
+  if (date === (document.getElementById("entryDate")?.value || planTodayISO())) loadEntryForm();
+  renderTasks();
+  renderReviewQueue();
+  renderDashboard();
+  renderWeekPlanner();
+  if (!saved) {
+    setLocalSaveResult(false, "任务状态已保存", "任务状态已写入本机缓存。", "任务完成状态未写入本机缓存");
+  } else {
+    showToast("已保存完成证据，并安排复盘。");
+  }
+}
+
+function startTaskSession(taskId) {
+  activeSession = {
+    taskId,
+    endsAt: Date.now() + 45 * 60 * 1000
+  };
+  window.clearInterval(startTaskSession.timer);
+  startTaskSession.timer = window.setInterval(paintTaskSession, 1000);
+  paintTaskSession();
+}
+
+function stopTaskSession(openCapture = true) {
+  const taskId = activeSession?.taskId || "";
+  activeSession = null;
+  window.clearInterval(startTaskSession.timer);
+  paintTaskSession();
+  if (openCapture && taskId) openTaskCapture(taskId);
+}
+
+function paintTaskSession() {
+  document.querySelectorAll("[data-session-for]").forEach((node) => {
+    const running = activeSession && node.dataset.sessionFor === activeSession.taskId;
+    node.hidden = !running;
+    if (!running) return;
+    const remaining = Math.max(0, activeSession.endsAt - Date.now());
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+    node.textContent = remaining === 0
+      ? "45 分钟已到。填写证据后保存。"
+      : `剩余 ${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    if (remaining === 0) stopTaskSession(true);
+  });
+}
+
+function regenerateTodayPlan() {
+  const date = planTodayISO();
+  const current = normalizeTaskList(planTasksForDate(date), date);
+  const active = current.filter((task) => task.status !== "shifted");
+  const generated = createDailyTasks(date);
+  const diff = diffPlan(active, generated);
+  const kept = diff.kept.filter((item) => item.reason === "已锁定" || item.reason === "已完成");
+  const replaced = diff.replaced;
+  const summary = [
+    kept.length ? `保留 ${kept.length} 项：${kept.map((item) => item.reason).join("、")}` : "没有已锁定或已完成任务",
+    replaced.length ? `更新 ${replaced.length} 项：${replaced.slice(0, 3).map((item) => item.reason).join("、")}` : "其余任务保持不变"
+  ].join("。");
+  if (!window.confirm(`重新生成今日计划。${summary}。确认后再生效。`)) {
+    showToast("已取消重新生成。");
+    return null;
+  }
+  const shifted = current.filter((task) => task.status === "shifted");
+  const merged = mergeRegeneratedTasks(active, generated);
+  state.weekPlans[date] = normalizeTaskList([...shifted, ...merged], date);
+  const saved = saveState();
+  renderTasks();
+  return { saved, message: `${summary}。今日任务已保存到本机。` };
 }
 
 function applyTaskToEntry(task) {
@@ -4419,6 +4711,12 @@ function renderWeekPlanner() {
                   <button type="button" data-edit-task="${escapeAttr(task.id)}">编辑</button>
                   <button type="button" data-shift-task="${escapeAttr(task.id)}">顺延</button>
                 </div>
+                <form class="task-edit-form" data-edit-form="${escapeAttr(task.id)}" hidden>
+                  <label>任务内容<input name="text" type="text" maxlength="300" value="${escapeAttr(task.text)}" required></label>
+                  <label>分钟<input name="minutes" type="number" min="10" max="180" step="5" value="${Number(task.minutes) || 25}" required></label>
+                  <button type="submit">保存任务</button>
+                  <button type="button" data-edit-cancel>取消</button>
+                </form>
               </div>
             `;
           }).join("")}
@@ -4453,7 +4751,26 @@ function renderWeekPlanner() {
   });
   document.querySelectorAll("[data-edit-task]").forEach((button) => {
     button.addEventListener("click", () => {
-      editTask(button.dataset.editTask);
+      const form = button.closest(".week-task")?.querySelector("[data-edit-form]");
+      if (!form) return;
+      form.hidden = false;
+      form.querySelector("[name='text']")?.focus();
+    });
+  });
+  document.querySelectorAll("[data-edit-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const data = new FormData(form);
+      const text = String(data.get("text") || "");
+      const minutes = String(data.get("minutes") || "");
+      if (!editTask(form.dataset.editForm, text, minutes)) {
+        form.hidden = false;
+        return;
+      }
+      form.hidden = true;
+    });
+    form.querySelector("[data-edit-cancel]")?.addEventListener("click", () => {
+      form.hidden = true;
     });
   });
   document.querySelectorAll("[data-shift-task]").forEach((button) => {
@@ -4482,25 +4799,21 @@ function findTask(taskId) {
   return null;
 }
 
-function editTask(taskId) {
+function editTask(taskId, text, minutesInput) {
   const task = findTask(taskId);
   if (!task) {
     setAuthResult("error", "任务不可编辑", "这个任务已不存在，请刷新周计划后再试。");
     return;
   }
-  const text = window.prompt("修改任务内容。要求写成可验收动作，例如：基础题 20 道 + 错因 3 条。", task.text);
-  if (text === null) return;
   const nextText = text.trim();
   if (!isValidTaskEditText(nextText)) {
     setAuthResult("error", "任务内容无效", "任务内容不能为空，请写成可验收动作。");
-    return;
+    return false;
   }
-  const minutesInput = window.prompt("修改预计分钟数。请填写 10-180 的 5 分钟刻度。", task.minutes);
-  if (minutesInput === null) return;
   const minutes = Number(String(minutesInput).trim());
   if (!isValidTaskEditMinutes(minutes)) {
     setAuthResult("error", "任务分钟无效", "任务分钟数请填写 10-180 的 5 分钟整数刻度。");
-    return;
+    return false;
   }
   task.text = nextText;
   task.minutes = minutes;
@@ -4510,6 +4823,7 @@ function editTask(taskId) {
   const saved = saveState();
   renderAll();
   setLocalSaveResult(saved, "任务已修改", "已锁定为手动任务，后续重排会保留它。", "任务修改未写入本机缓存");
+  return true;
 }
 
 function isValidTaskEditText(text) {
@@ -4793,7 +5107,7 @@ function createDailyTasks(date = planTodayISO()) {
     ...task,
     date,
     priority: task.priority || index + 1,
-    status: task.status === "shifted" ? "shifted" : isTaskDone(task, state.tasks) ? "done" : task.status || "todo",
+    status: task.status === "shifted" ? "shifted" : task.status === "done" ? "done" : "todo",
     locked: sanitizeBoolean(task.locked),
     source: task.source || "generated"
   }));
@@ -4829,7 +5143,7 @@ function normalizeTaskList(tasks, date) {
     topicId: task.topicId || "",
     minutes: task.minutes || 0,
     priority: task.priority || index + 1,
-    status: task.status === "shifted" ? "shifted" : isTaskDone(task, state.tasks) ? "done" : task.status || "todo",
+    status: task.status === "shifted" ? "shifted" : task.status === "done" ? "done" : "todo",
     locked: sanitizeBoolean(task.locked),
     source: task.source || "generated",
     sourceTaskId: task.sourceTaskId || "",
@@ -4991,6 +5305,7 @@ function renderPlanCards(tasks) {
               <li>${escapeHtml(acceptanceText)}</li>
             </ul>
           </details>
+          ${renderCaptureForm(task)}
           <section class="plan-diagnostic density-detail-only" aria-label="${escapeAttr(task.subject)}任务详尽说明">
             <div class="plan-diagnostic-grid">
               <article><span>阶段目标</span><p>阶段 ${escapeHtml(phase.id)} · ${escapeHtml(phasePlanById(phase.id).mission)}</p></article>
@@ -5327,10 +5642,24 @@ function renderReviewQueue() {
   });
   document.querySelectorAll("[data-review-fail]").forEach((button) => {
     button.addEventListener("click", () => {
-      if (!failReview(button.dataset.reviewFail)) return;
+      const card = button.closest(".review-queue-item");
+      const reason = card?.querySelector("[data-review-reason]")?.value || "";
+      if (!failReview(button.dataset.reviewFail, reason)) return;
       const saved = saveState();
       renderReviewQueue();
       setLocalSaveResult(saved, "失败已记录", "已安排短复盘，并保留失败原因。", "复盘失败记录未写入本机缓存");
+    });
+  });
+  document.querySelectorAll("[data-review-grade]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const card = button.closest(".review-queue-item");
+      const reason = card?.querySelector("[data-review-reason]")?.value || "";
+      if (!gradeReview(button.dataset.reviewGrade, button.dataset.grade, reason)) return;
+      const saved = saveState();
+      renderReviewQueue();
+      renderDashboard();
+      const effect = reviewGradeEffect(button.dataset.grade);
+      setLocalSaveResult(saved, effect.passed ? "复盘已通过" : "已缩短间隔", effect.leech ? "同一来源已失败 3 次，先减少新内容。" : "复盘结果已写入本机。", "复盘结果未写入本机缓存");
     });
   });
 }
@@ -5360,27 +5689,46 @@ function delayReview(id, days) {
   return true;
 }
 
-function failReview(id) {
+function failReview(id, reason = "") {
   const item = reviewRows().find((review) => review.id === id);
   if (!isReviewDue(item)) return false;
-  const reasons = ["概念不清", "公式不熟", "题型识别失败", "计算错误", "表达不规范", "记忆遗忘"];
-  const reason = window.prompt(`选择或填写失败原因：${reasons.join(" / ")}`, item.failureReason || "概念不清");
-  if (reason === null) return false;
-  const nextReason = reason.trim();
+  const nextReason = String(reason || item.failureReason || "概念不清").trim();
   if (!isValidReviewFailureReason(nextReason)) {
     setAuthResult("error", "失败原因无效", "请写明需要回炉的原因。");
     return false;
   }
-  const timestamp = stampReviewResult(item, "fail");
-  item.done = true;
-  item.failureReason = nextReason;
-  item.status = "failed";
-  item.quality = 1;
+  return gradeReview(id, "again", nextReason);
+}
+
+function gradeReview(id, grade, reason = "") {
+  const item = reviewRows().find((review) => review.id === id);
+  if (!isReviewDue(item)) return false;
+  const effect = reviewGradeEffect(grade, item.failStreak || 0);
+  const timestamp = stampReviewResult(item, effect.passed ? "pass" : "fail");
+  item.quality = effect.quality;
   item.completedAt = timestamp;
-  item.failStreak = (item.failStreak || 0) + 1;
-  cloneShortReview(item, item.failureReason);
+  item.failStreak = effect.failStreak;
+  item.lastResult = REVIEW_GRADE_LABELS[grade] ? grade : "good";
+  if (!effect.passed) {
+    item.done = true;
+    item.status = "failed";
+    item.failureReason = String(reason || item.failureReason || "需要回炉").trim();
+    item.leech = effect.leech;
+    cloneShortReview(item, item.failureReason);
+    return true;
+  }
+  item.done = true;
+  item.status = "done";
+  item.leech = false;
   return true;
 }
+
+const REVIEW_GRADE_LABELS = {
+  again: "再次",
+  hard: "困难",
+  good: "良好",
+  easy: "简单"
+};
 
 function isValidReviewFailureReason(reason) {
   return Boolean(reason && reason.trim());
@@ -5437,9 +5785,14 @@ function renderReviewItem(item) {
           <span>通过：${escapeHtml(guide.pass)}</span>
           <span>未过：${escapeHtml(guide.fail)}</span>
         </div>
-        <span>${escapeHtml(item.dueDate)}${item.failureReason ? ` · ${escapeHtml(item.failureReason)}` : ""}</span>
+        <span>${escapeHtml(item.dueDate)}${item.failureReason ? ` · ${escapeHtml(item.failureReason)}` : ""}${item.leech ? " · 韭菜" : ""}</span>
       </div>
       <div class="review-actions">
+        <label class="review-reason">回炉原因<input data-review-reason type="text" maxlength="80" value="${escapeAttr(item.failureReason || "")}" placeholder="概念不清"></label>
+        <button type="button" data-review-grade="${escapeAttr(item.id)}" data-grade="again">再次</button>
+        <button type="button" data-review-grade="${escapeAttr(item.id)}" data-grade="hard">困难</button>
+        <button type="button" data-review-grade="${escapeAttr(item.id)}" data-grade="good">良好</button>
+        <button type="button" data-review-grade="${escapeAttr(item.id)}" data-grade="easy">简单</button>
         <button type="button" data-review-done="${escapeAttr(item.id)}">完成</button>
         <button type="button" data-review-delay="${escapeAttr(item.id)}" data-days="1">+1</button>
         <button type="button" data-review-delay="${escapeAttr(item.id)}" data-days="3">+3</button>
@@ -5701,7 +6054,7 @@ function renderRecords() {
           <span>${(entry.total / 60).toFixed(1)}h · 核心 ${coreRatio}% · 错题回炉 ${mistakeRatio}%</span>
         </div>
         <div class="record-detail">
-          数学 ${entry.math || 0}m / ${entry.mathProblems || 0} 题 · 408 ${entry.cs408 || 0}m / ${entry.csProblems || 0} 题 · 英语 ${entry.english || 0}m / ${entry.reading || 0} 篇 · 政治 ${entry.politics || 0}m · 项目 ${entry.project || 0}m
+          数学 ${entry.math || 0}m / ${entry.mathProblems || 0} 题 · 408 ${entry.cs408 || 0}m / ${entry.csProblems || 0} 题 · 英语 ${entry.english || 0}m / ${entry.reading || 0} 篇 · 政治 ${entry.politics || 0}m · 项目 ${entry.project || 0}m${entry.sleepHours ? ` · 睡眠 ${entry.sleepHours}h` : ""}
         </div>
         ${entry.nextTask ? `<div class="record-note">明日第一任务：${escapeHtml(entry.nextTask)}</div>` : ""}
         ${entry.note ? `<div class="record-note">备注：${escapeHtml(entry.note)}</div>` : ""}
@@ -5741,6 +6094,11 @@ function renderRecords() {
 
 function switchView(viewId, options = {}) {
   if (!document.getElementById(viewId)) return;
+  const previous = document.querySelector(".view.active");
+  if (previous && previous.id !== viewId) {
+    previous.classList.add("leaving");
+    window.setTimeout(() => previous.classList.remove("leaving"), 160);
+  }
   document.querySelectorAll(".nav-item").forEach((item) => {
     const active = item.dataset.view === viewId;
     item.classList.toggle("active", active);
@@ -5919,17 +6277,35 @@ function renderSyllabus(selected = document.querySelector(".seg.active")?.datase
     `;
   }).join("") : `<div class="empty-state">没有匹配的考点。换一个关键词，或先看本阶段下一步小任务。</div>`;
 
+  document.querySelectorAll("[data-topic-evidence]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const id = form.dataset.topicEvidence;
+      const capturedEvidence = captureTopicEvidence(id, new FormData(form).get("evidence"));
+      if (!capturedEvidence) return;
+      const updatedAt = new Date().toISOString();
+      state.topics[id] = 2;
+      state.topicEvidence[id] = { ...topicEvidenceRow(id), updatedAt };
+      const saved = saveState();
+      renderSyllabus(selected);
+      renderSyllabusMini();
+      renderDashboard();
+      setLocalSaveResult(saved, "掌握证据已记录", "考点已标为掌握，证据已保存。", "掌握证据未写入本机缓存");
+    });
+    form.querySelector("[data-topic-evidence-cancel]")?.addEventListener("click", () => {
+      form.hidden = true;
+    });
+  });
   document.querySelectorAll(".topic").forEach((button) => {
     button.addEventListener("click", () => {
       const id = button.dataset.topicId;
       ensureKnowledgeContainers();
       const current = topicStateValue(id);
-      let next = (current + 1) % 3;
-      let capturedEvidence = false;
+      const next = (current + 1) % 3;
       if (next === 2 && !hasTopicEvidence(id)) {
-        capturedEvidence = captureTopicEvidence(id);
-        next = hasTopicEvidence(id) ? 2 : 1;
-        if (next === 1 && capturedEvidence) showToast("已先标为需复盘；补充题量、正确率或证据后再标已掌握。");
+        openTopicEvidenceForm(id);
+        showToast("补充题量、正确率或可交付结果后再标已掌握。");
+        return;
       }
       const updatedAt = new Date().toISOString();
       state.topics[id] = next;
@@ -5938,9 +6314,7 @@ function renderSyllabus(selected = document.querySelector(".seg.active")?.datase
       renderSyllabus(selected);
       renderSyllabusMini();
       renderDashboard();
-      if (capturedEvidence) {
-        setLocalSaveResult(saved, "掌握证据已记录", "考点已标为掌握，证据已保存。", "掌握证据未写入本机缓存");
-      } else if (!saved) {
+      if (!saved) {
         setLocalSaveResult(false, "考点状态已保存", "考点状态已写入本机缓存。", "考点状态未写入本机缓存");
       }
     });
@@ -5968,11 +6342,17 @@ function hasTopicEvidence(id) {
   return Boolean((evidence.problems || 0) > 0 || (evidence.accuracy || 0) > 0 || evidence.evidence);
 }
 
-function captureTopicEvidence(id) {
+function openTopicEvidenceForm(id) {
+  document.querySelectorAll("[data-topic-evidence]").forEach((form) => {
+    form.hidden = form.dataset.topicEvidence !== id;
+  });
+  document.querySelector(`[data-topic-evidence="${CSS.escape(id)}"] [name="evidence"]`)?.focus();
+}
+
+function captureTopicEvidence(id, text) {
   const existing = topicEvidenceRow(id);
-  const text = window.prompt("补充掌握证据：题量/正确率/可交付结果。例如：基础题 25 道，正确率 84%，能默写定义。", existing.evidence || "");
-  if (text === null) return false;
-  const evidenceText = text.trim();
+  if (text === null || text === undefined) return false;
+  const evidenceText = String(text).trim();
   if (!isValidTopicEvidenceText(evidenceText)) {
     showToast("掌握证据不能为空，请补充题量、正确率或可交付结果。");
     return false;
@@ -6072,18 +6452,27 @@ function renderTopic(subject, group, topic) {
   const guide = topicGuide(subject, group, topic);
   const evidence = topicEvidenceRow(id);
   return `
-    <button class="topic ${className}" data-topic-id="${escapeAttr(id)}">
-      <span class="topic-main">
-        <strong>${escapeHtml(topic)}</strong>
-        <em>${escapeHtml(guide.explain)}</em>
-        <small>${escapeHtml(guide.output)}</small>
-        ${evidence?.evidence ? `<small class="topic-evidence">证据：${escapeHtml(evidence.evidence)}</small>` : ""}
-      </span>
-      <span class="topic-side">
-        <span class="topic-state">${escapeHtml(label)}</span>
-        <em>${escapeHtml(guide.drill)}</em>
-      </span>
-    </button>
+    <div class="topic-row">
+      <button class="topic ${className}" data-topic-id="${escapeAttr(id)}">
+        <span class="topic-main">
+          <strong>${escapeHtml(topic)}</strong>
+          <em>${escapeHtml(guide.explain)}</em>
+          <small>${escapeHtml(guide.output)}</small>
+          ${evidence?.evidence ? `<small class="topic-evidence">证据：${escapeHtml(evidence.evidence)}</small>` : ""}
+        </span>
+        <span class="topic-side">
+          <span class="topic-state">${escapeHtml(label)}</span>
+          <em>${escapeHtml(guide.drill)}</em>
+        </span>
+      </button>
+      <form class="topic-evidence-form" data-topic-evidence="${escapeAttr(id)}" hidden>
+        <label>掌握证据<input name="evidence" type="text" maxlength="300" required value="${escapeAttr(evidence?.evidence || "")}" placeholder="基础题 25 道，正确率 84%，能默写定义"></label>
+        <div>
+          <button type="submit" class="primary-button">保存并标为已掌握</button>
+          <button type="button" data-topic-evidence-cancel>取消</button>
+        </div>
+      </form>
+    </div>
   `;
 }
 
@@ -6645,6 +7034,7 @@ function renderCoach(week, phase) {
 }
 
 function renderHeatmap() {
+  renderExecutionSignals();
   const container = document.getElementById("heatmap");
   const today = parseDate(planTodayISO());
   const cells = [];
@@ -7007,6 +7397,8 @@ function renderSettings() {
   document.getElementById("settingCoreRatio").value = state.settings.coreRatio;
   document.getElementById("settingTargetExamDate").value = state.settings.targetExamDate || DEFAULT_EXAM_DATE;
   document.getElementById("settingReviewDays").value = state.settings.reviewDays.join(",");
+  const notifications = document.getElementById("settingNotifications");
+  if (notifications) notifications.checked = Boolean(state.settings.notificationsEnabled);
   const controls = normalizePlanControls(state.settings.planControls);
   state.settings.planControls = controls;
   setValue("settingMaxNewTopics", controls.maxNewTopics);
