@@ -263,7 +263,7 @@ describe('merge: topic state', () => {
 
 describe('merge: whole-state entry point', () => {
   const localState = () => ({
-    settings: { density: 'focus' },
+    settings: { density: 'balanced' },
     entries: { '2026-09-01': { math: 10, updatedAt: '2026-09-01T00:00:00.000Z' } },
     scores: [{ id: 's1', total: 100, updatedAt: '2026-09-01T00:00:00.000Z' }],
     reviewItems: [],
@@ -286,7 +286,7 @@ describe('merge: whole-state entry point', () => {
     });
 
     expect(merged.entries['2026-09-01'].math).toBe(55);
-    expect(merged.settings.density).toBe('focus');
+    expect(merged.settings.density).toBe('balanced');
   });
 
   it('applies tombstones carried by the cloud copy so a deleted row does not come back', () => {

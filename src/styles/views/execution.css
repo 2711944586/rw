@@ -200,18 +200,14 @@ dialog.auth-dialog[open] {
 /* One paper. The page, the shell, and the cards share one cool tone.
    Hairlines separate sections. White inset highlights stay off. */
 body[data-density] {
-  --workspace-bg: #e6ebf2;
-  --workspace-canvas: #e6ebf2;
-  --workspace-surface: #f3f6fa;
-  --workspace-surface-strong: #f3f6fa;
-  --plan-bg: #e6ebf2;
-  --plan-canvas: #e6ebf2;
-  --plan-surface: #f3f6fa;
-  --plan-surface-soft: #e8edf3;
-  --bg: #e6ebf2;
-  --surface: #f3f6fa;
-  --surface-soft: #e8edf3;
-  --surface-tint: #e8edf3;
+  --workspace-bg: var(--plan-bg);
+  --workspace-canvas: var(--plan-canvas);
+  --workspace-surface: var(--plan-surface);
+  --workspace-surface-strong: var(--plan-surface);
+  --bg: var(--plan-bg);
+  --surface: var(--plan-surface);
+  --surface-soft: var(--plan-surface-soft);
+  --surface-tint: var(--plan-accent-soft);
   --shadow: none;
   --shadow-soft: none;
   --shadow-hover: none;
@@ -223,7 +219,7 @@ body[data-density] {
 body[data-density] .app-shell,
 body[data-density] .main,
 body[data-density] .view {
-  background: #e6ebf2;
+  background: var(--plan-bg);
   background-image: none;
 }
 
@@ -233,20 +229,93 @@ body[data-density] .view {
     height: 100dvh;
     max-height: 100dvh;
     margin: 0;
+    padding: 28px 18px 24px;
     border: 0;
-    border-right: 1px solid var(--workspace-line);
+    border-right: 1px solid var(--plan-line);
     border-radius: 0;
-    background: #f3f6fa;
+    background: var(--plan-bg);
+    color: var(--plan-text);
     box-shadow: none;
+  }
+
+  body[data-density] .brand {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+    padding: 0 10px 22px;
+    border-bottom: 0;
+  }
+
+  body[data-density] .brand-mark {
+    display: none;
+  }
+
+  body[data-density] .brand h1 {
+    color: var(--plan-ink);
+    font-size: 18px;
+    font-weight: 680;
+    letter-spacing: 0;
+  }
+
+  body[data-density] .brand p {
+    display: block;
+    margin: 2px 0 0;
+    color: var(--plan-muted);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  body[data-density] .nav-label {
+    padding: 0 10px 6px;
+    color: var(--plan-muted);
+    font-size: 11px;
+    font-weight: 650;
+  }
+
+  body[data-density] .nav-section + .nav-section {
+    margin-top: 18px;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  body[data-density] .nav-item {
+    min-height: 34px;
+    grid-template-columns: 16px minmax(0, 1fr);
+    gap: 10px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    color: var(--plan-text);
+  }
+
+  body[data-density] .nav-item:hover {
+    background: rgba(154, 52, 18, 0.06);
+    color: var(--plan-ink);
+  }
+
+  body[data-density] .nav-item.active {
+    background: transparent;
+    box-shadow: inset 2px 0 0 var(--plan-accent);
+    color: var(--plan-accent-strong);
+  }
+
+  body[data-density] .nav-ico,
+  body[data-density] .nav-item.active .nav-ico {
+    width: 16px;
+    height: 16px;
+  }
+
+  body[data-density] .nav-text {
+    font-size: 14px;
+    font-weight: 560;
   }
 
   body[data-density] .topbar {
     top: 0;
     margin: 0;
     border: 0;
-    border-bottom: 1px solid var(--workspace-line);
+    border-bottom: 1px solid var(--plan-line);
     border-radius: 0;
-    background: #f3f6fa;
+    background: var(--plan-bg);
     box-shadow: none;
   }
 }
@@ -303,6 +372,18 @@ body[data-density] .command-panel {
   background-image: none;
 }
 
+/* The top bar already names the page. Keep the live sentence, drop the second headline. */
+body[data-density] #dashboard .command-panel {
+  min-height: 0;
+  display: block;
+  padding: 0 0 4px;
+  border-bottom: 0;
+}
+
+body[data-density] #dashboard .command-panel h3 {
+  display: none;
+}
+
 body[data-density] .command-panel h3 {
   color: var(--ink);
   font-size: 32px;
@@ -311,6 +392,14 @@ body[data-density] .command-panel h3 {
   line-height: 1.15;
   background: none;
   -webkit-text-fill-color: currentcolor;
+}
+
+body[data-density] #dashboard .command-panel p {
+  max-width: 68ch;
+  color: var(--workspace-ink);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.45;
 }
 
 body[data-density] .command-metrics span {
@@ -327,41 +416,29 @@ body[data-density] .command-metrics span:hover {
 
 body[data-density] .focus-board,
 body[data-density] .target-lane {
-  gap: 0;
-  overflow: hidden;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-body[data-density] .focus-board > *,
-body[data-density] .target-lane > article {
-  min-width: 0;
-  padding: 20px 22px;
+  gap: 12px;
+  overflow: visible;
   border: 0;
-  border-right: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
 
-body[data-density] .focus-board > *:last-child,
-body[data-density] .target-lane > article:last-child {
-  border-right: 0;
+body[data-density] .focus-board > .focus-card,
+body[data-density] .target-lane > article,
+body[data-density] #dashboard .week-pulse {
+  min-width: 0;
+  padding: 18px 18px;
+  border: 1px solid var(--workspace-line);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: none;
 }
 
 @media (max-width: 900px) {
-  body[data-density] .focus-board > *,
-  body[data-density] .target-lane > article {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  body[data-density] .focus-board > *:last-child,
-  body[data-density] .target-lane > article:last-child {
-    border-bottom: 0;
+  body[data-density] .focus-board,
+  body[data-density] .target-lane {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -406,6 +483,76 @@ body[data-density] textarea,
 body[data-density] select {
   background: #f7f9fc;
   box-shadow: none;
+}
+
+/* The hairline reset above clears every dashboard tile, including the one
+   action card. Restore it after that reset so the subject stays readable. */
+body[data-density] #dashboard .focus-primary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-content: space-between;
+  column-gap: 24px;
+  row-gap: 20px;
+  border: 0;
+  border-radius: 16px;
+  background: #1c1915;
+  color: #fffaf4;
+}
+
+body[data-density] #dashboard .focus-primary-copy {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+body[data-density] #dashboard .focus-kicker {
+  display: block;
+  margin-bottom: 10px;
+  color: #e7c3ae;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+body[data-density] #dashboard .focus-primary strong {
+  color: #ffffff;
+  font-size: 44px;
+  line-height: 1.08;
+}
+
+body[data-density] #dashboard .focus-primary p {
+  color: #f3ebe3;
+}
+
+body[data-density] #dashboard .focus-action {
+  display: contents;
+}
+
+body[data-density] #dashboard .focus-action em {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  align-self: start;
+  color: #ffffff;
+  font-size: 40px;
+  line-height: 1;
+}
+
+body[data-density] #dashboard .focus-primary .primary-button {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  justify-self: start;
+  width: auto;
+  border-color: #ffffff;
+  background: #ffffff;
+  color: #1c1915;
+}
+
+@media (max-width: 620px) {
+  body[data-density] #dashboard .focus-primary .primary-button {
+    width: 100%;
+  }
 }
 
 body[data-density] :is(.operating-balanced, .operating-detail) {
@@ -594,4 +741,16 @@ body[data-density] .cadence-day.active .cadence-identity strong {
 
 .official-check button {
   flex: 0 0 auto;
+}
+
+/* Later rules in this file clear tile backgrounds. Put the desk surfaces back
+   after that wipe: white paper beside the navy task, ink rail already set above. */
+body[data-density] #dashboard .focus-board > .focus-card,
+body[data-density] #dashboard .target-lane > article,
+body[data-density] #dashboard .week-pulse,
+body[data-density] #dashboard .metric-card {
+  border: 1px solid var(--plan-line);
+  border-radius: 12px;
+  background: var(--plan-surface);
+  box-shadow: none;
 }

@@ -44,6 +44,7 @@ function installShellFallback(error) {
     if (!(target instanceof Element)) return;
     const nav = target.closest(".nav-item[data-view], [data-jump]");
     if (nav) {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
       event.preventDefault();
       setView(nav.dataset.view || nav.dataset.jump);
       return;

@@ -140,10 +140,11 @@ function isDueReviewItem(item, today) {
 
 /**
  * Get the current density mode from state.
- * @returns {'focus'|'balanced'|'detail'}
+ * @returns {'balanced'|'detail'}
  */
 function getDensityMode() {
-  return StateManager.getState('profile.density_mode') || 'focus';
+  const mode = StateManager.getState('profile.density_mode');
+  return mode === 'detail' ? 'detail' : 'balanced';
 }
 
 /**

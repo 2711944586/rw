@@ -8,7 +8,6 @@ describe('density mode utility', () => {
   beforeEach(() => {
     document.body.innerHTML = `
       <div class="density-toggle">
-        <button type="button" data-density="focus">Focus</button>
         <button type="button" data-density="balanced">Balanced</button>
         <button type="button" data-density="detail">Detail</button>
       </div>
@@ -31,7 +30,7 @@ describe('density mode utility', () => {
     expect(document.documentElement.getAttribute('data-density-level')).toBe('diagnostic');
     expect(document.querySelector('button[data-density="detail"]').classList.contains('active')).toBe(true);
     expect(document.querySelector('button[data-density="detail"]').getAttribute('aria-pressed')).toBe('true');
-    expect(document.querySelector('button[data-density="focus"]').getAttribute('aria-pressed')).toBe('false');
+    expect(document.querySelector('button[data-density="balanced"]').getAttribute('aria-pressed')).toBe('false');
     expect(document.querySelector('details[data-density-expand="detail"]').open).toBe(true);
   });
 
@@ -42,32 +41,34 @@ describe('density mode utility', () => {
     applyDensityMode('balanced');
 
     expect(document.body.getAttribute('data-density-level')).toBe('execution');
+    expect(document.body.getAttribute('data-density')).toBe('balanced');
     expect(details.open).toBe(false);
   });
 
   it('normalizes unknown modes to the default instead of applying them raw', () => {
     applyDensityMode('evil-mode');
 
-    expect(document.body.getAttribute('data-density')).toBe('focus');
-    expect(document.body.getAttribute('data-density-level')).toBe('action');
-    expect(document.querySelector('button[data-density="focus"]').classList.contains('active')).toBe(true);
-    expect(document.querySelector('button[data-density="balanced"]').getAttribute('aria-pressed')).toBe('false');
+    expect(document.body.getAttribute('data-density')).toBe('balanced');
+    expect(document.body.getAttribute('data-density-level')).toBe('execution');
+    expect(document.querySelector('button[data-density="balanced"]').classList.contains('active')).toBe(true);
+    expect(document.querySelector('button[data-density="detail"]').getAttribute('aria-pressed')).toBe('false');
   });
 
   it('falls back to the default when called without a mode', () => {
     applyDensityMode();
 
-    expect(document.body.getAttribute('data-density')).toBe('focus');
+    expect(document.body.getAttribute('data-density')).toBe('balanced');
   });
 
   it('normalizes and describes modes without touching the DOM', () => {
     expect(normalizeDensityMode('detail')).toBe('detail');
-    expect(normalizeDensityMode('nope')).toBe('focus');
-    expect(normalizeDensityMode('nope', 'balanced')).toBe('balanced');
-    expect(normalizeDensityMode(undefined)).toBe('focus');
+    expect(normalizeDensityMode('focus')).toBe('balanced');
+    expect(normalizeDensityMode('nope')).toBe('balanced');
+    expect(normalizeDensityMode('nope', 'detail')).toBe('detail');
+    expect(normalizeDensityMode(undefined)).toBe('balanced');
 
     expect(densityModeMeta('balanced')).toMatchObject({ level: 'execution' });
     expect(densityModeMeta('detail').expand).toEqual(['detail']);
-    expect(densityModeMeta('nope').level).toBe('action');
+    expect(densityModeMeta('nope').level).toBe('execution');
   });
 });

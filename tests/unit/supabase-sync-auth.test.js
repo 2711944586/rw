@@ -293,7 +293,7 @@ describe('supabaseSync auth', () => {
 
     expect(state).toMatchObject({
       schemaVersion: 3,
-      settings: { density: 'focus' },
+      settings: { density: 'balanced' },
       user: { id: 'user-1' },
       sync: { status: 'synced', pending: false },
     });
@@ -465,7 +465,7 @@ describe('supabaseSync auth', () => {
       weekendMinutes: 840,
       taskCount: 4,
       coreRatio: 55,
-      density: 'focus',
+      density: 'balanced',
       reviewDays: [1, 7, 365],
       retroTime: '06:05',
       planLogicVersion: 'cloud-plan',
@@ -612,7 +612,7 @@ describe('supabaseSync auth', () => {
 
     expect(state.settings).toMatchObject({
       weekdayMinutes: 180,
-      density: 'focus',
+      density: 'balanced',
     });
     expect(state.deleted).toEqual({ records: [], scores: [], tasks: [], reviews: [] });
   });
@@ -693,7 +693,7 @@ describe('supabaseSync auth', () => {
       task_count: 3,
       core_ratio: 55,
       target_exam_date: '2027-12-25',
-      density_mode: 'focus',
+      density_mode: 'balanced',
       retro_time: '22:00',
       plan_version: '4.1-evidence-capacity-governance-2026-08-31',
     });

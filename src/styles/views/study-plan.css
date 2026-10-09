@@ -3,18 +3,18 @@
    Base components stay in base.css/workspace.css; mode-specific composition stays here. */
 
 :root {
-  --plan-bg: #e6ebf2;
-  --plan-canvas: #e6ebf2;
-  --plan-surface: #f4f7fb;
-  --plan-surface-soft: #eef2f7;
-  --plan-ink: #182230;
-  --plan-text: #344054;
-  --plan-muted: #667085;
-  --plan-line: rgba(24, 39, 58, 0.08);
-  --plan-line-strong: rgba(24, 39, 58, 0.16);
-  --plan-accent: #315b94;
-  --plan-accent-strong: #274a78;
-  --plan-accent-soft: #e4ebf5;
+  --plan-bg: #f4f1ea;
+  --plan-canvas: #f4f1ea;
+  --plan-surface: #fffcf7;
+  --plan-surface-soft: #f7f3ec;
+  --plan-ink: #1c1915;
+  --plan-text: #3f382f;
+  --plan-muted: #6f655b;
+  --plan-line: rgba(48, 38, 26, 0.1);
+  --plan-line-strong: rgba(48, 38, 26, 0.18);
+  --plan-accent: #9a3412;
+  --plan-accent-strong: #7c2d12;
+  --plan-accent-soft: #f6e7dc;
   --plan-navy: #1c2433;
   --plan-warning: #9a6700;
   --plan-warning-soft: #f6f0df;
@@ -133,31 +133,15 @@ body[data-density] :is(.metric-card strong, .review-item strong, .week-day-summa
   font-variant-numeric: tabular-nums;
 }
 
-/* Shared mode hierarchy. */
-body[data-density="focus"] {
-  --density-view-width: 1120px;
-  --density-track-width: 960px;
-  --density-shell-gutter: 56px;
-  --density-panel-padding: 30px;
-  --density-heading-size: 24px;
-  --density-copy-size: 15px;
-}
-
-body[data-density="balanced"] {
-  --density-view-width: 1280px;
-  --density-track-width: 1224px;
-  --density-shell-gutter: 56px;
-  --density-panel-padding: 26px;
-  --density-heading-size: 22px;
-  --density-copy-size: 14px;
-}
-
+/* Both densities share one track. Switching mode changes what is shown, not the page width. */
+body[data-density="focus"],
+body[data-density="balanced"],
 body[data-density="detail"] {
-  --density-view-width: 1380px;
-  --density-track-width: 1332px;
+  --density-view-width: 1180px;
+  --density-track-width: 1120px;
   --density-shell-gutter: 48px;
-  --density-panel-padding: 22px;
-  --density-heading-size: 21px;
+  --density-panel-padding: 24px;
+  --density-heading-size: 22px;
   --density-copy-size: 14px;
 }
 
@@ -201,7 +185,7 @@ body[data-density="focus"] #dashboard.view.active {
   gap: 18px;
 }
 
-body[data-density="focus"] #dashboard > :is(.command-panel, .focus-board, .target-lane, .metric-grid) {
+body[data-density="focus"] #dashboard > :is(.command-panel, .focus-board, .week-pulse, .target-lane, .metric-grid) {
   width: min(var(--density-track-width), 100%);
   margin-inline: auto;
 }
@@ -1302,7 +1286,7 @@ body[data-density="detail"] #review > .content-grid > .panel:nth-child(n) {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  body[data-density="focus"] #dashboard > :is(.command-panel, .focus-board, .target-lane, .metric-grid) {
+  body[data-density="focus"] #dashboard > :is(.command-panel, .focus-board, .week-pulse, .target-lane, .metric-grid) {
     grid-column: 1;
   }
 

@@ -309,7 +309,8 @@ a:focus-visible,
   background: transparent;
   color: var(--text);
   text-align: left;
-  transition: all var(--duration) var(--ease);
+  text-decoration: none;
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease), color var(--duration) var(--ease), transform var(--duration) var(--ease);
 }
 
 .nav-item:hover {
@@ -336,7 +337,7 @@ a:focus-visible,
   background: var(--surface-soft);
   color: var(--muted);
   font-size: 14px;
-  transition: all var(--duration) var(--ease);
+  transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
 
 .nav-item.active .nav-ico {
@@ -465,7 +466,7 @@ a:focus-visible,
   color: var(--muted);
   font-size: 12px;
   font-weight: 550;
-  transition: all var(--duration-fast) var(--ease);
+  transition: background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
 }
 
 .density-toggle button:hover {
@@ -498,7 +499,7 @@ a:focus-visible,
   border-radius: var(--radius-pill);
   font-weight: 550;
   line-height: 1;
-  transition: all var(--duration) var(--ease);
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease), color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
 }
 
 .ghost-button,
@@ -620,7 +621,7 @@ a:focus-visible,
   color: var(--primary-dark);
   font-size: 12px;
   font-weight: 600;
-  transition: all var(--duration-fast) var(--ease);
+  transition: background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
 }
 
 .sync-pill button:hover {
@@ -751,7 +752,7 @@ a:focus-visible,
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
-  transition: all var(--duration) var(--ease);
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease), transform var(--duration) var(--ease);
 }
 
 .command-metrics span:hover {
@@ -1001,7 +1002,7 @@ a:focus-visible,
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface-soft);
-  transition: all var(--duration) var(--ease);
+  transition: background var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
 }
 
 .target-subject:hover,
@@ -1331,7 +1332,7 @@ a:focus-visible,
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  transition: all var(--duration) var(--ease);
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
 }
 
 /* ═══════════════ Plan Cards ═══════════════ */
@@ -1529,7 +1530,7 @@ a:focus-visible,
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  transition: all var(--duration) var(--ease);
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
 }
 
 .task-flow-card:hover {
@@ -1598,7 +1599,7 @@ a:focus-visible,
   color: var(--ink);
   font-size: 14px;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
-  transition: all var(--duration) var(--ease);
+  transition: border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
 }
 
 /* 错因备注 is prose, not a code or a score. As a single-line input it clipped the
@@ -1616,7 +1617,7 @@ a:focus-visible,
   line-height: 1.5;
   resize: vertical;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
-  transition: all var(--duration) var(--ease);
+  transition: border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
 }
 
 .score-form textarea:focus {
@@ -1634,7 +1635,6 @@ a:focus-visible,
   border-color: var(--primary);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02),
               0 0 0 3px var(--primary-glow);
-  outline: none;
 }
 
 .entry-form input::placeholder,
@@ -1697,7 +1697,7 @@ a:focus-visible,
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  transition: all var(--duration) var(--ease);
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
 }
 
 .week-day-card:hover {
@@ -1755,7 +1755,7 @@ a:focus-visible,
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-soft);
-  transition: all var(--duration-fast) var(--ease);
+  transition: background var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
 }
 
 .week-task:hover {
@@ -1801,7 +1801,7 @@ a:focus-visible,
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  transition: all var(--duration) var(--ease);
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease), transform var(--duration) var(--ease);
 }
 
 .review-item:hover,
@@ -2132,7 +2132,7 @@ a:focus-visible,
   background: var(--surface);
   color: inherit;
   text-align: left;
-  transition: all var(--duration) var(--ease);
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
 }
 
 .topic.done {
@@ -2535,7 +2535,7 @@ a:focus-visible,
   aspect-ratio: 1;
   border-radius: 4px;
   background: var(--bg-warm);
-  transition: all var(--duration-fast) var(--ease);
+  transition: background var(--duration-fast) var(--ease), box-shadow var(--duration-fast) var(--ease), transform var(--duration-fast) var(--ease);
 }
 
 .heatmap-cell[data-level="1"] { background: #e6edf7; }

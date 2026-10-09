@@ -79,18 +79,18 @@ describe('module views', () => {
     SettingsView.mount(container);
 
     const balanced = container.querySelector('[data-density="balanced"]');
-    const focus = container.querySelector('[data-density="focus"]');
+    const detail = container.querySelector('[data-density="detail"]');
 
     expect(balanced?.classList.contains('active')).toBe(true);
     expect(balanced?.getAttribute('aria-pressed')).toBe('true');
-    expect(focus?.getAttribute('aria-pressed')).toBe('false');
+    expect(detail?.getAttribute('aria-pressed')).toBe('false');
 
-    focus.click();
+    detail.click();
 
-    expect(StateManager.getState('profile.density_mode')).toBe('focus');
-    expect(document.documentElement.getAttribute('data-density')).toBe('focus');
-    expect(focus.classList.contains('active')).toBe(true);
-    expect(focus.getAttribute('aria-pressed')).toBe('true');
+    expect(StateManager.getState('profile.density_mode')).toBe('detail');
+    expect(document.documentElement.getAttribute('data-density')).toBe('detail');
+    expect(detail.classList.contains('active')).toBe(true);
+    expect(detail.getAttribute('aria-pressed')).toBe('true');
     expect(balanced.classList.contains('active')).toBe(false);
     expect(balanced.getAttribute('aria-pressed')).toBe('false');
   });

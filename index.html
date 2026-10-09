@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="./src/styles/views/study-plan.css">
   <link rel="stylesheet" href="./src/styles/views/execution.css">
 </head>
-<body data-density="focus">
+<body data-density="balanced">
   <a class="skip-link" href="#main-content">跳到主要内容</a>
   <div class="app-shell">
     <aside class="sidebar" aria-label="主导航">
@@ -40,42 +40,42 @@
       <nav class="nav-list">
         <div class="nav-section">
           <span class="nav-label" title="今天做什么">今天</span>
-          <button type="button" class="nav-item active" data-view="dashboard" data-title="总览" data-purpose="先看今天该做什么，再决定去哪一页。" data-icon="home" data-mobile-primary aria-label="总览" aria-current="page">
+          <a class="nav-item active" href="#dashboard" data-view="dashboard" data-title="总览" data-purpose="先看今天该做什么，再决定去哪一页。" data-icon="home" data-mobile-primary aria-label="总览" aria-current="page">
             <i class="nav-ico nav-ico-home" aria-hidden="true"></i><span class="nav-text">总览</span><em id="navRiskDot">待记录</em>
-          </button>
-          <button type="button" class="nav-item" data-view="today" data-title="今日" data-purpose="执行任务，并留下分钟、题量和错因。" data-icon="today" data-mobile-primary aria-label="今日">
+          </a>
+          <a class="nav-item" href="#today" data-view="today" data-title="今日" data-purpose="执行任务，并留下分钟、题量和错因。" data-icon="today" data-mobile-primary aria-label="今日">
             <i class="nav-ico nav-ico-today" aria-hidden="true"></i><span class="nav-text">今日</span><em id="navTaskCount">3 项</em>
-          </button>
-          <button type="button" class="nav-item" data-view="week" data-title="周计划" data-purpose="把这一周的小时摊到七天，周日只改一个变量。" data-icon="week" data-mobile-primary aria-label="周计划">
+          </a>
+          <a class="nav-item" href="#week" data-view="week" data-title="周计划" data-purpose="把这一周的小时摊到七天，周日只改一个变量。" data-icon="week" data-mobile-primary aria-label="周计划">
             <i class="nav-ico nav-ico-week" aria-hidden="true"></i><span class="nav-text">周计划</span><em id="navWeekPlan">7 天</em>
-          </button>
+          </a>
         </div>
         <div class="nav-section">
           <span class="nav-label" title="这一阶段走到哪">路线</span>
-          <button type="button" class="nav-item" data-view="foundation" data-title="路径" data-purpose="看当前阶段的进入条件和过关线。" data-icon="path" aria-label="路径">
+          <a class="nav-item" href="#foundation" data-view="foundation" data-title="路径" data-purpose="看当前阶段的进入条件和过关线。" data-icon="path" aria-label="路径">
             <i class="nav-ico nav-ico-path" aria-hidden="true"></i><span class="nav-text">路径</span><em>阶段</em>
-          </button>
-          <button type="button" class="nav-item" data-view="syllabus" data-title="考点" data-purpose="按掌握、需复盘和未开始核对考纲。" data-icon="grid" aria-label="考点">
+          </a>
+          <a class="nav-item" href="#syllabus" data-view="syllabus" data-title="考点" data-purpose="按掌握、需复盘和未开始核对考纲。" data-icon="grid" aria-label="考点">
             <i class="nav-ico nav-ico-grid" aria-hidden="true"></i><span class="nav-text">考点</span><em id="navSyllabusProgress">0%</em>
-          </button>
-          <button type="button" class="nav-item" data-view="resources" data-title="资料" data-purpose="每科只留一套主线，写清产出和停用条件。" data-icon="resources" aria-label="资料">
+          </a>
+          <a class="nav-item" href="#resources" data-view="resources" data-title="资料" data-purpose="每科只留一套主线，写清产出和停用条件。" data-icon="resources" aria-label="资料">
             <i class="nav-ico nav-ico-resources" aria-hidden="true"></i><span class="nav-text">资料</span><em>版本</em>
-          </button>
+          </a>
         </div>
         <div class="nav-section">
           <span class="nav-label" title="做完之后留下什么">证据</span>
-          <button type="button" class="nav-item" data-view="records" data-title="记录" data-purpose="回看每天的时长、睡眠和完成情况。" data-icon="records" data-mobile-primary aria-label="记录">
+          <a class="nav-item" href="#records" data-view="records" data-title="记录" data-purpose="回看每天的时长、睡眠和完成情况。" data-icon="records" data-mobile-primary aria-label="记录">
             <i class="nav-ico nav-ico-records" aria-hidden="true"></i><span class="nav-text">记录</span><em id="navRecordDays">0 天</em>
-          </button>
-          <button type="button" class="nav-item" data-view="review" data-title="复盘" data-purpose="处理到期回炉。积压超过 3 项时先清债。" data-icon="review" aria-label="复盘">
+          </a>
+          <a class="nav-item" href="#review" data-view="review" data-title="复盘" data-purpose="处理到期回炉。积压超过 3 项时先清债。" data-icon="review" aria-label="复盘">
             <i class="nav-ico nav-ico-review" aria-hidden="true"></i><span class="nav-text">复盘</span><em id="navReviewDue">0 到期</em>
-          </button>
-          <button type="button" class="nav-item" data-view="scores" data-title="模考" data-purpose="看近 5 套方向和近 10 套稳定性。" data-icon="scores" aria-label="模考">
+          </a>
+          <a class="nav-item" href="#scores" data-view="scores" data-title="模考" data-purpose="看近 5 套方向和近 10 套稳定性。" data-icon="scores" aria-label="模考">
             <i class="nav-ico nav-ico-scores" aria-hidden="true"></i><span class="nav-text">模考</span><em id="navScoreAvg">--</em>
-          </button>
-          <button type="button" class="nav-item" data-view="settings" data-title="设置" data-purpose="改时间预算、复盘规则和排程科目。" data-icon="settings" aria-label="设置">
+          </a>
+          <a class="nav-item" href="#settings" data-view="settings" data-title="设置" data-purpose="改时间预算、复盘规则和排程科目。" data-icon="settings" aria-label="设置">
             <i class="nav-ico nav-ico-settings" aria-hidden="true"></i><span class="nav-text">设置</span><em>自定义</em>
-          </button>
+          </a>
         </div>
         <button class="mobile-more-button" id="mobileMoreBtn" type="button" aria-label="更多页面和操作" aria-haspopup="dialog" aria-controls="commandDialog" aria-expanded="false">
           <i class="nav-ico" data-lucide="more-horizontal" aria-hidden="true"></i><span class="nav-text">更多</span>
@@ -115,8 +115,7 @@
             </div>
           <button class="ghost-button toolbar-icon-button" id="authOpenBtn" type="button" aria-label="账号管理" title="账号管理"><i data-lucide="user-round" aria-hidden="true"></i><span>账号</span></button>
           <div class="density-toggle" role="group" aria-label="这一页显示多少信息">
-            <button type="button" data-density="focus" aria-label="只看行动" title="只保留当前要做的事" aria-pressed="true"><span>行动</span></button>
-            <button type="button" data-density="balanced" aria-label="日常执行" title="任务、记录和本周安排" aria-pressed="false"><span>执行</span></button>
+            <button type="button" data-density="balanced" aria-label="日常执行" title="任务、记录和本周安排" aria-pressed="true"><span>执行</span></button>
             <button type="button" data-density="detail" aria-label="看诊断" title="阶段依据、趋势和调整规则" aria-pressed="false"><span>诊断</span></button>
           </div>
           <button class="ghost-button toolbar-icon-button" id="exportBtn" type="button" aria-label="导出全部数据" title="导出数据"><i data-lucide="download" aria-hidden="true"></i><span>导出</span></button>
@@ -131,7 +130,7 @@
         <section class="command-panel">
           <div>
             <span class="command-label">备考主线 · 2026-08-31 开始</span>
-            <h3>今天，从这里开始</h3>
+            <h3 class="command-headline">今天的下一步</h3>
             <p id="commandText">先执行任务，再保存记录；复盘到期时优先处理。</p>
           </div>
           <div class="command-metrics">
@@ -143,14 +142,14 @@
 
         <section class="focus-board">
           <article class="focus-primary">
-            <div>
+            <div class="focus-primary-copy">
               <span class="focus-kicker">此刻最重要</span>
               <strong id="focusPrimarySubject">未生成</strong>
               <p id="focusPrimaryTask">进入今日页生成任务。</p>
             </div>
             <div class="focus-action">
               <em id="focusPrimaryTime">--m</em>
-              <button class="primary-button" type="button" data-jump="today">进入今日计划</button>
+              <a class="primary-button" href="#today" data-jump="today">进入今日计划</a>
             </div>
           </article>
           <article class="focus-card">
@@ -815,6 +814,17 @@
           <section class="panel">
             <div class="panel-head">
               <div>
+                <h3>模考趋势</h3>
+                <p>近 5 套看方向，近 10 套看稳定性</p>
+              </div>
+            </div>
+            <div class="score-summary" id="scoreSummary"></div>
+            <div class="score-trend" id="scoreTrend" aria-label="最近模考总分"></div>
+            <div class="score-list" id="scoreList"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div>
                 <h3>新增模考</h3>
                 <p>保存分科分数和错因。</p>
               </div>
@@ -829,17 +839,6 @@
               <label class="span-2">错因备注<textarea id="scoreNote" rows="3" placeholder="例如：线代计算慢，计组 Cache 丢分"></textarea></label>
               <button type="submit" class="primary-button">保存模考</button>
             </form>
-          </section>
-          <section class="panel">
-            <div class="panel-head">
-              <div>
-                <h3>模考趋势</h3>
-                <p>近 5 套看方向，近 10 套看稳定性</p>
-              </div>
-            </div>
-            <div class="score-summary" id="scoreSummary"></div>
-            <div class="score-trend" id="scoreTrend" aria-label="最近模考总分"></div>
-            <div class="score-list" id="scoreList"></div>
           </section>
         </div>
       </section>

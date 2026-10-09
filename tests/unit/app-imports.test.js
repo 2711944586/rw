@@ -585,7 +585,7 @@ describe("app imports", () => {
       weekPlans: { "2026-06-08": [{ id: "2026-06-08-A-math" }] },
       project: { README: true },
       resources: { "math-main": 65 },
-      settings: { density: "focus" },
+      settings: { density: "balanced" },
       customTasks: [{ id: "custom-1", text: "错题回炉", minutes: 20 }],
       reviewItems: [{ id: "review-1" }],
       deleted: { records: ["2026-06-16"], scores: [], tasks: ["task-old"], reviews: [] },
@@ -867,7 +867,7 @@ describe("app imports", () => {
       const DEFAULT_REVIEW_DAYS = [1, 3, 7, 14, 30];
       const DEFAULT_RETRO_TIME = "22:00";
       const DEFAULT_PROFILE_NUMBERS = { weekdayMinutes: 120, weekendMinutes: 210, taskCount: 3, coreRatio: 65 };
-      const DENSITY_MODES = ["focus", "balanced", "detail"];
+      const DENSITY_MODES = ["balanced", "detail"];
       const MASTERY_STATUSES = ["learning", "needs_review", "mastered"];
       const PLAN_SUBJECTS = ["math", "cs408", "english", "politics", "review", "project"];
       const PLAN_INTENSITIES = ["bottomline", "normal", "strong"];
@@ -962,7 +962,7 @@ describe("app imports", () => {
 
     const payload = helpers.buildProfileSettingsPayload({
       settings: {
-        density: "focus",
+        density: "balanced",
         planControls: { planIntensity: "strong", focusSubject: "408", enabledSubjects: ["政治", "review"] },
         resourcesUpdatedAt: "2026-06-19T02:00:00Z",
         constructor: "bad",
@@ -979,7 +979,7 @@ describe("app imports", () => {
       }
     });
 
-    expect(payload.density).toBe("focus");
+    expect(payload.density).toBe("balanced");
     expect(Object.prototype.hasOwnProperty.call(payload, "constructor")).toBe(false);
     expect(payload.resourcesUpdatedAt).toBe("2026-06-19T02:00:00.000Z");
     expect(payload.planControls).toEqual({
@@ -1494,7 +1494,7 @@ describe("app imports", () => {
         weekendMinutes: 210,
         taskCount: 3,
         coreRatio: 65,
-        density: "focus",
+        density: "balanced",
         lastExportDate: "",
         targetExamDate: DEFAULT_EXAM_DATE,
         reviewDays: [1, 3, 7, 14, 30],
@@ -1532,7 +1532,7 @@ describe("app imports", () => {
         weekendMinutes: 300,
         taskCount: 4,
         coreRatio: 70,
-        density: "focus",
+        density: "balanced",
         targetExamDate: "2027-12-25",
         reviewDays: [1, 3, 7, 14, 30],
         planControls: { normalized: true }

@@ -21,13 +21,14 @@ let cleanupFns = [];
 /** @type {{status: 'success'|'error', message: string}|null} */
 let settingsFeedback = null;
 
-const VALID_DENSITY_MODES = new Set(['focus', 'balanced', 'detail']);
+const VALID_DENSITY_MODES = new Set(['balanced', 'detail']);
 const DEFAULT_DENSITY_MODE = 'balanced';
 const DEFAULT_RETRO_TIME = '22:00';
 const MAX_TEMPLATE_MINUTES = 240;
 const SENSITIVE_EXPORT_KEYS = new Set(['snapshots', 'sync', 'user']);
 
 function validDensityMode(mode) {
+  if (mode === 'focus') return DEFAULT_DENSITY_MODE;
   return VALID_DENSITY_MODES.has(mode) ? mode : DEFAULT_DENSITY_MODE;
 }
 
@@ -201,9 +202,8 @@ function setSettingsFeedback(saved, successMessage) {
 function renderDensitySection() {
   const current = getDensityMode();
   const modes = [
-    { value: 'focus', label: '专注', level: '行动' },
-    { value: 'balanced', label: '平衡', level: '执行' },
-    { value: 'detail', label: '详尽', level: '诊断' },
+    { value: 'balanced', label: '执行', level: '日常' },
+    { value: 'detail', label: '诊断', level: '依据' },
   ];
 
   return `

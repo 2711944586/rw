@@ -174,7 +174,7 @@ const defaultSettings = {
   weekendMinutes: 300,
   taskCount: 3,
   coreRatio: 65,
-  density: "focus",
+  density: "balanced",
   lastExportDate: "",
   targetExamDate: DEFAULT_EXAM_DATE,
   reviewDays: [1, 3, 7, 14, 30],
@@ -352,10 +352,10 @@ function migrateState(parsed) {
     // payload carried, instead of being overwritten by the clamped raw value.
     if (!settings.efficiencyModeApplied) {
       if (settings.taskCount === 4) settings.taskCount = 3;
-      if (!source.settings || source.settings.density === "balanced") settings.density = "focus";
       settings.efficiencyModeApplied = true;
     }
-    if (!["focus", "balanced", "detail"].includes(settings.density)) settings.density = "focus";
+    if (settings.density === "focus") settings.density = "balanced";
+    if (!["balanced", "detail"].includes(settings.density)) settings.density = "balanced";
     settings.targetExamDate = sanitizeDateOrFallback(settings.targetExamDate, DEFAULT_EXAM_DATE) || DEFAULT_EXAM_DATE;
     settings.reviewDays = Array.isArray(settings.reviewDays)
       ? [...new Set(settings.reviewDays.map((day) => sanitizeInteger(day, 1, 365)).filter(Boolean))].sort((a, b) => a - b)
@@ -498,7 +498,7 @@ function ensureSettingsContainer() {
   settings.weekendMinutes = firstIntegerValue([current.weekendMinutes, current.weekend_minutes, defaultSettings.weekendMinutes], 60, 840, defaultSettings.weekendMinutes);
   settings.taskCount = firstIntegerValue([current.taskCount, current.task_count, defaultSettings.taskCount], 3, 4, defaultSettings.taskCount);
   settings.coreRatio = firstIntegerValue([current.coreRatio, current.core_ratio, defaultSettings.coreRatio], 55, 85, defaultSettings.coreRatio);
-  if (!["focus", "balanced", "detail"].includes(settings.density)) settings.density = "focus";
+  if (settings.density === "focus" || !["balanced", "detail"].includes(settings.density)) settings.density = "balanced";
   settings.targetExamDate = sanitizeDateOrFallback(settings.targetExamDate, DEFAULT_EXAM_DATE) || DEFAULT_EXAM_DATE;
   settings.reviewDays = Array.isArray(settings.reviewDays)
     ? [...new Set(settings.reviewDays.map((day) => sanitizeInteger(day, 1, 365)).filter(Boolean))].sort((a, b) => a - b)
@@ -1937,6 +1937,7 @@ function bindNavigation() {
     if (!(target instanceof Element)) return;
     const button = target.closest(".nav-item[data-view], [data-jump]");
     if (!button) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
     const view = button.dataset.view || button.dataset.jump;
     if (!isValidView(view)) return;
     event.preventDefault();
@@ -3585,7 +3586,8 @@ function renderWeekPulse() {
   const maxMinutes = Math.max(60, ...days.map((day) => day.minutes));
   container.innerHTML = days.map((day) => {
     const height = day.minutes ? Math.max(8, Math.round(day.minutes / maxMinutes * 100)) : 0;
-    return `<span class="pulse-day" title="${day.iso} · ${day.minutes} 分钟"><i data-height="${height}"></i><em>${day.label}</em></span>`;
+    const bar = height ? `<i data-height="${height}"></i>` : `<i class="pulse-empty"></i>`;
+    return `<span class="pulse-day" title="${day.iso} · ${day.minutes} 分钟">${bar}<em>${day.label}</em></span>`;
   }).join("");
   if (caption) {
     caption.textContent = recorded >= 3

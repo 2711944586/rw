@@ -73,7 +73,7 @@ try {
 
   const mobileNavigation = await page.evaluate(() => {
     const navigation = document.querySelector('.nav-list');
-    const visibleButtons = [...(navigation?.querySelectorAll('button') || [])]
+    const visibleButtons = [...(navigation?.querySelectorAll('.nav-item, .mobile-more-button') || [])]
       .filter((button) => {
         const rect = button.getBoundingClientRect();
         return getComputedStyle(button).display !== 'none' && rect.width > 0 && rect.height > 0;
@@ -92,7 +92,7 @@ try {
   assert(!mobileNavigation.horizontalOverflow, 'Mobile navigation still scrolls horizontally.');
   assert(mobileNavigation.contentViewportGap >= 0, `Mobile content viewport extends behind navigation: gap=${mobileNavigation.contentViewportGap}`);
 
-  const focusDashboard = await page.evaluate(() => {
+  const executionDashboard = await page.evaluate(() => {
     const visible = (selector) => {
       const element = document.querySelector(selector);
       return Boolean(element && getComputedStyle(element).display !== 'none' && element.getClientRects().length);
@@ -102,17 +102,10 @@ try {
       targetStatusVisible: visible('.target-lane > .target-status-card'),
       scoreSplitVisible: visible('.target-lane > .score-split-card'),
       loopAuditVisible: visible('.target-lane > .loop-audit-card'),
-      visibleMetrics: [...document.querySelectorAll('#dashboard > .metric-grid > .metric-card')]
-        .filter((card) => getComputedStyle(card).display !== 'none' && card.getClientRects().length)
-        .map((card) => card.classList.contains('risk') ? 'risk' : 'metric'),
-      strategyVisible: visible('#dashboard > .strategy-board'),
     };
   });
-  assert(!focusDashboard.weeklyCardVisible, 'Mobile focus mode still repeats the weekly status card.');
-  assert(!focusDashboard.targetStatusVisible && !focusDashboard.scoreSplitVisible, 'Mobile focus mode still shows secondary target calibration cards.');
-  assert(focusDashboard.loopAuditVisible, 'Mobile focus mode hid the actionable daily audit.');
-  assert(JSON.stringify(focusDashboard.visibleMetrics) === JSON.stringify(['risk']), `Unexpected mobile focus metrics: ${JSON.stringify(focusDashboard.visibleMetrics)}`);
-  assert(!focusDashboard.strategyVisible, 'Mobile focus mode still shows the full strategy board.');
+  assert(executionDashboard.weeklyCardVisible, 'Mobile execution mode hid the weekly status card.');
+  assert(executionDashboard.targetStatusVisible && executionDashboard.scoreSplitVisible && executionDashboard.loopAuditVisible, 'Mobile execution mode hid the calibration cards.');
 
   const mobileToolbar = await page.evaluate(() => [...document.querySelectorAll('.top-actions .toolbar-icon-button')]
     .filter((button) => getComputedStyle(button).display !== 'none' && button.getClientRects().length)
@@ -143,7 +136,7 @@ try {
         const navigation = document.querySelector('.nav-list');
         return navigation ? navigation.scrollWidth > navigation.clientWidth + 1 : true;
       })(),
-      visibleNavigationButtons: [...document.querySelectorAll('.nav-list button')]
+      visibleNavigationButtons: [...document.querySelectorAll('.nav-list .nav-item, .nav-list .mobile-more-button')]
         .filter((button) => getComputedStyle(button).display !== 'none' && button.getClientRects().length).length,
     }));
     assert(!responsiveState.pageOverflow, `${viewport.width}px viewport has horizontal page overflow.`);
@@ -167,7 +160,7 @@ try {
   await page.waitForFunction(() => document.getElementById('mobileMoreBtn')?.getAttribute('aria-current') === 'page');
   assert((await page.getByRole('button', { name: /更多页面和操作，当前：设置/ }).getAttribute('aria-expanded')) === 'false', 'Mobile More trigger kept an expanded state after navigation.');
 
-  await page.getByRole('button', { name: '今日', exact: true }).click();
+  await page.getByRole('link', { name: '今日', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('.view.active')?.id === 'today');
   await page.locator('.density-toggle [data-density="balanced"]').click();
   await page.waitForFunction(() => document.body.dataset.density === 'balanced');

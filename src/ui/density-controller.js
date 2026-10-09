@@ -18,25 +18,20 @@
  */
 
 export const DENSITY_MODES = Object.freeze({
-  focus: Object.freeze({
-    label: '专注',
-    level: 'action',
-    expand: Object.freeze([]),
-  }),
   balanced: Object.freeze({
-    label: '平衡',
+    label: '执行',
     level: 'execution',
     expand: Object.freeze([]),
   }),
   detail: Object.freeze({
-    label: '详尽',
+    label: '诊断',
     level: 'diagnostic',
     expand: Object.freeze(['detail']),
   }),
 });
 
 const VALID_MODES = Object.freeze(Object.keys(DENSITY_MODES));
-const DEFAULT_MODE = 'focus';
+const DEFAULT_MODE = 'balanced';
 
 export function normalizeDensityMode(mode, fallback = DEFAULT_MODE) {
   return VALID_MODES.includes(mode) ? mode : fallback;
@@ -51,8 +46,8 @@ export function densityModeMeta(mode) {
  * both `documentElement` and `body`, then syncing the toggle buttons and any
  * `details[data-density-expand]` sections.
  *
- * An unknown or missing mode normalizes to `focus` rather than reading a second
- * state store: the caller owns the persisted value.
+ * An unknown or missing mode, including the retired `focus` mode, normalizes
+ * to `balanced`. The caller owns the persisted value.
  *
  * @param {string} [mode] - Density mode; unknown values fall back to the default
  */

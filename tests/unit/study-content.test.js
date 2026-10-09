@@ -59,9 +59,10 @@ describe("study workflow content", () => {
     for (const field of ["prerequisite", "resource", "basis"]) {
       expect(content).toContain(`${field}:`);
     }
-    expect(density).toContain("level: 'action'");
+    expect(density).not.toContain("level: 'action'");
     expect(density).toContain("level: 'execution'");
     expect(density).toContain("level: 'diagnostic'");
+    expect(density).toContain("expand: Object.freeze(['detail'])");
   });
 
   it("keeps the revised plan continuous and fully specified", () => {

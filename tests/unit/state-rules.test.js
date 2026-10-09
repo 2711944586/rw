@@ -176,7 +176,7 @@ describe('state rules: migrateState settings migration', () => {
   it('downgrades a four-task plan to three on the first efficiency migration', () => {
     const state = migrateState({ settings: { taskCount: 4, density: 'balanced' } });
     expect(state.settings.taskCount).toBe(3);
-    expect(state.settings.density).toBe('focus');
+    expect(state.settings.density).toBe('balanced');
     expect(state.settings.efficiencyModeApplied).toBe(true);
   });
 
@@ -193,7 +193,7 @@ describe('state rules: migrateState settings migration', () => {
 
   it('falls back to a known density and a usable exam date', () => {
     const state = migrateState({ settings: { density: 'chaotic', targetExamDate: 'not-a-date' } });
-    expect(state.settings.density).toBe('focus');
+    expect(state.settings.density).toBe('balanced');
     expect(state.settings.targetExamDate).toBe(DEFAULT_EXAM_DATE);
   });
 

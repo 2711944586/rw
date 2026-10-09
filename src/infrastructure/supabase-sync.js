@@ -22,7 +22,7 @@ const DEFAULT_PROFILE_NUMBERS = {
   taskCount: 3,
   coreRatio: 65
 };
-const DENSITY_MODES = ["focus", "balanced", "detail"];
+const DENSITY_MODES = ["balanced", "detail"];
 const MASTERY_STATUSES = ["learning", "needs_review", "mastered"];
 const PLAN_SUBJECTS = ["math", "cs408", "english", "politics", "review", "project"];
 const PLAN_INTENSITIES = ["bottomline", "normal", "strong"];
@@ -205,8 +205,10 @@ function normalizeIntegerSetting(value, fallback, min, max, defaultValue = min) 
   return asInteger(defaultValue, min, max);
 }
 
-function normalizeDensityMode(value, fallback = "focus") {
-  return asEnum(value, DENSITY_MODES, asEnum(fallback, DENSITY_MODES, "focus"));
+function normalizeDensityMode(value, fallback = "balanced") {
+  const candidate = value === "focus" ? "balanced" : value;
+  const fallbackMode = fallback === "focus" ? "balanced" : fallback;
+  return asEnum(candidate, DENSITY_MODES, asEnum(fallbackMode, DENSITY_MODES, "balanced"));
 }
 
 function normalizeTimeSetting(value, fallback = DEFAULT_RETRO_TIME) {
