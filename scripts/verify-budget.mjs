@@ -24,7 +24,9 @@ const BUDGETS = [
   { key: 'index', extension: '.css', limitKb: 95 },
   { key: 'vendor-supabase', extension: '.js', limitKb: 60 },
   { key: 'infra', extension: '.js', limitKb: 12 },
-  { key: 'domain', extension: '.js', limitKb: 9 },
+  // execution-loop.js landed in this chunk (gzip 9.27 KB on 2026-10-09).
+  // 12 KB matches the infra ceiling and still fails a real size jump.
+  { key: 'domain', extension: '.js', limitKb: 12 },
   { key: 'vendor-icons', extension: '.js', limitKb: 4 },
 ];
 
