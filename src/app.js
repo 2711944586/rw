@@ -3567,6 +3567,33 @@ function renderExecutionSignals() {
   applyDeferredStyles(host);
 }
 
+function renderWeekPulse() {
+  const container = document.getElementById("weekPulse");
+  const caption = document.getElementById("weekPulseCaption");
+  if (!container) return;
+  const today = parseDate(planTodayISO());
+  const days = [];
+  for (let index = 13; index >= 0; index -= 1) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - index);
+    const iso = formatDateISO(date);
+    const entry = entryRow(iso);
+    const minutes = entry ? getEntryTotals(entry).total : 0;
+    days.push({ iso, minutes, label: `${date.getMonth() + 1}/${date.getDate()}` });
+  }
+  const recorded = days.filter((day) => day.minutes > 0).length;
+  const maxMinutes = Math.max(60, ...days.map((day) => day.minutes));
+  container.innerHTML = days.map((day) => {
+    const height = day.minutes ? Math.max(8, Math.round(day.minutes / maxMinutes * 100)) : 0;
+    return `<span class="pulse-day" title="${day.iso} · ${day.minutes} 分钟"><i style="--pulse:${height}%"></i><em>${day.label}</em></span>`;
+  }).join("");
+  if (caption) {
+    caption.textContent = recorded >= 3
+      ? `已有 ${recorded} 天记录。柱高按这 14 天里最长的一天缩放。`
+      : "记录满 3 天后，这里显示每天投入。";
+  }
+}
+
 function renderDashboard() {
   const phase = getCurrentPhase();
   const all = entriesArray();
@@ -3576,6 +3603,7 @@ function renderDashboard() {
   const coreMinutes = sumMinutes(week, "core");
   const daysLeft = Math.ceil((parseDate(state.settings.targetExamDate || DEFAULT_EXAM_DATE) - parseDate(planTodayISO())) / 86400000);
   const dateStatus = examDateStatusText();
+  renderWeekPulse();
   const planDate = planTodayISO();
   const currentMonth = monthlyPlan.find((row) => planDate.startsWith(row[0]));
   const monthMinutes = sumMinutes(entriesArray().filter((entry) => entry.date.startsWith(planDate.slice(0, 7))), "total");
@@ -6075,6 +6103,8 @@ function switchView(viewId, options = {}) {
   });
   const nav = [...document.querySelectorAll(".nav-item[data-view]")].find((item) => item.dataset.view === viewId);
   document.getElementById("viewTitle").textContent = nav ? nav.dataset.title || nav.textContent.trim() : "";
+  const purpose = document.getElementById("viewPurpose");
+  if (purpose) purpose.textContent = nav?.dataset.purpose || "";
   if (workspaceRenderer) renderAll(viewId);
   if (options.moveFocus) {
     document.getElementById("main-content")?.focus({ preventScroll: true });
@@ -7071,6 +7101,17 @@ function renderScores() {
       <strong>${value}</strong>
     </div>
   `).join("");
+
+  const trend = document.getElementById("scoreTrend");
+  if (trend) {
+    const chronological = [...sorted].reverse().slice(-10);
+    const maxTotal = Math.max(420, ...chronological.map((score) => Number(score.total) || 0), 1);
+    trend.innerHTML = chronological.length ? chronological.map((score) => {
+      const total = Number(score.total) || 0;
+      const height = Math.max(6, Math.round(total / maxTotal * 100));
+      return `<span class="score-trend-bar" title="${escapeAttr(score.date)} · ${escapeAttr(score.name)} · ${total}"><i style="--score:${height}%"></i><em>${total}</em></span>`;
+    }).join("") : `<p class="score-trend-empty">保存两套以上模考后，这里显示总分走向。</p>`;
+  }
 
   document.getElementById("scoreList").innerHTML = sorted.length ? sorted.map((score) => `
     <div class="score-row">

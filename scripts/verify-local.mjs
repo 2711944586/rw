@@ -200,7 +200,7 @@ try {
       viewportHeight: window.innerHeight,
       navCenter: firstItem && lastItem ? (firstItem.top + lastItem.bottom) / 2 : 0,
       viewportCenter: window.innerHeight / 2,
-      peripheralNotesHidden: ['.sidebar-status', '.side-card', '.nav-label', '.topbar .eyebrow']
+      peripheralNotesHidden: ['.sidebar-status', '.side-card', '.topbar .eyebrow']
         .every((selector) => {
           const element = document.querySelector(selector);
           return !element || element.getClientRects().length === 0;

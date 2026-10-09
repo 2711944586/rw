@@ -10,7 +10,7 @@
 
 环境要求：Node.js `^20.19.0` 或 `>=22.12.0`，推荐 Node 22。
 
-双击 `scripts/start-local.bat`。脚本会在缺少 `node_modules` 时安装依赖，启动本机 Vite，并打开浏览器。如果 `127.0.0.1:5173` 已经是这个学习台，它只打开现有页面，不另起一套服务。
+双击项目根目录的 `start-local.bat`。脚本会在缺少 `node_modules` 时安装依赖，启动本机 Vite，并打开浏览器。如果 `127.0.0.1:5173` 已经是这个学习台，它只打开现有页面，不另起一套服务。
 
 ```powershell
 npm run start:local
@@ -49,6 +49,7 @@ npm run start:local
 
 ```text
 .
+├─ start-local.bat                  # 根目录双击启动
 ├─ index.html                       # 页面语义骨架与 Vite HTML 入口
 ├─ src/
 │  ├─ main.js                       # 启动入口与故障恢复壳

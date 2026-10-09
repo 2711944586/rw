@@ -5,9 +5,9 @@
   --workspace-surface: #ffffff;
   --workspace-surface-strong: #ffffff;
   --workspace-ink: #152033;
-  --workspace-text: #344256;
-  --workspace-muted: #65748a;
-  --workspace-faint: #96a3b5;
+  --workspace-text: #2c3a4e;
+  --workspace-muted: #4d5d74;
+  --workspace-faint: #5d6d84;
   --workspace-line: rgba(42, 59, 83, 0.11);
   --workspace-line-strong: rgba(42, 59, 83, 0.19);
   --workspace-nav: #152033;
@@ -292,29 +292,35 @@ a:focus-visible,
 .nav-list {
   display: grid;
   align-content: center;
-  gap: 10px;
+  gap: 2px;
   flex: 1 1 auto;
   min-height: 0;
-  padding-block: 18px 12px;
+  padding-block: 8px 4px;
 }
 
 .nav-section {
   display: grid;
-  gap: 4px;
+  gap: 1px;
 }
 
 .nav-section + .nav-section {
-  padding-top: 10px;
+  margin-top: 6px;
+  padding-top: 6px;
   border-top: 1px solid var(--workspace-line);
 }
 
 .nav-label {
-  display: none;
+  display: block;
+  padding: 0 10px 2px;
+  color: var(--workspace-ink);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.2;
 }
 
 .nav-item {
   width: 100%;
-  min-height: 41px;
+  min-height: 36px;
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
   gap: 8px;
@@ -375,6 +381,128 @@ a:focus-visible,
   display: none;
 }
 
+.week-pulse {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  border: 1px solid var(--workspace-line);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.week-pulse-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.week-pulse-head h3 {
+  margin: 0;
+  color: var(--workspace-ink);
+  font-size: 15px;
+  font-weight: 720;
+}
+
+.week-pulse-head p,
+.score-trend-empty {
+  margin: 0;
+  color: var(--workspace-text);
+  font-size: 12px;
+}
+
+.week-pulse-chart,
+.score-trend {
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  align-items: end;
+  gap: 6px;
+}
+
+.score-trend {
+  grid-template-columns: repeat(auto-fit, minmax(28px, 1fr));
+  margin: 8px 0 14px;
+}
+
+.pulse-day,
+.score-trend-bar {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 72px auto;
+  align-items: end;
+  justify-items: center;
+  gap: 6px;
+}
+
+.pulse-day i,
+.score-trend-bar i {
+  width: 100%;
+  max-width: 18px;
+  height: var(--pulse, var(--score, 0%));
+  min-height: 3px;
+  border-radius: 4px 4px 2px 2px;
+  background: var(--workspace-accent);
+}
+
+.pulse-day em,
+.score-trend-bar em {
+  color: var(--workspace-text);
+  font-family: var(--workspace-mono);
+  font-size: 10px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-group {
+  margin: 0;
+  padding: 14px 14px 16px;
+  border: 1px solid var(--workspace-line);
+  border-radius: 12px;
+}
+
+.settings-group legend {
+  padding: 0 6px;
+  color: var(--workspace-ink);
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.field-unit {
+  margin-left: 6px;
+  color: var(--workspace-text);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.settings-form label {
+  display: block;
+}
+
+@media (max-width: 720px) {
+  .week-pulse-chart {
+    gap: 2px;
+  }
+
+  .pulse-day em {
+    font-size: 0;
+  }
+
+  .pulse-day:nth-child(odd) em {
+    font-size: 9px;
+  }
+
+  .settings-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .nav-item.active em {
   color: var(--workspace-accent);
 }
@@ -422,17 +550,33 @@ a:focus-visible,
   box-shadow: var(--workspace-shadow-soft);
 }
 
+.topbar-title,
 .topbar > div:first-child {
   min-width: 0;
+  display: grid;
+  gap: 2px;
 }
 
 .topbar h2 {
   margin: 0;
   color: var(--workspace-ink);
   font-family: var(--workspace-display);
-  font-size: 23px;
-  font-weight: 680;
-  line-height: 1.1;
+  font-size: 20px;
+  font-weight: 720;
+  line-height: 1.15;
+}
+
+.topbar-title p,
+#viewPurpose {
+  margin: 0;
+  max-width: 46ch;
+  overflow: hidden;
+  color: var(--workspace-text);
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .eyebrow {
@@ -630,7 +774,7 @@ a:focus-visible,
 }
 
 .focus-primary .focus-kicker {
-  color: #aebfff;
+  color: #d5def4;
 }
 
 .focus-primary strong {
@@ -647,7 +791,7 @@ a:focus-visible,
 .focus-primary p {
   max-width: 52ch;
   margin: 10px 0 0;
-  color: #c2cbda;
+  color: #e4eaf4;
   font-size: 14px;
   line-height: 1.65;
 }
@@ -662,7 +806,7 @@ a:focus-visible,
 }
 
 .focus-action em {
-  color: #b8c9ff;
+  color: #d7e2ff;
   font-family: var(--workspace-display);
   font-variant-numeric: tabular-nums;
   font-size: 30px;
@@ -1442,8 +1586,8 @@ textarea:hover {
 }
 
 .command-dialog-head span {
-  color: #aebfff;
-  font-size: 10px;
+  color: #d5def4;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -1533,13 +1677,13 @@ textarea:hover {
 }
 
 .command-option small {
-  color: #878e99;
+  color: #c5ccd6;
   font-size: 11px;
 }
 
 .command-option em {
-  color: #aebfff;
-  font-size: 10px;
+  color: #d5def4;
+  font-size: 11px;
   font-style: normal;
   font-weight: 700;
 }
@@ -1865,7 +2009,11 @@ textarea:hover {
   }
 
   .topbar h2 {
-    font-size: 19px;
+    font-size: 17px;
+  }
+
+  #viewPurpose {
+    display: none;
   }
 
   .eyebrow {
@@ -3954,29 +4102,13 @@ body[data-density] .view {
 
 body[data-density] .topbar > div:first-child {
   min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 11px;
+  display: grid;
+  gap: 2px;
 }
 
 body[data-density] .topbar > div:first-child::after {
-  min-height: 23px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 8px;
-  border: 1px solid var(--workspace-line);
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.68);
-  color: var(--workspace-muted);
-  font-family: var(--workspace-mono);
-  font-size: 10px;
-  font-weight: 700;
-  white-space: nowrap;
+  content: none;
 }
-
-body[data-density="focus"] .topbar > div:first-child::after { content: "01 / 行动"; }
-body[data-density="balanced"] .topbar > div:first-child::after { content: "02 / 执行"; }
-body[data-density="detail"] .topbar > div:first-child::after { content: "03 / 诊断"; }
 
 body[data-density] .density-toggle {
   min-height: 40px;
@@ -3990,7 +4122,7 @@ body[data-density] .density-toggle {
 }
 
 body[data-density] .density-toggle button {
-  min-width: 65px;
+  min-width: 52px;
   min-height: 32px;
   display: inline-flex;
   align-items: center;
@@ -3999,9 +4131,9 @@ body[data-density] .density-toggle button {
   border: 1px solid transparent;
   border-radius: 6px;
   padding: 0 8px;
-  color: #6d7480;
-  font-size: 11px;
-  font-weight: 650;
+  color: #3d4654;
+  font-size: 12px;
+  font-weight: 680;
 }
 
 body[data-density] .density-toggle button small {

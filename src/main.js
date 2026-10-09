@@ -34,6 +34,8 @@ function installShellFallback(error) {
     const title = nav?.dataset.title || nav?.textContent?.trim() || "总览";
     const heading = document.getElementById("viewTitle");
     if (heading) heading.textContent = title;
+    const purpose = document.getElementById("viewPurpose");
+    if (purpose) purpose.textContent = nav?.dataset.purpose || "";
     if (window.location.hash !== `#${nextView}`) window.history.replaceState(null, "", `#${nextView}`);
   };
 

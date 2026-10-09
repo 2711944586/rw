@@ -17,3 +17,5 @@ coverage/
 .vscode/
 .kiro/
 .github/copilot-instructions.md
+
+.env*
