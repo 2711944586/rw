@@ -367,6 +367,13 @@ begin
       status in ('due', 'done', 'delayed', 'failed')
       and delay_count >= 0 and quality_score between 0 and 5
       and interval_index >= 0 and fail_streak >= 0
+      and last_result in ('', 'pass', 'fail', 'delay', 'again', 'hard', 'good', 'easy')
+    ) not valid;
+  end if;
+
+  if not exists (select 1 from pg_constraint where conrelid = 'public.review_items'::regclass and conname = 'review_items_last_result_check') then
+    alter table public.review_items add constraint review_items_last_result_check check (
+      last_result in ('', 'pass', 'fail', 'delay', 'again', 'hard', 'good', 'easy')
     ) not valid;
   end if;
 

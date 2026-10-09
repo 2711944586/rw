@@ -132,6 +132,7 @@ import {
   mergeRegeneratedTasks,
   presentSyncStatus,
   reviewGradeEffect,
+  reviewPosture,
   sanitizeLoadTier,
   sanitizeSleepHours,
   shouldUseBottomLine,
@@ -6782,18 +6783,20 @@ function renderReviewScience() {
   }
 }
 
-function renderReviewModeLayouts({ weekHours, coreRatio, mistakeRatio, activeDays, dueCount, avg14, monthHours, monthTarget }) {
+function renderReviewModeLayouts({ weekHours, coreRatio, mistakeRatio, activeDays, dueCount, avg14, monthHours, monthTarget, weeklyTarget }) {
   const focus = document.getElementById("reviewFocusLayout");
   const operations = document.getElementById("reviewOperationsLayout");
   const diagnostic = document.getElementById("reviewDiagnosticLayout");
-  const nextAction = dueCount > 3
-    ? "暂停新增章节，先处理最老的 1 项到期复盘。"
-    : activeDays < 4
-      ? "下周先恢复底线日，不补偿式加时。"
-      : mistakeRatio < 0.7
-        ? "只修复本周重复最多的一个错因。"
-        : "保持当前总量，只推进下周第一个核心任务。";
-  const status = dueCount > 3 || activeDays < 4 ? "需要降载" : mistakeRatio < 0.7 ? "先修复错因" : "维持节奏";
+  const posture = reviewPosture({
+    dueCount,
+    activeDays,
+    mistakeRatio,
+    weekHours,
+    weeklyTarget,
+    coreRatio
+  });
+  const nextAction = posture.action;
+  const status = posture.status;
 
   if (focus) {
     focus.innerHTML = `
@@ -6865,14 +6868,14 @@ function renderReview() {
   const monthTarget = currentMonth ? currentMonth[1] : phase.weeklyTarget * 4;
   const dueCount = reviewRows().filter((item) => isReviewDue(item, planDate)).length;
   const avgSyllabus = Math.round(["math", "cs408", "english", "politics"].reduce((sum, subject) => sum + syllabusProgress(subject).percent, 0) / 4);
-  // The review backlog gates the load advice. It used to be derived only from
-  // hours / core ratio / active days, so a week with strong execution but four
-  // overdue reviews showed "需要降载" in the banner and "可小幅加难度" in this
-  // tile — two opposite conclusions on one screen.
-  const learningStatus = dueCount > 3 ? "先清复盘再加量" :
-    weekHours >= phase.weeklyTarget * 0.9 && coreRatio >= 0.65 && activeDays >= 6 ? "可小幅加难度" :
-    weekHours < phase.weeklyTarget * 0.7 || activeDays <= 3 ? "先恢复底线日" :
-    "保持当前负荷";
+  const learningStatus = reviewPosture({
+    dueCount,
+    activeDays,
+    mistakeRatio,
+    weekHours,
+    weeklyTarget: phase.weeklyTarget,
+    coreRatio
+  }).load;
 
   // The banner above already reports weekly hours, core ratio and mistake
   // recovery with the same numbers, so the grid only carries what the banner
@@ -6897,7 +6900,7 @@ function renderReview() {
   renderMilestone();
   renderRollingWindowChart();
   renderReviewScience();
-  renderReviewModeLayouts({ weekHours, coreRatio, mistakeRatio, activeDays, dueCount, avg14, monthHours, monthTarget });
+  renderReviewModeLayouts({ weekHours, coreRatio, mistakeRatio, activeDays, dueCount, avg14, monthHours, monthTarget, weeklyTarget: phase.weeklyTarget });
   renderPlanGovernance();
 
   const totalHours = sumMinutes(entriesArray(), "total") / 60;

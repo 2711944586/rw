@@ -1560,12 +1560,13 @@ a:focus-visible,
 .settings-form,
 .custom-task-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
-.entry-form {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.score-form,
+.settings-form,
+.custom-task-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .entry-form label,
@@ -4556,7 +4557,7 @@ body[data-density="focus"] .today-workbench > .detail-section {
 }
 
 .entry-form {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .entry-form .span-2 {
@@ -5292,14 +5293,13 @@ body[data-density="focus"] .today-workbench > .detail-section {
     font-size: 21px;
   }
 
-  .entry-form,
   .settings-form,
   .custom-task-form {
     grid-template-columns: 1fr;
   }
 
-  .today-entry-panel .entry-form {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .today-entry-panel .entry-fields {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .today-entry-panel .entry-form label {

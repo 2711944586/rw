@@ -469,29 +469,49 @@
               </div>
             </div>
             <form class="entry-form" id="entryForm">
-              <label>数学分钟<input type="number" min="0" id="mathMin" inputmode="numeric"></label>
-              <label>408 分钟<input type="number" min="0" id="csMin" inputmode="numeric"></label>
-              <label>英语分钟<input type="number" min="0" id="engMin" inputmode="numeric"></label>
-              <label>政治分钟<input type="number" min="0" id="polMin" inputmode="numeric"></label>
-              <label>项目分钟<input type="number" min="0" id="projectMin" inputmode="numeric"></label>
-              <label>质量评分<input type="number" min="1" max="5" id="qualityScore" inputmode="numeric" placeholder="1-5"></label>
-              <label>睡眠小时<input type="number" min="0" max="14" step="0.1" id="sleepHours" inputmode="decimal" placeholder="7.5"></label>
-              <label>疲劳 1-5<input type="number" min="1" max="5" id="fatigueScore" inputmode="numeric" placeholder="3"></label>
-              <label>当日档位
-                <select id="loadTier">
-                  <option value="">未记录</option>
-                  <option value="bottomline">底线日</option>
-                  <option value="normal">正常日</option>
-                  <option value="strong">加强日</option>
-                </select>
-              </label>
-              <label>数学题数<input type="number" min="0" id="mathProblems" inputmode="numeric"></label>
-              <label>408 题数<input type="number" min="0" id="csProblems" inputmode="numeric"></label>
-              <label>阅读篇数<input type="number" min="0" id="readingCount" inputmode="numeric"></label>
-              <label>新增错题<input type="number" min="0" id="newMistakes" inputmode="numeric"></label>
-              <label>回炉错题<input type="number" min="0" id="fixedMistakes" inputmode="numeric"></label>
-              <label class="span-2">明日第一任务<input type="text" id="nextTask" placeholder="例如：高数极限习题 20 道"></label>
-              <label class="span-2">备注<input type="text" id="note" placeholder="可空，记录卡点即可"></label>
+              <fieldset class="entry-group">
+                <legend>分钟</legend>
+                <div class="entry-fields">
+                  <label>数学<input type="number" min="0" id="mathMin" inputmode="numeric"></label>
+                  <label>408<input type="number" min="0" id="csMin" inputmode="numeric"></label>
+                  <label>英语<input type="number" min="0" id="engMin" inputmode="numeric"></label>
+                  <label>政治<input type="number" min="0" id="polMin" inputmode="numeric"></label>
+                  <label>项目<input type="number" min="0" id="projectMin" inputmode="numeric"></label>
+                </div>
+              </fieldset>
+              <fieldset class="entry-group">
+                <legend>题量与错题</legend>
+                <div class="entry-fields">
+                  <label>数学题<input type="number" min="0" id="mathProblems" inputmode="numeric"></label>
+                  <label>408 题<input type="number" min="0" id="csProblems" inputmode="numeric"></label>
+                  <label>阅读篇<input type="number" min="0" id="readingCount" inputmode="numeric"></label>
+                  <label>新增错题<input type="number" min="0" id="newMistakes" inputmode="numeric"></label>
+                  <label>回炉错题<input type="number" min="0" id="fixedMistakes" inputmode="numeric"></label>
+                  <label>质量 1-5<input type="number" min="1" max="5" id="qualityScore" inputmode="numeric" placeholder="1-5"></label>
+                </div>
+              </fieldset>
+              <fieldset class="entry-group">
+                <legend>身体与档位</legend>
+                <div class="entry-fields">
+                  <label>睡眠小时<input type="number" min="0" max="14" step="0.1" id="sleepHours" inputmode="decimal" placeholder="7.5"></label>
+                  <label>疲劳 1-5<input type="number" min="1" max="5" id="fatigueScore" inputmode="numeric" placeholder="可空"></label>
+                  <label>当日档位
+                    <select id="loadTier">
+                      <option value="">未记录</option>
+                      <option value="bottomline">底线日</option>
+                      <option value="normal">正常日</option>
+                      <option value="strong">加强日</option>
+                    </select>
+                  </label>
+                </div>
+              </fieldset>
+              <fieldset class="entry-group">
+                <legend>收口</legend>
+                <div class="entry-fields">
+                  <label class="span-2">明日第一任务<input type="text" id="nextTask" placeholder="例如：高数极限习题 20 道"></label>
+                  <label class="span-2">备注<input type="text" id="note" placeholder="可空，记录卡点即可"></label>
+                </div>
+              </fieldset>
               <button type="submit" class="primary-button">保存今日记录</button>
             </form>
           </section>
@@ -720,11 +740,11 @@
             <div class="review-operations-layout density-balanced-only" id="reviewOperationsLayout"></div>
             <div class="review-diagnostic-layout density-detail-only" id="reviewDiagnosticLayout"></div>
           </section>
-          <section class="panel wide density-balanced-only">
+          <section class="panel wide review-metrics-panel">
             <div class="panel-head">
               <div>
-                <h3>周复盘</h3>
-                <p>用完成、产出、复盘和恢复判断是否偏航。</p>
+                <h3>本周数字</h3>
+                <p>只列横幅没有展开的天数、日均和到期队列。</p>
               </div>
             </div>
             <div class="review-grid" id="weeklyReview"></div>

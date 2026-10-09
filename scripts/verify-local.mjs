@@ -213,7 +213,7 @@ try {
     };
   });
   assert(desktopNavigation.position === 'sticky', 'Desktop navigation is not sticky.');
-  assert(Math.abs(desktopNavigation.height - (desktopNavigation.viewportHeight - 28)) <= 2, 'Desktop navigation does not fill the available viewport.');
+  assert(Math.abs(desktopNavigation.height - desktopNavigation.viewportHeight) <= 2, 'Desktop navigation does not fill the available viewport.');
   assert(Math.abs(desktopNavigation.navCenter - desktopNavigation.viewportCenter) <= 12, 'Desktop navigation items are not visually centered.');
   assert(desktopNavigation.peripheralNotesHidden, 'Peripheral desktop annotations are still visible.');
   assert(desktopNavigation.fontFamily.startsWith('"Noto Sans SC Variable"'), 'Chinese-first workspace font stack is not active.');
@@ -262,7 +262,7 @@ try {
   });
   await page.waitForTimeout(50);
   const stickyTop = await page.locator('.sidebar').evaluate((element) => element.getBoundingClientRect().top);
-  assert(stickyTop >= 13 && stickyTop <= 15, `Desktop navigation did not remain visible: top=${stickyTop}`);
+  assert(stickyTop >= 0 && stickyTop <= 1, `Desktop navigation did not remain visible: top=${stickyTop}`);
 
   await page.setViewportSize({ width: 1024, height: 900 });
   const tabletDesktopState = await page.evaluate(() => ({

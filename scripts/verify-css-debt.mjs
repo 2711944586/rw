@@ -26,7 +26,7 @@ const STYLE_ROOT = path.resolve('src/styles');
 const CEILINGS = Object.freeze({
   'base.css': 12,
   'views/study-plan.css': 13,
-  'workspace.css': 40,
+  'workspace.css': 38,
   'components/auth.css': 1,
   'components/toolbar.css': 9,
   'views/execution.css': 0,

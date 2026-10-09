@@ -7,6 +7,8 @@
 
 export const LOAD_TIERS = Object.freeze(["bottomline", "normal", "strong"]);
 export const REVIEW_GRADES = Object.freeze(["again", "hard", "good", "easy"]);
+/** Values review_items.last_result may store. Grades travel with the pass/fail outcome. */
+export const REVIEW_RESULTS = Object.freeze(["pass", "fail", "delay", "again", "hard", "good", "easy"]);
 export const SYNC_STATUS_LABELS = Object.freeze({
   local: "仅本机",
   unconfigured: "仅本机",
@@ -169,6 +171,47 @@ export function decodeLoadNote(note = "") {
     sleepHours: sanitizeSleepHours(sleep),
     fatigue: fatigue ? sanitizeFatigue(fatigue) : 0,
     note: text.replace(LOAD_MARKER, "").replace(SLEEP_MARKER, "").replace(FATIGUE_MARKER, "").replace(/\s+/g, " ").trim()
+  };
+}
+
+/**
+ * One review conclusion for every density. The banner and the weekly tiles
+ * used to answer the same week with opposite advice.
+ * @param {{ dueCount?: number, activeDays?: number, mistakeRatio?: number, weekHours?: number, weeklyTarget?: number, coreRatio?: number }} input
+ */
+export function reviewPosture({ dueCount = 0, activeDays = 0, mistakeRatio = 1, weekHours = 0, weeklyTarget = 0, coreRatio = 0 } = {}) {
+  if (dueCount > 3) {
+    return {
+      status: "先清复盘",
+      action: "暂停新增章节，先处理最老的 1 项到期复盘。",
+      load: "先清复盘再加量"
+    };
+  }
+  if (activeDays < 4 || (weeklyTarget > 0 && (weekHours < weeklyTarget * 0.7 || activeDays <= 3))) {
+    return {
+      status: "先恢复节奏",
+      action: "下周先恢复底线日，不补偿式加时。",
+      load: "先恢复底线日"
+    };
+  }
+  if (mistakeRatio < 0.7) {
+    return {
+      status: "先修复错因",
+      action: "只修复本周重复最多的一个错因。",
+      load: "保持当前负荷"
+    };
+  }
+  if (weeklyTarget > 0 && weekHours >= weeklyTarget * 0.9 && coreRatio >= 0.65 && activeDays >= 6) {
+    return {
+      status: "维持节奏",
+      action: "保持当前总量，只推进下周第一个核心任务。",
+      load: "可小幅加难度"
+    };
+  }
+  return {
+    status: "维持节奏",
+    action: "保持当前总量，只推进下周第一个核心任务。",
+    load: "保持当前负荷"
   };
 }
 

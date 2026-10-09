@@ -738,7 +738,7 @@ describe('supabaseSync auth', () => {
         cleanStartAppliedAt: '2026-09-01T00:00:00.000Z',
       },
       entries: {
-        '2026-09-01': { math: 45, quality: { bad: true }, quality_score: '4', nextTask: { bad: true }, note: { bad: true } },
+        '2026-09-01': { math: 45, quality: { bad: true }, quality_score: '4', nextTask: { bad: true }, note: { bad: true }, sleepHours: 6.5, fatigue: 4, loadTier: 'bottomline' },
         'bad-date': { math: 90 },
         '2026-02-31': { math: 30 },
       },
@@ -781,7 +781,7 @@ describe('supabaseSync auth', () => {
       },
       tasks: { 'task-safe': true, __proto__: true },
       reviewItems: [
-        { id: 'review-safe', dueDate: '2026-09-01', sourceTaskId: '__proto__', topicId: 'constructor', subject: { bad: true }, text: { bad: true }, title: '安全复盘', failureReason: { bad: true }, failure_reason: '需要重做', status: 'bad-status', done: 'false', lastResult: { bad: true }, last_result: 'delay', delayCount: { bad: true }, delay_count: '3', quality: { bad: true }, quality_score: '4', intervalIndex: { bad: true }, interval_index: '2', failStreak: { bad: true }, fail_streak: '1' },
+        { id: 'review-safe', dueDate: '2026-09-01', sourceTaskId: '__proto__', topicId: 'constructor', subject: { bad: true }, text: { bad: true }, title: '安全复盘', failureReason: { bad: true }, failure_reason: '需要重做', status: 'bad-status', done: 'false', lastResult: { bad: true }, last_result: 'again', delayCount: { bad: true }, delay_count: '3', quality: { bad: true }, quality_score: '4', intervalIndex: { bad: true }, interval_index: '2', failStreak: { bad: true }, fail_streak: '1' },
         { id: '__proto__', dueDate: '2026-09-01', text: '坏复盘' },
       ],
       topics: {
@@ -840,7 +840,7 @@ describe('supabaseSync auth', () => {
       study_date: '2026-09-01',
       quality_score: 4,
       next_task: '',
-      note: '',
+      note: '[负荷 bottomline] [睡眠 6.5h] [疲劳 4]',
     })]);
     expect(upsertRows('study_tasks')).toEqual([expect.objectContaining({
       id: 'task-safe',
@@ -874,7 +874,7 @@ describe('supabaseSync auth', () => {
       quality_score: 4,
       interval_index: 2,
       fail_streak: 1,
-      last_result: 'delay',
+      last_result: 'again',
     })]);
     expect(upsertRows('topic_progress')).toEqual([expect.objectContaining({
       topic_id: 'topic-safe',

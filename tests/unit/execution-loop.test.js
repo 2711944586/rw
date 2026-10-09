@@ -10,7 +10,9 @@ import {
   reviewGradeEffect,
   shouldUseBottomLine,
   validateCompletionEvidence,
-  weeklyReviewPrompt
+  weeklyReviewPrompt,
+  reviewPosture,
+  REVIEW_RESULTS
 } from "../../src/domain/execution-loop.js";
 
 describe("execution loop", () => {
@@ -100,6 +102,20 @@ describe("execution loop", () => {
     expect(decoded).toMatchObject({ loadTier: "bottomline", sleepHours: 6.5, fatigue: 4, note: "左右极限还不稳定" });
     expect(encodeLoadNote("普通笔记", {})).toBe("普通笔记");
     expect(encodeLoadNote("普通笔记", { fatigue: null, sleepHours: 0, loadTier: "" })).not.toContain("[疲劳");
+  });
+
+  it("uses one review posture for the banner and the weekly tiles", () => {
+    const backlog = reviewPosture({ dueCount: 4, activeDays: 6, mistakeRatio: 1, weekHours: 20, weeklyTarget: 14, coreRatio: 0.7 });
+    expect(backlog.status).toBe("先清复盘");
+    expect(backlog.load).toBe("先清复盘再加量");
+    expect(backlog.action).toContain("到期复盘");
+    const quiet = reviewPosture({ dueCount: 0, activeDays: 6, mistakeRatio: 1, weekHours: 14, weeklyTarget: 14, coreRatio: 0.7 });
+    expect(quiet.status).toBe("维持节奏");
+    expect(quiet.load).toBe("可小幅加难度");
+  });
+
+  it("keeps review grades inside the cloud result vocabulary", () => {
+    expect(REVIEW_RESULTS).toEqual(expect.arrayContaining(["pass", "fail", "delay", "again", "hard", "good", "easy"]));
   });
 
   it("shows the Sunday single-variable prompt and overdue official checks", () => {

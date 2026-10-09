@@ -10,6 +10,7 @@ import {
   PLAN_START_DATE
 } from "../config/app-config.js";
 import { getSyncConflictKey } from "./sync-contract.js";
+import { REVIEW_RESULTS, decodeLoadNote, encodeLoadNote } from "../domain/execution-loop.js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
@@ -23,7 +24,6 @@ const DEFAULT_PROFILE_NUMBERS = {
 };
 const DENSITY_MODES = ["focus", "balanced", "detail"];
 const MASTERY_STATUSES = ["learning", "needs_review", "mastered"];
-const REVIEW_RESULTS = ["pass", "fail", "delay"];
 const PLAN_SUBJECTS = ["math", "cs408", "english", "politics", "review", "project"];
 const PLAN_INTENSITIES = ["bottomline", "normal", "strong"];
 const EXPERIENCE_TRACKS = ["balanced", "mathHeavy", "cs408Heavy", "englishSteady", "latePolitics"];
@@ -105,15 +105,22 @@ function asInteger(value, min = 0, max = Number.POSITIVE_INFINITY) {
 }
 
 function decodedDailyLoad(note) {
-  const text = asString(note);
-  const tier = (text.match(/\[负荷 (bottomline|normal|strong)\]/) || [])[1] || "";
-  const sleep = Number((text.match(/\[睡眠 (\d+(?:\.\d)?)h\]/) || [])[1] || 0);
-  const fatigue = Number((text.match(/\[疲劳 ([1-5])\]/) || [])[1] || 3);
+  const decoded = decodeLoadNote(asString(note));
   return {
-    sleepHours: Number.isFinite(sleep) ? sleep : 0,
-    fatigue: fatigue >= 1 && fatigue <= 5 ? fatigue : 3,
-    loadTier: tier
+    sleepHours: decoded.sleepHours,
+    fatigue: decoded.fatigue,
+    loadTier: decoded.loadTier
   };
+}
+
+function cloudDailyNote(row) {
+  const decoded = decodeLoadNote(asString(row.note));
+  const fatigue = Number(row.fatigue);
+  return encodeLoadNote(decoded.note, {
+    loadTier: row.loadTier || decoded.loadTier,
+    sleepHours: row.sleepHours ?? decoded.sleepHours,
+    fatigue: Number.isInteger(fatigue) && fatigue >= 1 && fatigue <= 5 ? fatigue : (decoded.fatigue || null)
+  });
 }
 
 function asString(value, fallback = "") {
@@ -287,6 +294,7 @@ function safeCloudLabel(value, fallback, maxLength = 80) {
 
 function firstCloudString(values, fallback = "") {
   for (const value of Array.isArray(values) ? values : []) {
+    if (value != null && !["string", "number", "bigint"].includes(typeof value)) continue;
     const text = asString(value);
     if (text) return text;
   }
@@ -822,6 +830,7 @@ export async function loadCloudState(baseState) {
   state.entries = Object.fromEntries(recordRows.flatMap((row) => {
     const studyDate = asDate(row.study_date);
     if (!studyDate || !isOnOrAfterPlanStart(studyDate)) return [];
+    const load = decodedDailyLoad(asString(row.note));
     return [[studyDate, {
       math: asInteger(row.math_minutes),
       cs408: asInteger(row.cs408_minutes),
@@ -836,7 +845,9 @@ export async function loadCloudState(baseState) {
       quality: firstCloudInteger([row.quality_score, 3], 1, 5, 3),
       nextTask: asString(row.next_task),
       note: asString(row.note),
-      ...decodedDailyLoad(asString(row.note)),
+      sleepHours: load.sleepHours,
+      fatigue: load.fatigue || null,
+      loadTier: load.loadTier,
       updatedAt: asTimestamp(row.updated_at, "")
     }]];
   }));
@@ -901,6 +912,7 @@ export async function loadCloudState(baseState) {
         intervalIndex: asInteger(row.interval_index),
         failStreak: asInteger(row.fail_streak),
         lastResult: asEnum(row.last_result, REVIEW_RESULTS, ""),
+        leech: asInteger(row.fail_streak) >= 3,
         lastSubmittedDate: asDate(row.last_submitted_date) || "",
         topicId: safeCloudKey(row.topic_id),
         updatedAt: asTimestamp(row.updated_at, "")
@@ -1044,7 +1056,7 @@ async function performCloudSave(state, options = {}) {
       fixed_mistakes: asInteger(row.fixedMistakes),
       quality_score: firstCloudInteger([row.quality, row.quality_score, 3], 1, 5, 3),
       next_task: asString(row.nextTask),
-      note: asString(row.note),
+      note: cloudDailyNote(row),
       updated_at: asTimestamp(row.updatedAt, now)
     }];
   });

@@ -3,27 +3,27 @@
    Base components stay in base.css/workspace.css; mode-specific composition stays here. */
 
 :root {
-  --plan-bg: #f1f3f6;
-  --plan-canvas: #f8f9fb;
-  --plan-surface: #ffffff;
-  --plan-surface-soft: #f5f7fa;
+  --plan-bg: #e6ebf2;
+  --plan-canvas: #e6ebf2;
+  --plan-surface: #f4f7fb;
+  --plan-surface-soft: #eef2f7;
   --plan-ink: #182230;
   --plan-text: #344054;
   --plan-muted: #667085;
-  --plan-line: #dde3ea;
-  --plan-line-strong: #c5cfdb;
+  --plan-line: rgba(24, 39, 58, 0.08);
+  --plan-line-strong: rgba(24, 39, 58, 0.16);
   --plan-accent: #315b94;
   --plan-accent-strong: #274a78;
-  --plan-accent-soft: #e8eef7;
-  --plan-navy: #202735;
+  --plan-accent-soft: #e4ebf5;
+  --plan-navy: #1c2433;
   --plan-warning: #9a6700;
-  --plan-warning-soft: #fff6dc;
+  --plan-warning-soft: #f6f0df;
   --plan-danger: #a13a3a;
-  --plan-danger-soft: #fff0f0;
-  --plan-radius: 10px;
-  --plan-shadow: 0 1px 2px rgba(20, 31, 48, 0.04), 0 12px 30px rgba(35, 49, 69, 0.055);
-  --plan-shadow-raised: 0 2px 4px rgba(20, 31, 48, 0.055), 0 18px 42px rgba(35, 49, 69, 0.075);
-  --plan-inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  --plan-danger-soft: #f6e8e8;
+  --plan-radius: 8px;
+  --plan-shadow: none;
+  --plan-shadow-raised: none;
+  --plan-inner-highlight: none;
 }
 
 body[data-density] {
@@ -77,20 +77,17 @@ body[data-density] .storage-card {
 }
 
 body[data-density] .panel,
-body[data-density] .hero-panel {
-  box-shadow: var(--plan-inner-highlight), var(--plan-shadow);
-}
-
+body[data-density] .hero-panel,
 body[data-density] .detail-section,
 body[data-density] .workflow-card,
 body[data-density] .storage-card {
-  box-shadow: var(--plan-inner-highlight);
+  box-shadow: none;
 }
 
 body[data-density] .panel:hover,
 body[data-density] .hero-panel:hover {
-  border-color: var(--plan-line-strong);
-  box-shadow: var(--plan-inner-highlight), var(--plan-shadow-raised);
+  border-color: var(--plan-line);
+  box-shadow: none;
   transform: none;
 }
 
@@ -168,9 +165,11 @@ body[data-density="detail"] {
   body[data-density] .topbar {
     width: min(var(--density-track-width), calc(100% - var(--density-shell-gutter)));
     margin-inline: auto;
-    border-color: var(--plan-line);
-    background: rgba(252, 253, 255, 0.94);
-    box-shadow: var(--plan-inner-highlight), 0 8px 24px rgba(35, 49, 69, 0.06);
+    border: 0;
+    border-bottom: 1px solid var(--plan-line);
+    border-radius: 0;
+    background: var(--plan-surface);
+    box-shadow: none;
   }
 }
 
@@ -261,8 +260,8 @@ body[data-density="focus"] #today .today-plan-panel {
   display: grid;
   align-content: start;
   gap: 18px;
-  border-top: 3px solid var(--plan-navy);
-  box-shadow: var(--plan-shadow);
+  border-top: 0;
+  box-shadow: none;
 }
 
 body[data-density="focus"] #today .today-plan-panel .panel-head {
@@ -326,9 +325,10 @@ body[data-density="focus"] .daily-plan .plan-card.primary-task {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
   align-content: center;
-  border-radius: var(--plan-radius);
-  background: #ffffff;
-  border: 1px solid var(--plan-line-strong);
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--plan-line);
   box-shadow: none;
 }
 
@@ -371,9 +371,11 @@ body[data-density="focus"] #week .week-command-panel .panel-head {
 body[data-density="focus"] .week-focus-slice {
   min-height: 250px;
   grid-template-columns: minmax(180px, 0.72fr) minmax(0, 1.55fr) minmax(220px, 0.9fr);
-  border: 1px solid var(--plan-line-strong);
-  border-radius: var(--plan-radius);
-  background: #ffffff;
+  border: 0;
+  border-top: 1px solid var(--plan-line);
+  border-bottom: 1px solid var(--plan-line);
+  border-radius: 0;
+  background: transparent;
 }
 
 body[data-density="focus"] .week-focus-slice > div {
@@ -426,7 +428,7 @@ body[data-density="focus"] .resource-focus-contract {
   padding: 20px 24px;
   border: 0;
   border-top: 1px solid var(--plan-line);
-  background: #ffffff;
+  background: transparent;
 }
 
 body[data-density="focus"] .resource-focus-copy {
@@ -585,13 +587,15 @@ body[data-density="balanced"] .operating-balanced,
 body[data-density="balanced"] .science-protocol,
 body[data-density="balanced"] .english-drip-card,
 body[data-density="balanced"] .daily-progress {
-  border-radius: var(--plan-radius);
-  background: var(--plan-surface-soft);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   background-image: none;
+  box-shadow: none;
 }
 
 body[data-density="balanced"] .operating-balanced {
-  box-shadow: var(--plan-inner-highlight), var(--plan-shadow);
+  box-shadow: none;
 }
 
 body[data-density="balanced"] .operating-rail {
@@ -606,7 +610,9 @@ body[data-density="balanced"] .operating-rail article:last-child {
   min-height: 156px;
   padding: 18px;
   border: 0;
-  background: #ffffff;
+  border-right: 1px solid var(--plan-line);
+  border-bottom: 1px solid var(--plan-line);
+  background: transparent;
 }
 
 body[data-density="balanced"] .operating-rail article:last-child {
@@ -627,7 +633,7 @@ body[data-density="balanced"] :is(.phase-subject-board, .resource-operation-grid
 
 body[data-density="balanced"] :is(.phase-subject-board, .resource-operation-grid) article {
   border-left-color: var(--plan-line);
-  background: #ffffff;
+  background: var(--plan-surface);
 }
 
 body[data-density="balanced"] :is(.phase-subject-board, .resource-operation-grid) :is(span, em) {

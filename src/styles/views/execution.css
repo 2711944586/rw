@@ -108,8 +108,17 @@
   transition: height 180ms var(--workspace-ease, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
+.view.active {
+  animation: surfaceIn 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .view.leaving {
   animation: viewOut 140ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes surfaceIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes viewOut {
@@ -179,10 +188,365 @@ dialog.auth-dialog[open] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .view.active,
   .view.leaving,
+  .view.active > *,
   dialog.command-dialog[open],
   dialog.auth-dialog[open] {
     animation: none;
+  }
+}
+
+/* One paper. The page, the shell, and the cards share one cool tone.
+   Hairlines separate sections. White inset highlights stay off. */
+body[data-density] {
+  --workspace-bg: #e6ebf2;
+  --workspace-canvas: #e6ebf2;
+  --workspace-surface: #f3f6fa;
+  --workspace-surface-strong: #f3f6fa;
+  --plan-bg: #e6ebf2;
+  --plan-canvas: #e6ebf2;
+  --plan-surface: #f3f6fa;
+  --plan-surface-soft: #e8edf3;
+  --bg: #e6ebf2;
+  --surface: #f3f6fa;
+  --surface-soft: #e8edf3;
+  --surface-tint: #e8edf3;
+  --shadow: none;
+  --shadow-soft: none;
+  --shadow-hover: none;
+  --workspace-shadow: none;
+  --workspace-shadow-soft: none;
+  --workspace-shadow-raised: none;
+}
+
+body[data-density] .app-shell,
+body[data-density] .main,
+body[data-density] .view {
+  background: #e6ebf2;
+  background-image: none;
+}
+
+@media (min-width: 901px) {
+  body[data-density] .sidebar {
+    top: 0;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-right: 1px solid var(--workspace-line);
+    border-radius: 0;
+    background: #f3f6fa;
+    box-shadow: none;
+  }
+
+  body[data-density] .topbar {
+    top: 0;
+    margin: 0;
+    border: 0;
+    border-bottom: 1px solid var(--workspace-line);
+    border-radius: 0;
+    background: #f3f6fa;
+    box-shadow: none;
+  }
+}
+
+body[data-density] :is(
+  .panel,
+  .panel.wide,
+  .hero-panel,
+  .focus-card,
+  .focus-primary,
+  .metric-card,
+  .command-panel,
+  .coach-strip,
+  .strategy-card,
+  .detail-section,
+  .workflow-card,
+  .storage-card,
+  .target-lane > article,
+  .plan-card:not(.primary-task),
+  .science-protocol,
+  .english-drip-card,
+  .daily-progress,
+  .week-day-card,
+  .review-item,
+  .record-stat,
+  #week .panel,
+  #foundation .panel,
+  #review .panel,
+  #records .panel,
+  #scores .panel,
+  #resources .panel,
+  #settings .panel,
+  #syllabus .panel,
+  .today-plan-panel,
+  .today-entry-panel,
+  .today-review-panel,
+  .task-flow-panel,
+  .week-command-panel
+) {
+  border-color: transparent;
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+}
+
+body[data-density] :is(.panel, .focus-card, .metric-card, .command-panel, .hero-panel):hover {
+  transform: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+body[data-density] .command-panel {
+  padding-inline: 0;
+  background-image: none;
+}
+
+body[data-density] .command-panel h3 {
+  color: var(--ink);
+  font-size: 32px;
+  font-weight: 680;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  background: none;
+  -webkit-text-fill-color: currentcolor;
+}
+
+body[data-density] .command-metrics span {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body[data-density] .command-metrics span:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+body[data-density] .focus-board,
+body[data-density] .target-lane {
+  gap: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body[data-density] .focus-board > *,
+body[data-density] .target-lane > article {
+  min-width: 0;
+  padding: 20px 22px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body[data-density] .focus-board > *:last-child,
+body[data-density] .target-lane > article:last-child {
+  border-right: 0;
+}
+
+@media (max-width: 900px) {
+  body[data-density] .focus-board > *,
+  body[data-density] .target-lane > article {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  body[data-density] .focus-board > *:last-child,
+  body[data-density] .target-lane > article:last-child {
+    border-bottom: 0;
+  }
+}
+
+body[data-density] .metric-grid,
+body[data-density] .coach-strip {
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body[data-density] .panel-head h3 {
+  letter-spacing: -0.02em;
+}
+
+body[data-density] :is(
+  .metric-card strong,
+  .focus-card strong,
+  .focus-action em,
+  .command-metrics strong,
+  .review-item strong
+) {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+body[data-density] .view.active > * {
+  animation: rowIn 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+body[data-density] .view.active > *:nth-child(2) { animation-delay: 28ms; }
+body[data-density] .view.active > *:nth-child(3) { animation-delay: 56ms; }
+body[data-density] .view.active > *:nth-child(4) { animation-delay: 84ms; }
+body[data-density] .view.active > *:nth-child(5) { animation-delay: 112ms; }
+
+@keyframes rowIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+body[data-density] input,
+body[data-density] textarea,
+body[data-density] select {
+  background: #f7f9fc;
+  box-shadow: none;
+}
+
+body[data-density] :is(.operating-balanced, .operating-detail) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body[data-density] :is(.operating-balanced, .operating-detail) > header,
+body[data-density] :is(.operating-balanced, .operating-detail) > footer {
+  background: transparent;
+  box-shadow: none;
+}
+
+body[data-density] .operating-rail {
+  gap: 0;
+  background: transparent;
+}
+
+body[data-density] .operating-rail article,
+body[data-density] .operating-rail article:last-child {
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  box-shadow: none;
+}
+
+body[data-density] :is(.target-subject, .audit-item, .audit-item.ok, .audit-item.warn) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body[data-density] .week-cadence-strip {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body[data-density] .week-cycle-head {
+  background: transparent;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+body[data-density] .week-cycle-head span {
+  color: var(--muted);
+  border-left-color: transparent;
+}
+
+body[data-density] .cadence-day,
+body[data-density] .cadence-day.active {
+  background: transparent;
+  box-shadow: none;
+}
+
+body[data-density] .cadence-day.active .cadence-identity strong {
+  color: var(--primary-dark);
+}
+
+.entry-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+.entry-group {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.entry-group legend {
+  padding: 0 0 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.entry-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+
+.entry-fields .span-2 {
+  grid-column: 1 / -1;
+}
+
+.entry-form .primary-button {
+  justify-self: start;
+}
+
+.review-metrics-panel .review-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+
+.review-metrics-panel .review-item {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.review-metrics-panel .review-item strong {
+  display: block;
+  margin: 4px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.review-operation-grid article,
+.review-diagnostic-grid article {
+  background: transparent;
+}
+
+@media (max-width: 720px) {
+  .entry-fields,
+  .review-metrics-panel .review-grid,
+  .review-operation-grid,
+  .review-diagnostic-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .review-operation-grid article,
+  .review-diagnostic-grid article,
+  .review-metrics-panel .review-item {
+    border-left: 0;
+    border-right: 0;
   }
 }
 
