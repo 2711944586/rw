@@ -255,7 +255,7 @@ CSP 门禁：用 vercel.json 的真实响应头托管 dist/，遍历全部路由
 npm audit --audit-level=moderate
 ```
 
-当前产物体积以 `npm run build` 后的 `scripts/verify-budget.mjs` 为准。domain 包上限是 12 KB gzip。
+当前产物体积以 `npm run build` 后的 `scripts/verify-budget.mjs` 为准。domain 包上限是 16 KB gzip。
 
 ## 数据库与部署
 
