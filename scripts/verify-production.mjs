@@ -143,7 +143,7 @@ try {
     throw new Error(`Mobile viewport has ${result.clippedCount} clipped text elements.`);
   }
 
-  // The mobile viewport only exposes five nav buttons (总览/今日/周计划/记录/更多),
+  // The mobile viewport only exposes six nav buttons (总览/今日/复盘/周计划/设置/更多),
   // so the full route sweep has to run at a desktop width where the sidebar is
   // visible. Checking mobile first keeps the mobile-specific assertions above.
   await page.setViewportSize({ width: 1440, height: 1000 });

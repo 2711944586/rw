@@ -88,7 +88,7 @@ try {
       })(),
     };
   });
-  assert(JSON.stringify(mobileNavigation.labels) === JSON.stringify(['总览', '今日', '周计划', '记录', '更多']), `Unexpected mobile navigation: ${JSON.stringify(mobileNavigation.labels)}`);
+  assert(JSON.stringify(mobileNavigation.labels) === JSON.stringify(['总览', '今日', '复盘', '周计划', '设置', '更多']), `Unexpected mobile navigation: ${JSON.stringify(mobileNavigation.labels)}`);
   assert(!mobileNavigation.horizontalOverflow, 'Mobile navigation still scrolls horizontally.');
   assert(mobileNavigation.contentViewportGap >= 0, `Mobile content viewport extends behind navigation: gap=${mobileNavigation.contentViewportGap}`);
 
@@ -141,7 +141,7 @@ try {
     }));
     assert(!responsiveState.pageOverflow, `${viewport.width}px viewport has horizontal page overflow.`);
     assert(!responsiveState.navigationOverflow, `${viewport.width}px mobile navigation overflows.`);
-    assert(responsiveState.visibleNavigationButtons === 5, `${viewport.width}px viewport does not expose exactly five navigation buttons.`);
+    assert(responsiveState.visibleNavigationButtons === 6, `${viewport.width}px viewport does not expose exactly six navigation buttons.`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
 
@@ -157,8 +157,16 @@ try {
   await commandDialog.getByRole('button', { name: /设置.*打开/ }).click();
   await page.waitForFunction(() => document.querySelector('.view.active')?.id === 'settings');
   assert(new URL(page.url()).hash === '#settings', `Command navigation did not update the hash: ${page.url()}`);
+  await page.waitForFunction(() => document.querySelector('.nav-item[data-view="settings"]')?.getAttribute('aria-current') === 'page');
+  assert(await page.locator('#mobileMoreBtn').getAttribute('aria-current') !== 'page', 'Settings is a primary mobile tab, so More must not stay current.');
+  assert((await page.getByRole('button', { name: '更多页面和操作' }).getAttribute('aria-expanded')) === 'false', 'Mobile More trigger kept an expanded state after navigation.');
+
+  await page.getByRole('button', { name: '更多页面和操作' }).click();
+  await commandDialog.getByRole('searchbox').fill('考点');
+  await commandDialog.getByRole('button', { name: /考点.*打开/ }).click();
+  await page.waitForFunction(() => document.querySelector('.view.active')?.id === 'syllabus');
   await page.waitForFunction(() => document.getElementById('mobileMoreBtn')?.getAttribute('aria-current') === 'page');
-  assert((await page.getByRole('button', { name: /更多页面和操作，当前：设置/ }).getAttribute('aria-expanded')) === 'false', 'Mobile More trigger kept an expanded state after navigation.');
+  assert((await page.getByRole('button', { name: /更多页面和操作，当前：考点/ }).getAttribute('aria-expanded')) === 'false', 'Mobile More trigger kept an expanded state after a secondary route.');
 
   await page.getByRole('link', { name: '今日', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('.view.active')?.id === 'today');
