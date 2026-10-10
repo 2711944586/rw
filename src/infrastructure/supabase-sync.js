@@ -11,6 +11,7 @@ import {
 } from "../config/app-config.js";
 import { getSyncConflictKey } from "./sync-contract.js";
 import { REVIEW_RESULTS, decodeLoadNote, encodeLoadNote } from "../domain/execution-loop.js";
+import { normalizeGoalInput } from "../domain/admission-catalog.js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
@@ -464,6 +465,9 @@ function sanitizeCloudProfileSettings(value) {
   if (Object.prototype.hasOwnProperty.call(source, "efficiencyModeApplied")) settings.efficiencyModeApplied = asBoolean(source.efficiencyModeApplied);
   if (Object.prototype.hasOwnProperty.call(source, "rampSettingsApplied")) settings.rampSettingsApplied = asBoolean(source.rampSettingsApplied);
   if (Object.prototype.hasOwnProperty.call(source, "notificationsEnabled")) settings.notificationsEnabled = asBoolean(source.notificationsEnabled);
+  if (Object.prototype.hasOwnProperty.call(source, "adaptivePriority")) settings.adaptivePriority = asBoolean(source.adaptivePriority);
+  if (Object.prototype.hasOwnProperty.call(source, "aiAssist")) settings.aiAssist = asBoolean(source.aiAssist);
+  if (Object.prototype.hasOwnProperty.call(source, "studyGoal")) settings.studyGoal = normalizeGoalInput(source.studyGoal);
   if (Array.isArray(source.officialChecksDone)) {
     settings.officialChecksDone = source.officialChecksDone
       .map((item) => asString(item).trim())
@@ -490,7 +494,9 @@ function sanitizeCloudSnapshotPayload(payload) {
     "reviewItems",
     "deleted",
     "deletedMeta",
-    "cleanStartArchive"
+    "cleanStartArchive",
+    "mistakes",
+    "sessions"
   ];
   return Object.fromEntries(allowedKeys.flatMap((key) => (
     Object.prototype.hasOwnProperty.call(payload, key) ? [[key, payload[key]]] : []

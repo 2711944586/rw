@@ -1,0 +1,9 @@
+{
+  "name": "软微 420 学习台",
+  "short_name": "软微420",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F8FA",
+  "theme_color": "#171C29",
+  "lang": "zh-CN"
+}

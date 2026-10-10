@@ -1,11 +1,11 @@
-export const SCHEMA_VERSION = 3;
-export const PLAN_LOGIC_VERSION = "4.1-evidence-capacity-governance-2026-08-31";
-export const APP_BUILD = "2026-09-22-ui-review-fixes-v4.1.2";
+export const SCHEMA_VERSION = 4;
+export const PLAN_LOGIC_VERSION = "4.2-workbench-2026-10-10";
+export const APP_BUILD = "2026-10-10-workbench-v4.2.0";
 export const PLAN_START_DATE = "2026-08-31";
 export const CLEAN_START_VERSION = "2026-08-31-from-zero-v2";
 export const DEFAULT_EXAM_DATE = "2027-12-25";
 export const DEFAULT_EXAM_DATE_STATUS = "推算排程日，非官方初试日期";
-export const SOURCE_CHECK_DATE = "2026-08-17";
+export const SOURCE_CHECK_DATE = "2026-10-10";
 export const REFERENCE_CAPACITY_HOURS = 2200;
 export const TARGET_TOTAL_HOURS = REFERENCE_CAPACITY_HOURS;
 export const DENSITY_BUTTON_SELECTOR = ".density-toggle button[data-density]";

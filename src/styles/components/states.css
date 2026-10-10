@@ -1,0 +1,42 @@
+/* Shared interaction states. These classes opt in and do not force the cascade. */
+
+.workbench-state {
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+}
+
+.workbench-state:hover {
+  background: var(--accent-soft);
+}
+
+.workbench-state:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.workbench-state:disabled,
+.workbench-state[aria-disabled="true"] {
+  opacity: 0.55;
+}
+
+.workbench-state.is-empty {
+  color: var(--muted);
+}
+
+.workbench-state.is-loading {
+  opacity: 0.72;
+}
+
+.workbench-state.is-error {
+  color: #6f2d32;
+}
+
+.workbench-state.is-success {
+  color: #243044;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workbench-state {
+    transition: none;
+  }
+}

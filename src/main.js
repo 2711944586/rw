@@ -68,6 +68,14 @@ function installShellFallback(error) {
   if (hint) hint.textContent = "页面进入恢复模式。请先清理本机缓存，再刷新页面。";
 }
 
+if (import.meta.env?.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((error) => {
+      console.error("[rw] service worker registration failed", error);
+    });
+  });
+}
+
 try {
   await restoreLocalState();
   await import("./app.js");

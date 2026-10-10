@@ -1959,7 +1959,7 @@ textarea:hover {
     min-width: 0;
     height: 58px;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     align-items: stretch;
     gap: 4px;
   }
@@ -1970,6 +1970,23 @@ textarea:hover {
 
   .nav-item:not([data-mobile-primary]) {
     display: none;
+  }
+
+  .nav-item[data-view="dashboard"] { order: 1; }
+  .nav-item[data-view="today"] { order: 2; }
+  .nav-item[data-view="week"] { order: 3; }
+  .nav-item[data-view="review"] { order: 4; }
+  .nav-item[data-view="settings"] { order: 5; }
+  .mobile-more-button { order: 6; }
+
+  .nav-item[data-mobile-label] .nav-text {
+    font-size: 0;
+  }
+
+  .nav-item[data-mobile-label]::after {
+    content: attr(data-mobile-label);
+    font-size: 10px;
+    line-height: 1;
   }
 
   .nav-item,

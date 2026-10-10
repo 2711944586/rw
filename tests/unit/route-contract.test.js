@@ -18,7 +18,7 @@ describe('route contract', () => {
   });
 
   it('keeps mobile primary routes inside the canonical contract', () => {
-    expect(MOBILE_PRIMARY_VIEW_IDS).toEqual(['dashboard', 'today', 'week', 'records']);
+    expect(MOBILE_PRIMARY_VIEW_IDS).toEqual(['dashboard', 'today', 'review', 'week', 'settings']);
     MOBILE_PRIMARY_VIEW_IDS.forEach((viewId) => expect(VIEW_IDS).toContain(viewId));
   });
 

@@ -2,7 +2,7 @@
  * Execution loop rules for the production study desk.
  *
  * Pure functions only: completion evidence, plan diff, load signals,
- * review grades, and the five user-facing sync states.
+ * review grades, and the learner-facing sync states.
  */
 
 export const LOAD_TIERS = Object.freeze(["bottomline", "normal", "strong"]);
@@ -10,15 +10,15 @@ export const REVIEW_GRADES = Object.freeze(["again", "hard", "good", "easy"]);
 /** Values review_items.last_result may store. Grades travel with the pass/fail outcome. */
 export const REVIEW_RESULTS = Object.freeze(["pass", "fail", "delay", "again", "hard", "good", "easy"]);
 export const SYNC_STATUS_LABELS = Object.freeze({
-  local: "仅本机",
-  unconfigured: "仅本机",
-  pending: "等待上传",
-  syncing: "等待上传",
-  synced: "已同步",
+  local: "已在本机保存",
+  unconfigured: "已在本机保存",
+  pending: "离线待同步",
+  syncing: "正在同步",
+  synced: "云端已同步",
   paused: "同步暂停",
-  offline: "等待上传",
-  error: "等待上传",
-  conflict: "冲突待处理"
+  offline: "离线待同步",
+  error: "同步失败",
+  conflict: "同步冲突"
 });
 
 const COMPLETION_FIELDS = new Set([
@@ -408,7 +408,19 @@ export function presentSyncStatus(sync = {}, options = {}) {
   if (status === "synced") {
     return { key: "synced", label: SYNC_STATUS_LABELS.synced, pending: false };
   }
-  return { key: "pending", label: SYNC_STATUS_LABELS.pending, pending: true };
+  if (status === "syncing") {
+    return { key: "syncing", label: SYNC_STATUS_LABELS.syncing, pending: true };
+  }
+  if (status === "offline") {
+    return { key: "offline", label: SYNC_STATUS_LABELS.offline, pending: true };
+  }
+  if (status === "error") {
+    return { key: "error", label: SYNC_STATUS_LABELS.error, pending: true };
+  }
+  if (status === "pending") {
+    return { key: "pending", label: SYNC_STATUS_LABELS.pending, pending: true };
+  }
+  return { key: status, label: SYNC_STATUS_LABELS[status] || SYNC_STATUS_LABELS.pending, pending: true };
 }
 
 export function weeklyReviewPrompt(date = new Date()) {

@@ -91,11 +91,14 @@ describe("execution loop", () => {
   });
 
   it("collapses sync internals into five learner-facing states", () => {
-    expect(presentSyncStatus({ status: "local" }, { signedIn: false }).label).toBe("仅本机");
-    expect(presentSyncStatus({ status: "pending" }, { signedIn: true }).label).toBe("等待上传");
-    expect(presentSyncStatus({ status: "synced", lastSyncAt: "2026-10-09T01:02:03.000Z" }, { signedIn: true }).label).toBe("已同步");
+    expect(presentSyncStatus({ status: "local" }, { signedIn: false }).label).toBe("已在本机保存");
+    expect(presentSyncStatus({ status: "pending" }, { signedIn: true }).label).toBe("离线待同步");
+    expect(presentSyncStatus({ status: "syncing" }, { signedIn: true }).label).toBe("正在同步");
+    expect(presentSyncStatus({ status: "synced", lastSyncAt: "2026-10-09T01:02:03.000Z" }, { signedIn: true }).label).toBe("云端已同步");
+    expect(presentSyncStatus({ status: "offline" }, { signedIn: true }).label).toBe("离线待同步");
     expect(presentSyncStatus({ status: "paused", cloudPaused: true }, { signedIn: true }).label).toBe("同步暂停");
-    expect(presentSyncStatus({ status: "error", lastError: "duplicate key value" }, { signedIn: true }).label).toBe("冲突待处理");
+    expect(presentSyncStatus({ status: "error", lastError: "network down" }, { signedIn: true }).label).toBe("同步失败");
+    expect(presentSyncStatus({ status: "error", lastError: "duplicate key value" }, { signedIn: true }).label).toBe("同步冲突");
   });
 
   it("round-trips load signals through the daily note", () => {

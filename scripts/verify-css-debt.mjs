@@ -30,6 +30,7 @@ const CEILINGS = Object.freeze({
   'components/auth.css': 1,
   'components/toolbar.css': 9,
   'views/execution.css': 0,
+  'components/states.css': 0,
 });
 
 const TOTAL_CEILING = Object.values(CEILINGS).reduce((sum, value) => sum + value, 0);

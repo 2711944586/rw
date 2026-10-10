@@ -5,8 +5,22 @@
    ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Primary palette — restrained cobalt */
-  --primary: #4169a7;
+  /* Workbench tokens. Existing names stay so older rules keep working. */
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --text-primary: #171c29;
+  --accent: #4867d8;
+  --accent-soft: #dbe3f5;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --primary: var(--accent);
   --primary-dark: #355b92;
   --primary-darker: #294a78;
   --primary-ink: #243a5a;
@@ -15,15 +29,13 @@
   --primary-glow-strong: rgba(65, 105, 167, 0.25);
 
   /* Cool neutrals */
-  --bg: #fafaf9;
-  --bg-warm: #f5f5f4;
-  --surface: #ffffff;
-  --surface-soft: #f7f7f6;
+  --bg-warm: #f3f5f8;
+  --surface-soft: #f7f8fa;
   --surface-tint: #f1f4f8;
   --surface-glass: rgba(255, 255, 255, 0.72);
 
   /* Text hierarchy */
-  --ink: #18181b;
+  --ink: var(--text-primary);
   --text: #3f3f46;
   --muted: #71717a;
   --faint: #a1a1aa;
@@ -57,9 +69,6 @@
   --shadow-glow: 0 0 0 1px var(--line-accent),
                  0 4px 16px var(--primary-glow);
 
-  /* Radius — softer, more premium */
-  --radius: 8px;
-  --radius-sm: 6px;
   --radius-pill: 999px;
 
   /* Typography */

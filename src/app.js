@@ -156,6 +156,27 @@ import {
   subjectLabel,
   subjectPlanWeights
 } from "./domain/study-strategy.js";
+import { phaseHeadline, resolvePhaseStatus } from "./domain/study-phase.js";
+import {
+  ADMISSION_SOURCE_CHECKED_AT,
+  DEFAULT_STUDY_GOAL,
+  contentVersionEntry,
+  goalChangeImpact,
+  normalizeGoalInput,
+  publishedCatalog,
+  resolveStudyGoal,
+  subjectStatusLabel
+} from "./domain/admission-catalog.js";
+import { claimStudySession, finishStudySession, pauseStudySession, resumeStudySession, sessionCrossedMidnight } from "./domain/study-session.js";
+import { createMistake, mistakesForTopic, transitionMistake } from "./domain/mistake-record.js";
+import { explainReviewSchedule } from "./domain/review-explanation.js";
+import { buildStudyReport } from "./domain/study-report.js";
+import { outcomeSnapshot, weeklyDiagnosis } from "./domain/analytics-evidence.js";
+import { PRIORITY_WEIGHTS_V1, scoreTaskPriority } from "./domain/priority-score.js";
+import { localReviewPrompt } from "./domain/local-assist.js";
+import { WRITE_CONTRACT } from "./core/write-contract.js";
+import { createEntityRepository, replaceMistake, replaceSessions } from "./infrastructure/persistence/entity-repository.js";
+import { clearSessionLock, lockHeldByOtherTab, writeSessionLock } from "./infrastructure/persistence/session-lock.js";
 
 const {
   APP_STATE: STORAGE_KEY,
@@ -182,7 +203,10 @@ const defaultSettings = {
   reviewDays: [1, 3, 7, 14, 30],
   planControls: { ...DEFAULT_PLAN_CONTROLS },
   notificationsEnabled: false,
-  officialChecksDone: []
+  officialChecksDone: [],
+  studyGoal: { ...DEFAULT_STUDY_GOAL },
+  adaptivePriority: false,
+  aiAssist: false
 };
 
 const browserStorage = createBrowserStorage(window.localStorage);
@@ -235,6 +259,9 @@ let legacyImportPending = Boolean(readStorage(LEGACY_STORAGE_KEY) && !readStorag
 let lastStorageFailureNoticeAt = 0;
 let selectedResourceSubject = "math";
 let selectedStartupWeek = 0;
+let openStudySession = null;
+let taskCountdown = null;
+let sessionTicker = null;
 let lastAuthResult = {
   status: "idle",
   title: "账号状态",
@@ -246,6 +273,7 @@ async function bootstrapApp() {
     setDefaultDates();
     hydrateIcons();
     bindNavigation();
+    bindPrimaryTaskStart();
     initWorkspaceController();
     bindDensityControls();
     bindForms();
@@ -257,6 +285,9 @@ async function bootstrapApp() {
     bindAuth();
     bindWeekPlanner();
     bindNetworkStatus();
+    bindStudySession();
+    bindMistakeCapture();
+    restoreOpenSession();
     const upgradeSaved = upgradeGeneratedPlans();
     await initCloudSession();
     renderAll();
@@ -359,6 +390,9 @@ function migrateState(parsed) {
     if (settings.density === "focus") settings.density = "balanced";
     if (!["balanced", "detail"].includes(settings.density)) settings.density = "balanced";
     settings.targetExamDate = sanitizeDateOrFallback(settings.targetExamDate, DEFAULT_EXAM_DATE) || DEFAULT_EXAM_DATE;
+    settings.studyGoal = normalizeGoalInput(settings.studyGoal || settingsInput.studyGoal);
+    settings.adaptivePriority = sanitizeBoolean(settings.adaptivePriority);
+    settings.aiAssist = sanitizeBoolean(settings.aiAssist);
     settings.reviewDays = Array.isArray(settings.reviewDays)
       ? [...new Set(settings.reviewDays.map((day) => sanitizeInteger(day, 1, 365)).filter(Boolean))].sort((a, b) => a - b)
       : [...defaultSettings.reviewDays];
@@ -407,6 +441,8 @@ function migrateState(parsed) {
       resources: resourcesState,
       settings,
       customTasks: sanitizeCustomTasks(customTasksState || []),
+      mistakes: stateArray(source.mistakes).map((item) => createMistake(item)).filter((item) => item.summary || item.topicId),
+      sessions: stateArray(source.sessions).filter(isPlainStateObject).slice(-40),
       reviewItems: filterReviewItemsFromStart(rawReviewItems),
       deleted,
       deletedMeta,
@@ -502,6 +538,12 @@ function ensureSettingsContainer() {
   settings.coreRatio = firstIntegerValue([current.coreRatio, current.core_ratio, defaultSettings.coreRatio], 55, 85, defaultSettings.coreRatio);
   if (settings.density === "focus" || !["balanced", "detail"].includes(settings.density)) settings.density = "balanced";
   settings.targetExamDate = sanitizeDateOrFallback(settings.targetExamDate, DEFAULT_EXAM_DATE) || DEFAULT_EXAM_DATE;
+  // Some unit tests evaluate this function outside the module, where the import is absent.
+  settings.studyGoal = typeof normalizeGoalInput === "function"
+    ? normalizeGoalInput(settings.studyGoal)
+    : settings.studyGoal;
+  settings.adaptivePriority = sanitizeBoolean(settings.adaptivePriority);
+  settings.aiAssist = sanitizeBoolean(settings.aiAssist);
   settings.reviewDays = Array.isArray(settings.reviewDays)
     ? [...new Set(settings.reviewDays.map((day) => sanitizeInteger(day, 1, 365)).filter(Boolean))].sort((a, b) => a - b)
     : [...defaultSettings.reviewDays];
@@ -1171,7 +1213,9 @@ function sanitizeSnapshotPayload(payload) {
     "reviewItems",
     "deleted",
     "deletedMeta",
-    "cleanStartArchive"
+    "cleanStartArchive",
+    "mistakes",
+    "sessions"
   ];
   return cloneJson(Object.fromEntries(allowedKeys.flatMap((key) => (
     Object.prototype.hasOwnProperty.call(payload, key) ? [[key, payload[key]]] : []
@@ -1217,6 +1261,8 @@ function freshState() {
     schemaVersion: SCHEMA_VERSION,
     entries: {},
     scores: [],
+    mistakes: [],
+    sessions: [],
     topics: {},
     topicEvidence: {},
     tasks: {},
@@ -1245,6 +1291,9 @@ function saveState(options = {}) {
   state.schemaVersion = SCHEMA_VERSION;
   ensureRuntimeContainers();
   state.settings.lastSavedAt = new Date().toISOString();
+  if (STORAGE_KEY !== WRITE_CONTRACT.storageKey) {
+    throw new Error("学习状态写入键与约定不一致。");
+  }
   const payload = JSON.stringify(state);
   const saved = writeStorage(STORAGE_KEY, payload);
   void persistRecoveryCopy(payload);
@@ -1928,9 +1977,13 @@ function formatDateISO(date) {
   return `${year}-${month}-${day}`;
 }
 
+function getPhaseResolution(dateValue = planTodayISO()) {
+  return resolvePhaseStatus(dateValue, phases);
+}
+
 function getCurrentPhase(dateValue = planTodayISO()) {
-  const current = parseDate(dateValue);
-  return phases.find((phase) => current >= parseDate(phase.start) && current <= parseDate(phase.end)) || phases[0];
+  const resolution = getPhaseResolution(dateValue);
+  return resolution.phase || phases[phases.length - 1];
 }
 
 function bindNavigation() {
@@ -1954,6 +2007,16 @@ function bindNavigation() {
     normalizeHashRoute();
   });
   document.documentElement.dataset.navBound = "1";
+}
+
+function bindPrimaryTaskStart() {
+  document.getElementById("startPrimaryTask")?.addEventListener("click", (event) => {
+    const taskId = event.currentTarget?.dataset.taskId;
+    if (!taskId) return;
+    event.preventDefault();
+    const task = findPlannedTask(taskId);
+    if (task) beginStudySession(task);
+  });
 }
 
 function bindDensityControls() {
@@ -2070,7 +2133,9 @@ function bindForms() {
       english: readNumber("scoreEng"),
       math: readNumber("scoreMath"),
       cs408: readNumber("scoreCs"),
-      note: document.getElementById("scoreNote")?.value.trim() || ""
+      note: document.getElementById("scoreNote")?.value.trim() || "",
+      topicId: document.getElementById("scoreTopic")?.value.trim() || "",
+      errorType: document.getElementById("scoreErrorType")?.value || ""
     };
     score.total = score.politics + score.english + score.math + score.cs408;
     if (!validateScoreForm(score)) return;
@@ -2087,6 +2152,21 @@ function bindForms() {
       scores.push(score);
     }
     state.scores.sort((a, b) => a.date.localeCompare(b.date));
+    if (score.note && score.topicId) {
+      const mistake = createMistake({
+        subject: "模考",
+        topicId: score.topicId,
+        summary: score.note,
+        errorType: score.errorType,
+        examAttemptId: score.id,
+        source: "mock"
+      });
+      state = {
+        ...entityRepository.read(),
+        mistakes: mistakeRows().filter((item) => item.examAttemptId !== score.id)
+      };
+      state = replaceMistake(state, mistake);
+    }
     const saved = saveState();
     event.target.reset();
     clearScoreValidation();
@@ -2285,7 +2365,14 @@ function bindImportExport() {
         }
         const migratedState = migrateState(importPayload);
         const nextState = protectImportedSession(migratedState);
-        if (!window.confirm(importConfirmationMessage(nextState))) {
+        const duplicateNote = importDuplicateNote(nextState);
+        const previewText = `${importConfirmationMessage(nextState)}${duplicateNote}`;
+        const preview = document.getElementById("importPreview");
+        if (preview) {
+          preview.hidden = false;
+          preview.textContent = previewText;
+        }
+        if (!window.confirm(`${previewText}\n取消会保持当前数据，导入前会自动留下可回滚快照。`)) {
           setAuthResult("idle", "导入已取消", "当前数据未改变。");
           return;
         }
@@ -2399,12 +2486,20 @@ function extractImportStatePayload(payload) {
   return hasImportStateKeys(nested) ? nested : null;
 }
 
+function importDuplicateNote(nextState) {
+  const currentIds = new Set(scoreRows().map((item) => item.id));
+  const incoming = stateArray(nextState?.scores).filter((item) => item && currentIds.has(item.id));
+  if (!incoming.length) return "";
+  return `\n其中 ${incoming.length} 条模考与当前编号重复，导入后以备份里的内容为准。`;
+}
+
 function importConfirmationMessage(nextState) {
   const counts = importStateCounts(nextState);
   return [
     "确认导入这份备份？当前本机数据会先保存为快照。",
     `记录 ${counts.entries} 天，模考 ${counts.scores} 条，周计划任务 ${counts.weekTasks} 项。`,
-    `复盘 ${counts.reviews} 项，自定义任务 ${counts.customTasks} 项，资料进度 ${counts.resources} 项。`
+    `复盘 ${counts.reviews} 项，错题 ${counts.mistakes} 条，学习会话 ${counts.sessions} 条。`,
+    `自定义任务 ${counts.customTasks} 项，资料进度 ${counts.resources} 项。`
   ].join("\n");
 }
 
@@ -2419,6 +2514,8 @@ function importStateCounts(nextState) {
     scores: stateArray(source.scores).filter(isPlainStateObject).length,
     weekTasks,
     reviews: stateArray(source.reviewItems).filter(isPlainStateObject).length,
+    mistakes: stateArray(source.mistakes).filter(isPlainStateObject).length,
+    sessions: stateArray(source.sessions).filter(isPlainStateObject).length,
     customTasks: stateArray(source.customTasks).filter(isPlainStateObject).length,
     resources: Object.keys(stateObject(source.resources)).length
   };
@@ -2537,6 +2634,232 @@ function bindRecords() {
   document.getElementById("exportCsvBtn")?.addEventListener("click", exportRecordsCsv);
 }
 
+function readStudyGoalFromForm() {
+  const current = normalizeGoalInput(state.settings?.studyGoal);
+  return normalizeGoalInput({
+    admissionYear: Number(document.getElementById("settingAdmissionYear")?.value || current.admissionYear),
+    directionId: document.getElementById("settingDirection")?.value || current.directionId,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+function renderStudyGoalForm() {
+  const goal = resolveStudyGoal(ensureSettingsContainer().studyGoal, { verifiedAt: ADMISSION_SOURCE_CHECKED_AT });
+  const yearSelect = document.getElementById("settingAdmissionYear");
+  const directionSelect = document.getElementById("settingDirection");
+  if (yearSelect) yearSelect.value = String(goal.admissionYear);
+  const catalog = publishedCatalog(goal.basisAdmissionYear);
+  if (directionSelect && catalog) {
+    const current = directionSelect.value;
+    directionSelect.innerHTML = catalog.directions.map((item) => `
+      <option value="${escapeAttr(item.id)}">${escapeHtml(item.id)} ${escapeHtml(item.name)}${item.examTrack === "recommendation-only" ? " · 只招推免" : ""}</option>
+    `).join("");
+    directionSelect.value = catalog.directions.some((item) => item.id === (current || goal.directionId))
+      ? (current || goal.directionId)
+      : goal.directionId;
+  }
+  const version = contentVersionEntry();
+  setText("goalStatusText", `${goal.pendingOfficial
+    ? `${goal.admissionYear} 入学待官方确认。科目暂按 ${goal.basisAdmissionYear} 年官方目录显示。`
+    : `${goal.admissionYear} 入学目录已核验（${goal.verifiedAt}）。`} 内容版本 ${version.id}。`);
+  const subjects = document.getElementById("goalSubjectList");
+  if (subjects) {
+    subjects.innerHTML = goal.subjects.map((subject) => `
+      <li><strong>${escapeHtml(subject.code)}</strong> ${escapeHtml(subject.name)} <em>${escapeHtml(subjectStatusLabel(goal.pendingOfficial ? "pending" : "official"))}</em></li>
+    `).join("");
+  }
+  const adaptive = document.getElementById("settingAdaptivePriority");
+  if (adaptive) adaptive.checked = Boolean(state.settings.adaptivePriority);
+  const ai = document.getElementById("settingAiAssist");
+  if (ai) ai.checked = Boolean(state.settings.aiAssist);
+}
+
+const entityRepository = createEntityRepository({
+  read: () => state,
+  commit: (next) => {
+    state = next;
+    return saveState();
+  }
+});
+
+function todayPhaseText(date = planTodayISO()) {
+  const resolution = getPhaseResolution(date);
+  const phase = resolution.phase;
+  if (!phase) return "阶段未配置";
+  if (resolution.status === "completed") return "备考周期已结束。历史阶段仍可回看，不再按阶段 A 排新任务。";
+  if (resolution.status === "not-started") return `计划未开始。下一阶段 ${phase.id}：${phase.focus || ""}`;
+  return `阶段 ${phase.id}：${phase.focus || ""}`;
+}
+
+function activeStudyGoal() {
+  return resolveStudyGoal(ensureSettingsContainer().studyGoal, { verifiedAt: ADMISSION_SOURCE_CHECKED_AT });
+}
+
+function bindStudySession() {
+  document.getElementById("sessionPauseBtn")?.addEventListener("click", () => {
+    if (!openStudySession) return;
+    openStudySession = openStudySession.status === "paused"
+      ? resumeStudySession(openStudySession)
+      : pauseStudySession(openStudySession);
+    renderSessionBar();
+  });
+  document.getElementById("sessionFinishBtn")?.addEventListener("click", () => {
+    if (!openStudySession) return;
+    openStudySession = finishStudySession(openStudySession);
+    const task = findPlannedTask(openStudySession.taskId);
+    if (task) {
+      state.tasks[task.id] = true;
+      task.actualMinutes = openStudySession.effectiveMinutes;
+      task.sessionId = openStudySession.id;
+    }
+    rememberSession(openStudySession);
+    openStudySession = null;
+    const saved = saveState();
+    renderSessionBar();
+    renderAll();
+    setLocalSaveResult(saved, "本次学习已结束", "计时已写入本机。可在同一张卡片补题量和错因。", "计时未写入本机缓存");
+  });
+  window.addEventListener("beforeunload", () => {
+    if (openStudySession?.status === "running") {
+      openStudySession = pauseStudySession(openStudySession);
+      rememberSession(openStudySession);
+      saveState({ skipCloud: true });
+    }
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key !== "pku_swm_420_session_lock" || !openStudySession) return;
+    if (!lockHeldByOtherTab(openStudySession)) return;
+    openStudySession = pauseStudySession(openStudySession);
+    rememberSession(openStudySession);
+    renderSessionBar();
+  });
+}
+
+function bindMistakeCapture() {
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const button = target.closest("[data-mistake-status]");
+    if (!button) return;
+    const current = mistakeRows().find((item) => item.id === button.dataset.mistakeId);
+    const next = transitionMistake(current, button.dataset.mistakeStatus);
+    if (!next || next === current) return;
+    state = replaceMistake(entityRepository.read(), next);
+    const saved = saveState();
+    renderAll();
+    setLocalSaveResult(saved, "错题状态已更新", "历史状态仍留在这条错题里。", "错题状态未写入本机缓存");
+  });
+  document.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.classList.contains("mistake-form")) return;
+    event.preventDefault();
+    const data = new FormData(form);
+    const mistake = createMistake({
+      subject: data.get("subject"),
+      topicId: data.get("topicId"),
+      summary: data.get("summary"),
+      errorType: data.get("errorType"),
+      taskId: data.get("taskId"),
+      source: data.get("source") || "task"
+    });
+    if (!mistake.summary) {
+      showToast("写一句错题摘要后再保存。");
+      return;
+    }
+    state = replaceMistake(entityRepository.read(), mistake);
+    const saved = saveState();
+    form.reset();
+    renderAll();
+    setLocalSaveResult(saved, "错题已记下", "可以在考点页按考点回看。", "错题未写入本机缓存");
+  });
+}
+
+function mistakeRows() {
+  state.mistakes = stateArray(state.mistakes).map((item) => createMistake(item)).filter((item) => item.summary || item.topicId);
+  return state.mistakes;
+}
+
+function findPlannedTask(taskId) {
+  for (const tasks of Object.values(stateObject(state.weekPlans))) {
+    const found = stateArray(tasks).find((task) => task?.id === taskId);
+    if (found) return found;
+  }
+  return null;
+}
+
+function rememberSession(session) {
+  if (!session?.id) return;
+  state = replaceSessions(entityRepository.read(), session);
+  if (session.status === "finished") clearSessionLock();
+  else writeSessionLock(session);
+}
+
+function restoreOpenSession() {
+  const latest = [...stateArray(state.sessions)].reverse().find((item) => item?.status === "running" || item?.status === "paused");
+  if (!latest || lockHeldByOtherTab(latest)) return;
+  openStudySession = latest.status === "running" ? pauseStudySession(latest) : latest;
+  rememberSession(openStudySession);
+  renderSessionBar();
+}
+
+function beginStudySession(task) {
+  if (!task?.id) return;
+  const claim = claimStudySession(openStudySession, task.id);
+  openStudySession = claim.session;
+  if (sessionCrossedMidnight(openStudySession)) {
+    openStudySession = pauseStudySession(openStudySession);
+    rememberSession(openStudySession);
+    openStudySession = claimStudySession(null, task.id).session;
+  }
+  rememberSession(openStudySession);
+  renderSessionBar();
+  setRoute("today");
+}
+
+function renderSessionBar() {
+  const bar = document.getElementById("sessionBar");
+  if (!bar) return;
+  bar.hidden = !openStudySession || openStudySession.status === "finished";
+  if (!openStudySession || bar.hidden) {
+    window.clearInterval(sessionTicker);
+    sessionTicker = null;
+    return;
+  }
+  const task = findPlannedTask(openStudySession.taskId);
+  setText("sessionTaskLabel", task ? `${task.subject} · ${task.text}` : "学习计时");
+  const pause = document.getElementById("sessionPauseBtn");
+  if (pause) pause.textContent = openStudySession.status === "paused" ? "继续" : "暂停";
+  const paint = () => {
+    const running = openStudySession?.status === "running" ? Math.max(0, Date.now() - Date.parse(openStudySession.startedAt)) : 0;
+    const totalMs = ((Number(openStudySession?.accumulatedMinutes) || 0) * 60000) + running;
+    const minutes = Math.floor(totalMs / 60000);
+    const seconds = Math.floor((totalMs % 60000) / 1000);
+    setText("sessionClock", `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`);
+  };
+  paint();
+  if (!sessionTicker && openStudySession.status === "running") sessionTicker = window.setInterval(paint, 1000);
+  if (openStudySession.status !== "running" && sessionTicker) {
+    window.clearInterval(sessionTicker);
+    sessionTicker = null;
+  }
+}
+
+function taskPriorityNote(task) {
+  if (!state.settings?.adaptivePriority || !task) return "";
+  const due = reviewRows().filter((item) => isReviewDue(item)).length;
+  const taskLocked = sanitizeBoolean(task.locked);
+  const scored = scoreTaskPriority({
+    urgency: task.source === "carryover" ? 0.8 : 0.4,
+    weakness: task.subject === "数学" || task.subject === "408" ? 0.7 : 0.3,
+    reviewLoad: Math.min(1, due / 5),
+    phaseImportance: task.subject === "数学" || task.subject === "408" ? 0.8 : 0.4,
+    locked: taskLocked,
+    enabled: true
+  }, PRIORITY_WEIGHTS_V1);
+  if (!scored.reasons.length) return "";
+  return `<p class="priority-note">建议原因：${escapeHtml(scored.reasons.join("，"))}。权重 ${escapeHtml(scored.weightsVersion)}，可以忽略。</p>`;
+}
+
 function bindSettings() {
   document.getElementById("settingsForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -2562,8 +2885,15 @@ function bindSettings() {
         rollingWindowDays: numericSettings.rollingWindowDays,
         enabledSubjects: Array.from(document.querySelectorAll("#settingEnabledSubjects input:checked")).map((input) => input.value),
       }),
-      notificationsEnabled: Boolean(document.getElementById("settingNotifications")?.checked)
+      notificationsEnabled: Boolean(document.getElementById("settingNotifications")?.checked),
+      adaptivePriority: Boolean(document.getElementById("settingAdaptivePriority")?.checked),
+      aiAssist: Boolean(document.getElementById("settingAiAssist")?.checked),
+      studyGoal: readStudyGoalFromForm()
     };
+    const impact = goalChangeImpact(state.settings.studyGoal, nextSettings.studyGoal);
+    if (impact.changesSubjects && !window.confirm(`科目配置会变化。影响：${impact.areas.join("、")}。已完成的${impact.preserved.join("、")}会保留。`)) {
+      return;
+    }
     state.settings = nextSettings;
     const saved = saveState();
     renderAll();
@@ -3046,15 +3376,16 @@ function renderAuthPanel() {
 function syncStatusLabel() {
   const status = syncDisplayStatus();
   return ({
-    local: supabaseConfigured ? "未登录" : "仅本机保存",
-    unconfigured: "未配置云端",
-    pending: "等待同步",
-    syncing: "同步中",
-    synced: "已同步",
+    local: supabaseConfigured ? "未登录，已在本机保存" : "已在本机保存",
+    unconfigured: "已在本机保存",
+    pending: "离线待同步",
+    syncing: "正在同步",
+    synced: "云端已同步",
     error: "同步失败",
-    offline: "离线草稿",
-    paused: "云端暂停"
-  })[status] || "仅本机保存";
+    offline: "离线待同步",
+    paused: "同步暂停",
+    conflict: "同步冲突"
+  })[status] || "已在本机保存";
 }
 
 function renderSnapshotPanel() {
@@ -3828,7 +4159,7 @@ function renderSideNav(week, phase) {
   const scoreAvg = averageScores(last5).total;
   const risk = riskSnapshot(week, phase);
 
-  setText("sidePhase", `${phase.id} · ${phase.name}`);
+  setText("sidePhase", phaseHeadline(getPhaseResolution()));
   setText("sideWeek", `${weekHours.toFixed(1)} / ${phase.weeklyTarget}h`);
   setText("minimumTarget", minimumTargetText(phase));
   setText("sideCoreLabel", `核心占比 ${corePercent}%`);
@@ -3847,7 +4178,9 @@ function examDateStatusText() {
 }
 
 function officialBasisText() {
-  return `资料核验 ${SOURCE_CHECK_DATE}：学习计划从 ${PLAN_START_DATE} 开始；科目以北大软微已发布信息为备考基准，2027 年 12 月仍为推算窗口。`;
+  const goal = resolveStudyGoal(ensureSettingsContainer().studyGoal, { verifiedAt: ADMISSION_SOURCE_CHECKED_AT });
+  const status = subjectStatusLabel(goal.pendingOfficial ? "pending" : "official");
+  return `资料核验 ${SOURCE_CHECK_DATE}：${goal.admissionYear} 入学 / ${goal.directionId} ${goal.directionName} · ${status}。${goal.note}`;
 }
 
 function renderWorkflowRail() {
@@ -4207,7 +4540,6 @@ function renderScoreTargets() {
 }
 
 function renderTasks(force = false, date = planTodayISO()) {
-  const phase = getCurrentPhase(date);
   const result = buildDailyTasks(force, date, { persist: force, withSaveResult: true });
   const tasks = result.tasks;
 
@@ -4251,15 +4583,19 @@ function renderTasks(force = false, date = planTodayISO()) {
   document.getElementById("todayTasks").innerHTML = fullHtml;
   document.getElementById("todayTasksPreview").innerHTML = compactHtml;
   document.getElementById("dailyPlan").innerHTML = renderPlanCards(tasks);
+  bindPlanSessionActions(document.getElementById("dailyPlan") || document);
+  renderSessionBar();
   renderDailyOperatingConsole(tasks, date);
   renderDailyTaskProgress(tasks);
   renderScienceProtocol(tasks, date);
   renderEnglishDrip(tasks, date);
   const taskFlow = document.getElementById("taskFlow");
   if (taskFlow) taskFlow.innerHTML = renderTaskFlow(tasks);
-  const carryCount = tasks.filter((task) => task.source === "carryover").length;
-  document.getElementById("dailyPlanMeta").textContent = `${tasks.length} 个必做任务，预算 ${tasks.reduce((sum, task) => sum + task.minutes, 0)} 分钟${carryCount ? `；${carryCount} 项由未完成任务顺延` : "；完成后只做记录和到期复盘"}`;
-  document.getElementById("todayPhaseText").textContent = `阶段 ${phase.id}：${phase.focus}`;
+  const nextTask = tasks.find((task) => !isTaskDone(task, state.tasks));
+  document.getElementById("dailyPlanMeta").textContent = nextTask
+    ? `下一步：${nextTask.subject} · ${nextTask.text}`
+    : (tasks.length ? "今天的任务都已勾完。可以补记结果或去处理复盘。" : "还没有任务。点重新生成得到今天的第一项。");
+  document.getElementById("todayPhaseText").textContent = todayPhaseText(date);
   setText("navTaskCount", `${tasks.length} 项`);
   renderFocusBoard(tasks);
   renderAcceptance(tasks);
@@ -4355,7 +4691,6 @@ function renderCaptureForm(task) {
 }
 
 let taskCaptureId = "";
-let activeSession = null;
 
 function openTaskCapture(taskId) {
   taskCaptureId = taskId;
@@ -4441,7 +4776,7 @@ function commitTaskCompletion(task, evidence) {
 }
 
 function startTaskSession(taskId) {
-  activeSession = {
+  taskCountdown = {
     taskId,
     endsAt: Date.now() + 45 * 60 * 1000
   };
@@ -4451,8 +4786,8 @@ function startTaskSession(taskId) {
 }
 
 function stopTaskSession(openCapture = true) {
-  const taskId = activeSession?.taskId || "";
-  activeSession = null;
+  const taskId = taskCountdown?.taskId || "";
+  taskCountdown = null;
   window.clearInterval(startTaskSession.timer);
   paintTaskSession();
   if (openCapture && taskId) openTaskCapture(taskId);
@@ -4460,10 +4795,10 @@ function stopTaskSession(openCapture = true) {
 
 function paintTaskSession() {
   document.querySelectorAll("[data-session-for]").forEach((node) => {
-    const running = activeSession && node.dataset.sessionFor === activeSession.taskId;
+    const running = taskCountdown && node.dataset.sessionFor === taskCountdown.taskId;
     node.hidden = !running;
     if (!running) return;
-    const remaining = Math.max(0, activeSession.endsAt - Date.now());
+    const remaining = Math.max(0, taskCountdown.endsAt - Date.now());
     const minutes = Math.floor(remaining / 60000);
     const seconds = Math.floor((remaining % 60000) / 1000);
     node.textContent = remaining === 0
@@ -4859,31 +5194,44 @@ function shiftTaskToTomorrow(taskId) {
 }
 
 function renderFocusBoard(tasks) {
-  const phase = getCurrentPhase();
+  const resolution = getPhaseResolution();
+  const phase = resolution.phase || getCurrentPhase();
   const week = lastDaysEntries(7);
   const weekHours = sumMinutes(week, "total") / 60;
   const dueCount = reviewRows().filter((item) => isReviewDue(item)).length;
-  const primary = tasks[0];
-  const support = tasks.slice(1, 3);
-  const weekPercent = phase.weeklyTarget ? Math.min(100, Math.round(weekHours / phase.weeklyTarget * 100)) : 0;
+  const openTasks = tasks.filter((task) => !isTaskDone(task, state.tasks));
+  const primary = openTasks[0] || null;
+  const doneCount = tasks.filter((task) => isTaskDone(task, state.tasks)).length;
+  const weekPercent = phase?.weeklyTarget ? Math.min(100, Math.round(weekHours / phase.weeklyTarget * 100)) : 0;
+  const todayEntry = entryRow(planTodayISO());
+  const todayHours = todayEntry ? (getEntryTotals(todayEntry).total / 60) : 0;
+  const weekDelta = phase?.weeklyTarget ? weekHours - phase.weeklyTarget : 0;
 
-  setText("focusPrimarySubject", primary ? primary.subject : "未生成");
-  setText("focusPrimaryTask", primary ? primary.text : "进入今日页生成任务。");
-  setText("focusPrimaryTime", primary ? `${primary.minutes}m` : "--m");
-  setText("focusReviewCount", `${dueCount} 项`);
-  setText("focusPace", `${weekHours.toFixed(1)}h / ${phase.weeklyTarget}h`);
-    setText("focusRecordHint", dueCount ? "先处理到期复盘。" : "完成后保存记录。");
+  setText("deskDateLabel", `${planTodayISO()} · ${phaseHeadline(resolution)}`);
+  setText("deskPhaseLine", resolution.status === "completed"
+    ? "考试周期已结束。历史记录仍可回看，不再排入阶段 A。"
+    : resolution.status === "not-started"
+      ? "计划尚未到开始日。可以先核对报考目标。"
+      : (phase?.focus || ""));
+  setText("commandText", primary ? primary.text : (tasks.length ? "今天的任务都已完成" : "还没有今日任务"));
+  setText("focusPrimarySubject", primary ? primary.subject : (tasks.length ? "已完成" : "未生成"));
+  setText("focusPrimaryTask", primary ? primary.text : (tasks.length ? "可以处理到期复盘，或到今日页补记结果。" : "打开今日页生成第一份计划。"));
+  setText("focusPrimaryTime", primary ? `${primary.minutes}m` : "--");
+  setText("focusTodayProgress", `${doneCount} / ${tasks.length} 项`);
+  setText("deskDoneCount", `${doneCount}/${tasks.length || 0}`);
+  setText("deskStudyHours", `${todayHours.toFixed(1)}h`);
+  setText("focusReviewCount", String(dueCount));
+  setText("focusReviewTitle", dueCount ? `${dueCount} 项到期` : "今天没有到期项");
+  setText("focusPace", phase ? `${weekHours.toFixed(1)}h / ${phase.weeklyTarget}h` : "周期已结束");
+  setText("focusWeekHint", week.length
+    ? (weekDelta >= 0 ? `比阶段周目标多 ${weekDelta.toFixed(1)} 小时。` : `比阶段周目标少 ${Math.abs(weekDelta).toFixed(1)} 小时。`)
+    : "记录满 3 天后给出偏差。");
+  setText("focusRecordHint", dueCount ? "有到期复盘。做完主任务后去复盘页。" : "完成后在今日页记一次结果。");
   setStyleWidth("focusWeekFill", `${weekPercent}%`);
-
-  const supportNode = document.getElementById("focusSupportTasks");
-  if (supportNode) {
-    supportNode.innerHTML = support.length ? support.map((task) => `
-      <div>
-        <strong>${escapeHtml(task.subject)}</strong>
-        <span>${Number(task.minutes) || 0}m</span>
-      </div>
-      <p>${escapeHtml(task.text)}</p>
-    `).join("") : `<p>今天先完成主任务，再决定是否加量。</p>`;
+  const startLink = document.getElementById("startPrimaryTask");
+  if (startLink) {
+    startLink.textContent = primary ? "开始这项" : "打开今日";
+    startLink.dataset.taskId = primary?.id || "";
   }
 }
 
@@ -5014,15 +5362,28 @@ function createDailyTasks(date = planTodayISO()) {
   const nonCoreReserve = (politicsDay ? politicsMinutes : englishReserve) + reviewReserve;
   const minimumCore = Math.round(budget * (state.settings.coreRatio || 65) / 100);
   const coreMinutes = Math.max(coreFloor * 2, minimumCore, budget - nonCoreReserve);
+  const goal = activeStudyGoal();
+  const goalKeys = new Set(goal.subjectKeys);
   const coreWeight = (weights.math || 0) + (weights.cs408 || 0) || 1;
   const mathMinutes = Math.max(coreFloor, roundToFive(coreMinutes * ((weights.math || 0.5) / coreWeight)));
   const csMinutes = Math.max(coreFloor, roundToFive(coreMinutes * ((weights.cs408 || 0.5) / coreWeight)));
 
-  if (controls.enabledSubjects.includes("math")) {
-    tasks.push(topicTask(date, phase, "数学", topicMath, mathMinutes, "高数/线代/概率按阶段推进"));
+  if (controls.enabledSubjects.includes("math") && goalKeys.has("math")) {
+    tasks.push(topicTask(date, phase, "数学", topicMath, mathMinutes, goal.provisional ? "数学范围沿用已核验目录，不是当年承诺" : "高数/线代/概率按阶段推进"));
   }
-  if (controls.enabledSubjects.includes("cs408")) {
+  if (controls.enabledSubjects.includes("cs408") && goalKeys.has("cs408")) {
     tasks.push(topicTask(date, phase, "408", topicCs, csMinutes, "按数据结构、计组、OS、计网推进"));
+  } else if (goalKeys.has("professional") && tasks.length < targetCount) {
+    const professional = goal.subjects.find((subject) => subject.key === "professional");
+    tasks.push({
+      id: `${date}-${phase.id}-professional`,
+      subject: professional?.name || "专业课",
+      text: goal.provisional
+        ? `${professional?.name || "专业课"}按最近官方目录暂排，等当年目录发布后再改。`
+        : `${professional?.name || "专业课"}做一节基础题，并写下错因。`,
+      minutes: csMinutes,
+      priority: 3
+    });
   }
   if (topicPolitics && politicsDay && controls.enabledSubjects.includes("politics")) {
     tasks.push(topicTask(date, phase, "政治", topicPolitics, politicsMinutes, "基础框架、选择题、背诵"));
@@ -5290,6 +5651,20 @@ function renderPlanCards(tasks) {
             <em>${escapeHtml(blueprint.metric)}</em>
           </div>
           <p>${escapeHtml(task.text)}</p>
+          ${taskPriorityNote(task)}
+          <form class="mistake-form" data-task-id="${escapeAttr(task.id)}">
+            <input type="hidden" name="taskId" value="${escapeAttr(task.id)}">
+            <input type="hidden" name="subject" value="${escapeAttr(task.subject)}">
+            <input type="hidden" name="source" value="task">
+            <label>错题摘要<input name="summary" type="text" maxlength="240" placeholder="一句话写下错在哪"></label>
+            <label>错因<select name="errorType"><option>概念</option><option>方法</option><option>计算</option><option>审题</option><option>时间管理</option><option>自定义</option></select></label>
+            <label>考点编号<input name="topicId" type="text" maxlength="80" placeholder="可选，例如 math/极限与连续/数列极限"></label>
+            <button type="submit" class="ghost-button">记下错题</button>
+          </form>
+          <div class="plan-actions">
+            <button type="button" class="primary-button" data-start-session="${escapeAttr(task.id)}">开始计时</button>
+            <button type="button" class="ghost-button" data-skip-session="${escapeAttr(task.id)}">直接记录</button>
+          </div>
           <div class="plan-output density-balanced-only"><strong>交付</strong>${escapeHtml(outputText)}</div>
           <details class="plan-detail density-balanced-only">
             <summary>执行方法与验收</summary>
@@ -5319,6 +5694,20 @@ function renderPlanCards(tasks) {
       </article>
     `;
   }).join("");
+}
+
+function bindPlanSessionActions(root = document) {
+  root.querySelectorAll("[data-start-session]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const task = findPlannedTask(button.dataset.startSession);
+      if (task) beginStudySession(task);
+    });
+  });
+  root.querySelectorAll("[data-skip-session]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelector(`[data-capture-for="${CSS.escape(button.dataset.skipSession)}"]`)?.querySelector("input, select, textarea")?.focus();
+    });
+  });
 }
 
 function renderDailyOperatingConsole(tasks, date = planTodayISO()) {
@@ -5677,9 +6066,11 @@ function delayReview(id, days) {
   const delayDays = sanitizeInteger(days, 1, 30);
   const due = parseDate(item.dueDate);
   due.setDate(due.getDate() + delayDays);
+  item.previousDueDate = item.dueDate;
   item.dueDate = formatDateISO(due);
   item.delayCount = (item.delayCount || 0) + 1;
   item.status = "delayed";
+  item.scheduleReason = "手动顺延，避免和当天主任务抢时间。";
   stampReviewResult(item, "delay");
   return true;
 }
@@ -5792,14 +6183,31 @@ function renderReviewPolicy(dueCount, upcomingCount) {
   `).join("");
 }
 
+function reviewQueueStatus(item, date = planTodayISO()) {
+  if (item?.done || item?.status === "done") return "done";
+  if (item?.status === "delayed") return "deferred";
+  if (item?.status === "skipped") return "skipped";
+  const dueDate = sanitizeDateKey(item?.dueDate);
+  if (dueDate && dueDate < date) return "overdue";
+  return "due";
+}
+
 function renderReviewItem(item) {
   const due = isReviewDue(item) ? "due" : "";
   const guide = reviewRoundGuide(item.round);
+  const explanation = explainReviewSchedule({
+    status: reviewQueueStatus(item),
+    fromDate: item.previousDueDate || "",
+    toDate: item.dueDate,
+    reason: item.scheduleReason || "",
+    affectedTaskCount: planTasksForDate(planTodayISO()).length
+  });
   return `
     <article class="review-queue-item ${due}">
       <div>
         <strong>${escapeHtml(item.round)} · ${escapeHtml(item.subject)}</strong>
         <p>${escapeHtml(item.text)}</p>
+        <p class="review-why">${escapeHtml(explanation.why)} ${escapeHtml(explanation.impact)}</p>
         <div class="review-guide">
           <span>${escapeHtml(guide.action)}</span>
           <span>通过：${escapeHtml(guide.pass)}</span>
@@ -6481,6 +6889,7 @@ function renderTopic(subject, group, topic) {
           <em>${escapeHtml(guide.explain)}</em>
           <small>${escapeHtml(guide.output)}</small>
           ${evidence?.evidence ? `<small class="topic-evidence">证据：${escapeHtml(evidence.evidence)}</small>` : ""}
+          ${renderTopicMistakes(id)}
         </span>
         <span class="topic-side">
           <span class="topic-state">${escapeHtml(label)}</span>
@@ -6495,6 +6904,46 @@ function renderTopic(subject, group, topic) {
         </div>
       </form>
     </div>
+  `;
+}
+
+function renderTopicMistakes(topicId) {
+  const related = mistakesForTopic(mistakeRows(), topicId).slice(0, 3);
+  if (!related.length) return "";
+  return `<small class="topic-mistakes">错题 ${related.length}：${related.map((item) => `
+    ${escapeHtml(item.summary)}
+    <button type="button" data-mistake-id="${escapeAttr(item.id)}" data-mistake-status="mastered">标为已掌握</button>
+    <button type="button" data-mistake-id="${escapeAttr(item.id)}" data-mistake-status="archived">归档</button>
+  `).join("；")}</small>`;
+}
+
+function renderStudyReportCard() {
+  const host = document.getElementById("studyReportCard");
+  if (!host) return;
+  const week = lastDaysEntries(7);
+  const report = buildStudyReport({
+    period: "week",
+    minutes: week.length ? sumMinutes(week, "total") : null,
+    taskDelta: null,
+    dueReviews: reviewRows().filter((item) => isReviewDue(item)).length,
+    weakTopics: mistakeRows().slice(0, 3).map((item) => item.summary),
+    mockDelta: null
+  });
+  const assist = localReviewPrompt({ enabled: Boolean(state.settings?.aiAssist), mistakes: mistakeRows() });
+  host.innerHTML = `
+    ${assist.enabled ? `<article class="workbench-state"><span>本机提示</span><p>${escapeHtml(assist.text)}</p></article>` : ""}
+    <article>
+      <span>事实</span>
+      <p>${report.facts.map((fact) => escapeHtml(fact)).join(" ")}</p>
+    </article>
+    <article>
+      <span>建议</span>
+      <p>${escapeHtml(report.action)}</p>
+    </article>
+    <article>
+      <span>未核验推论</span>
+      <p>${report.inferences.length ? escapeHtml(report.inferences.join(" ")) : "没有足够证据时，这里留空。"}</p>
+    </article>
   `;
 }
 
@@ -7159,6 +7608,25 @@ function renderScores() {
     }).join("") : `<p class="score-trend-empty">保存两套以上模考后，这里显示总分走向。</p>`;
   }
 
+  const diagnosis = document.getElementById("weeklyDiagnosis");
+  if (diagnosis) {
+    const week = lastDaysEntries(7);
+    const card = weeklyDiagnosis({
+      improvement: week.length ? `近 7 天有 ${week.filter((entry) => entry.total > 0).length} 天留下学习分钟。` : "",
+      problem: weak === "待记录" ? "" : `近 5 套短板在${weak}。`,
+      action: "下一周只加强这一科的一项闭卷练习。",
+      evidence: ["#records", "#scores"]
+    });
+    const outcome = outcomeSnapshot({ mockTotal: avg.total || null });
+    diagnosis.innerHTML = `
+      <span>本周三件事</span>
+      <strong>${escapeHtml(card.improvement)}</strong>
+      <p>${escapeHtml(card.problem)}</p>
+      <p>${escapeHtml(card.action)}</p>
+      <small>${outcome.mockTotal == null ? outcome.missingStrategy : `近 5 套均分 ${outcome.mockTotal.toFixed(1)}，这是结果口径，不是录取预测。`}</small>
+    `;
+  }
+
   document.getElementById("scoreList").innerHTML = sorted.length ? sorted.map((score) => `
     <div class="score-row">
       <div class="score-row-head">
@@ -7460,6 +7928,8 @@ function renderSettings() {
   });
   setText("settingsExamDateStatus", examDateStatusText());
   setText("appBuildText", APP_BUILD);
+  renderStudyGoalForm();
+  renderStudyReportCard();
   renderStorageHealthText();
 
   document.getElementById("standardsList").innerHTML = [

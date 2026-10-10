@@ -695,7 +695,7 @@ describe('supabaseSync auth', () => {
       target_exam_date: '2027-12-25',
       density_mode: 'balanced',
       retro_time: '22:00',
-      plan_version: '4.1-evidence-capacity-governance-2026-08-31',
+      plan_version: '4.2-workbench-2026-10-10',
     });
     expect(upsertRows('daily_records')).toBeUndefined();
     expect(upsertRows('study_tasks').map((row) => row.id)).toEqual(['task-safe']);

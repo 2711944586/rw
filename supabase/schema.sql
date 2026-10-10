@@ -10,7 +10,7 @@ create table if not exists public.profiles (
   core_ratio integer not null default 65,
   review_days integer[] not null default array[1,3,7,14,30],
   plan_version text not null default '4.0-aug31-operating-plan-2026-08-31',
-  density_mode text not null default 'focus',
+  density_mode text not null default 'balanced',
   retro_time text not null default '22:00',
   last_synced_at timestamptz,
   updated_at timestamptz not null default now()
