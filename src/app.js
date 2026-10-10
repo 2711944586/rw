@@ -131,8 +131,10 @@ import {
   encodeLoadNote,
   mergeRegeneratedTasks,
   presentSyncStatus,
+  formatRatioPercent,
   reviewGradeEffect,
   reviewPosture,
+  rescheduleReviewFamily,
   sanitizeLoadTier,
   sanitizeSleepHours,
   shouldUseBottomLine,
@@ -510,7 +512,7 @@ function ensureSettingsContainer() {
 
 function defaultSyncState(sync = {}) {
   const source = stateObject(sync);
-  const status = ["local", "pending", "syncing", "synced", "error", "offline", "paused", "unconfigured"].includes(source.status)
+  const status = ["local", "pending", "syncing", "synced", "error", "offline", "paused", "unconfigured", "conflict"].includes(source.status)
     ? source.status
     : "local";
   return {
@@ -3533,14 +3535,14 @@ function renderExecutionSignals() {
     plannedMinutes: entry.loadTier === "bottomline" ? 90 : 150,
     doneMinutes: entry.total || 0,
     sleepHours: entry.sleepHours || 0
-  })));
+  })), { dueCount: reviewRows().filter((item) => isReviewDue(item)).length });
   const sunday = weeklyReviewPrompt(new Date());
   const checks = dueOfficialChecks(planTodayISO(), state.settings.officialChecksDone || []);
   const leechCount = reviewRows().filter((item) => item.leech).length;
   const trend = lastDaysEntries(7);
   const parts = [];
   if (signals.active) {
-    parts.push(`<p class="signal-warning">${signals.shortSleep ? "最近两晚睡眠不足 7 小时。" : ""}${signals.lowCompletion ? "最近三天完成时间低于底线档预算的 60%。" : ""}次日使用底线日，不补夜间时长。</p>`);
+    parts.push(`<p class="signal-warning">${signals.shortSleep ? "最近两晚睡眠不足 7 小时。" : ""}${signals.lowCompletion ? "最近三天完成时间低于底线档预算的 60%。" : ""}${signals.reviewDebt ? "到期复盘超过 3 项。" : ""}次日使用底线日，不补夜间时长。</p>`);
   }
   if (sunday) parts.push(`<p>${escapeHtml(sunday.text)}可选变量：${sunday.choices.join("、")}。</p>`);
   if (leechCount) parts.push(`<p>${leechCount} 条复盘已连续失败 3 次。先减少新内容，再处理这些回炉。</p>`);
@@ -3821,7 +3823,7 @@ function renderSideNav(week, phase) {
   const corePercent = totalMinutes ? Math.round(sumMinutes(week, "core") / totalMinutes * 100) : 0;
   const dueCount = reviewRows().filter((item) => isReviewDue(item)).length;
   const activeDays = entriesArray().filter((entry) => entry.total > 0).length;
-  const avgSyllabus = Math.round(["math", "cs408", "english", "politics"].reduce((sum, subject) => sum + syllabusProgress(subject).percent, 0) / 4);
+  const syllabusMark = syllabusMarkSummary();
   const last5 = [...scoreRows()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   const scoreAvg = averageScores(last5).total;
   const risk = riskSnapshot(week, phase);
@@ -3834,7 +3836,7 @@ function renderSideNav(week, phase) {
   setText("navRiskDot", risk.label);
   setText("navRecordDays", `${activeDays} 天`);
   setText("navReviewDue", `${dueCount} 到期`);
-  setText("navSyllabusProgress", `${avgSyllabus}%`);
+  setText("navSyllabusProgress", syllabusMark.nav);
   setText("navScoreAvg", scoreAvg ? `${scoreAvg.toFixed(0)}` : "--");
 }
 
@@ -3858,7 +3860,7 @@ function renderWorkflowRail() {
   const dueCount = reviewRows().filter((item) => isReviewDue(item, planDate)).length;
   const recentScores = scoreRows().filter((score) => score.date >= formatDateISO(addDays(parseDate(planDate), -45))).length;
   const active14 = new Set(lastDaysEntries(14).filter((entry) => entry.total > 0).map((entry) => entry.date)).size;
-  const avgSyllabus = Math.round(["math", "cs408", "english", "politics"].reduce((sum, subject) => sum + syllabusProgress(subject).percent, 0) / 4);
+  const syllabusMark = syllabusMarkSummary();
   const steps = [
     ["计划", `${tasks.length} 项`, tasks.length ? "done" : "wait"],
     ["执行", `${doneTasks}/${tasks.length}`, doneTasks ? "active" : "wait"],
@@ -3867,7 +3869,7 @@ function renderWorkflowRail() {
     ["日审", todayEntry?.nextTask ? "已收口" : "待收口", todayEntry?.nextTask ? "done" : todayEntry ? "active" : "wait"],
     ["统计", `${active14}/14 天`, active14 >= 8 ? "done" : active14 ? "active" : "wait"],
     ["模考", recentScores ? `${recentScores} 次` : "未到期", recentScores ? "done" : "wait"],
-    ["校准", `${avgSyllabus}%`, avgSyllabus ? "active" : "wait"]
+    ["校准", syllabusMark.nav, syllabusMark.nav === "—" ? "wait" : "active"]
   ];
   container.innerHTML = steps.map(([label, value, status], index) => `
     <div class="workflow-step ${status}">
@@ -5180,16 +5182,19 @@ function rampBudgetForDate(date = planTodayISO()) {
 
 function shouldUseMinimumDay(date = planTodayISO()) {
   const cursor = parseDate(date);
-  let lowDays = 0;
+  const days = [];
   for (let index = 1; index <= 3; index += 1) {
     const day = new Date(cursor);
     day.setDate(cursor.getDate() - index);
     const entry = entryRow(formatDateISO(day));
     if (!entry) continue;
-    const total = getEntryTotals(entry).total;
-    if (total > 0 && total < 120) lowDays += 1;
+    days.push({
+      plannedMinutes: entry.loadTier === "bottomline" ? 90 : 150,
+      doneMinutes: getEntryTotals(entry).total,
+      sleepHours: entry.sleepHours || 0
+    });
   }
-  return lowDays >= 2;
+  return shouldUseBottomLine(days, { dueCount: dueReviewItems(date).length }).active;
 }
 
 function bottomLineMinutes(phase = getCurrentPhase()) {
@@ -5387,7 +5392,7 @@ function renderScienceProtocol(tasks, date = planTodayISO()) {
   const spacingRule = learningScienceRules.find((item) => item.key === "spacing");
   const rows = [
     ["主动回忆", tasks.some((task) => ["数学", "408", "复盘"].includes(task.subject)) ? "已安排" : "需补", "题量、闭卷重做、过程图优先。"],
-    ["自适应复盘", reviewDue ? `${reviewDue} 项到期` : "队列健康", reviewDue ? "只抽取最高优先级；失败缩短间隔并减少新内容。" : spacingRule?.guardrail || "默认检查点会按表现调整。"],
+    ["自适应复盘", reviewDue ? `${reviewDue} 项到期` : reviewLoadSignal(reviewRows(), date, state.settings.planControls).label, reviewDue ? "只抽取最高优先级；失败会把下一次提前到明天，通过会把下一次推后。" : spacingRule?.guardrail || "默认检查点会按表现调整。"],
     ["英语不断档", hasEnglish ? "已保留" : "需手动补", "最低 20 分钟：新词、复习词、错词和 1 句定位。"],
     ["核心占比", `${coreRatio}%`, `目标 ${state.settings.coreRatio || 65}% 左右，低负荷日先守数学和 408。`],
     ["今日节律", dayRole.role, `${dayRole.action} ${dayRole.output}`]
@@ -5647,8 +5652,9 @@ function renderReviewQueue() {
       const saved = saveState();
       renderReviewQueue();
       renderDashboard();
-      const effect = reviewGradeEffect(button.dataset.grade);
-      setLocalSaveResult(saved, effect.passed ? "复盘已通过" : "已缩短间隔", effect.leech ? "同一来源已失败 3 次，先减少新内容。" : "复盘结果已写入本机。", "复盘结果未写入本机缓存");
+      const graded = reviewRows().find((review) => review.id === button.dataset.reviewGrade);
+      const failed = graded?.status === "failed";
+      setLocalSaveResult(saved, failed ? "已缩短间隔" : "复盘已通过", graded?.leech ? "同一来源已失败 3 次，先减少新内容。" : "复盘结果已写入本机。", "复盘结果未写入本机缓存");
     });
   });
 }
@@ -5703,13 +5709,36 @@ function gradeReview(id, grade, reason = "") {
     item.status = "failed";
     item.failureReason = String(reason || item.failureReason || "需要回炉").trim();
     item.leech = effect.leech;
-    cloneShortReview(item, item.failureReason);
+    const schedule = reviewFamilySchedule(item, effect);
+    if (schedule.needsShortReview) cloneShortReview(item, item.failureReason);
+    else applySiblingReschedule(schedule.changed);
     return true;
   }
   item.done = true;
   item.status = "done";
   item.leech = false;
+  applySiblingReschedule(reviewFamilySchedule(item, effect).changed);
   return true;
+}
+
+function reviewFamilySchedule(item, effect) {
+  return rescheduleReviewFamily({
+    item,
+    siblings: reviewRows().filter((review) => review.sourceTaskId && review.sourceTaskId === item.sourceTaskId),
+    today: planTodayISO(),
+    passed: effect.passed,
+    failStreak: effect.failStreak
+  });
+}
+
+function applySiblingReschedule(change) {
+  if (!change?.id || !change.dueDate) return;
+  const sibling = reviewRows().find((review) => review.id === change.id);
+  if (!isActiveReviewItem(sibling)) return;
+  sibling.dueDate = change.dueDate;
+  sibling.failStreak = change.failStreak || 0;
+  sibling.leech = Boolean(change.leech);
+  sibling.updatedAt = new Date().toISOString();
 }
 
 const REVIEW_GRADE_LABELS = {
@@ -5738,6 +5767,8 @@ function cloneShortReview(item, reason) {
     delayCount: 0,
     failureReason: reason,
     quality: 0,
+    failStreak: item.failStreak || 0,
+    leech: Boolean(item.leech),
     updatedAt: now
   });
 }
@@ -6734,6 +6765,18 @@ function syllabusProgress(subject) {
   return { percent: syllabusSubjectDetail(subject).percent };
 }
 
+function syllabusMarkSummary() {
+  const details = ["math", "cs408", "english", "politics"].map((subject) => syllabusSubjectDetail(subject));
+  const total = details.reduce((sum, item) => sum + item.total, 0);
+  const marked = details.reduce((sum, item) => sum + item.done, 0);
+  const touched = details.reduce((sum, item) => sum + item.done + item.review, 0);
+  if (!touched || !total) {
+    return { value: "无样本", hint: "还没有考点被标记", nav: "—" };
+  }
+  const percent = Math.round(marked / total * 100);
+  return { value: `${percent}%`, hint: "已标记占比，不是做题正确率", nav: `${percent}%` };
+}
+
 function syllabusSubjectDetail(subject) {
   const data = syllabus[subject];
   let total = 0;
@@ -6844,8 +6887,8 @@ function renderReviewModeLayouts({ weekHours, coreRatio, mistakeRatio, activeDay
       <header><div><span>7 天执行复盘</span><h3>先看证据，再改计划</h3></div><strong>${escapeHtml(status)}</strong></header>
       <div class="review-operation-grid">
         <article><span>有效时长</span><strong>${weekHours.toFixed(1)}h</strong><p>14 天日均 ${avg14.toFixed(1)}h，检查趋势而不是单日峰值。</p></article>
-        <article><span>核心投入</span><strong>${Math.round(coreRatio * 100)}%</strong><p>数学与 408 看 7 天窗口，参考区间 60%-75%。</p></article>
-        <article><span>回炉结果</span><strong>${Math.round(mistakeRatio * 100)}%</strong><p>低于 70% 先减少新内容，不用追加整套资料。</p></article>
+        <article><span>核心投入</span><strong>${formatRatioPercent(coreRatio == null ? 0 : coreRatio, coreRatio == null ? 0 : 1)}</strong><p>${coreRatio == null ? "这 7 天还没有学习分钟。" : "数学与 408 看 7 天窗口，参考区间 60%-75%。"}</p></article>
+        <article><span>回炉结果</span><strong>${formatRatioPercent(mistakeRatio == null ? 0 : mistakeRatio, mistakeRatio == null ? 0 : 1)}</strong><p>${mistakeRatio == null ? "还没有新错题，这一格先空着。" : "低于 70% 先减少新内容，不用追加整套资料。"}</p></article>
         <article><span>月度容量</span><strong>${monthHours.toFixed(1)} / ${monthTarget}h</strong><p>这是排程容量，不是必须追满的绩效指标。</p></article>
       </div>
       <footer><strong>本周建议</strong><span>${escapeHtml(nextAction)}</span></footer>
@@ -6889,17 +6932,18 @@ function renderReview() {
   const days14 = lastDaysEntries(14);
   const weekHours = sumMinutes(week, "total") / 60;
   const avg14 = days14.length ? sumMinutes(days14, "total") / 60 / 14 : 0;
-  const coreRatio = sumMinutes(week, "total") ? sumMinutes(week, "core") / sumMinutes(week, "total") : 0;
+  const weekTotal = sumMinutes(week, "total");
+  const coreRatio = weekTotal ? sumMinutes(week, "core") / weekTotal : null;
   const newMistakes = sumMinutes(week, "newMistakes");
   const fixedMistakes = sumMinutes(week, "fixedMistakes");
-  const mistakeRatio = newMistakes ? fixedMistakes / newMistakes : 1;
+  const mistakeRatio = newMistakes ? fixedMistakes / newMistakes : null;
   const activeDays = new Set(week.filter((entry) => entry.total > 0).map((entry) => entry.date)).size;
   const planDate = planTodayISO();
   const monthHours = sumMinutes(entriesArray().filter((entry) => entry.date.startsWith(planDate.slice(0, 7))), "total") / 60;
   const currentMonth = monthlyPlan.find((row) => planDate.startsWith(row[0]));
   const monthTarget = currentMonth ? currentMonth[1] : phase.weeklyTarget * 4;
   const dueCount = reviewRows().filter((item) => isReviewDue(item, planDate)).length;
-  const avgSyllabus = Math.round(["math", "cs408", "english", "politics"].reduce((sum, subject) => sum + syllabusProgress(subject).percent, 0) / 4);
+  const syllabusMark = syllabusMarkSummary();
   const learningStatus = reviewPosture({
     dueCount,
     activeDays,
@@ -6917,7 +6961,7 @@ function renderReview() {
     ["14天日均", `${avg14.toFixed(1)}h`, "判断曲线，不看单日"],
     ["本月累计", `${monthHours.toFixed(1)}h`, `月目标 ${monthTarget}h`],
     ["到期复盘", `${dueCount} 项`, dueCount ? "先清到期再开新内容" : "队列正常"],
-    ["考纲证据", `${avgSyllabus}%`, "四科平均掌握标记"],
+    ["考纲证据", syllabusMark.value, syllabusMark.hint],
     ["负荷建议", learningStatus, "按完成率与复盘积压调整难度"]
   ];
 

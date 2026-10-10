@@ -39,13 +39,19 @@ async function routeState(page, route) {
     const topLevelPanels = [...(active?.querySelectorAll(":scope > .content-grid > .panel, :scope > .today-workbench > .panel, :scope > .today-workbench > .detail-section") || [])]
       .filter((element) => getComputedStyle(element).display !== "none" && element.getClientRects().length);
     const topbar = document.querySelector(".topbar");
+    const main = document.querySelector(".main");
     const contentTrack = active?.querySelector(":scope > .today-workbench, :scope > .content-grid, :scope > .focus-board");
     const topbarRect = topbar?.getBoundingClientRect();
+    const mainRect = main?.getBoundingClientRect();
     const contentTrackRect = contentTrack?.getBoundingClientRect();
     const alignment = topbarRect && contentTrackRect ? {
       centerDelta: Math.abs((topbarRect.left + topbarRect.right) / 2 - (contentTrackRect.left + contentTrackRect.right) / 2),
       leftDelta: Math.abs(topbarRect.left - contentTrackRect.left),
       rightDelta: Math.abs(topbarRect.right - contentTrackRect.right)
+    } : null;
+    const coverage = topbarRect && mainRect ? {
+      leftDelta: Math.abs(topbarRect.left - mainRect.left),
+      rightDelta: Math.abs(topbarRect.right - mainRect.right)
     } : null;
     const isGreenColor = (value) => {
       const channels = String(value || "").match(/[\d.]+/g)?.map(Number) || [];
@@ -108,6 +114,7 @@ async function routeState(page, route) {
       resourceStageRows: visibleCount(".resource-stage-row"),
       resourceDossierTabs: visibleCount("[data-resource-dossier-subject]"),
       alignment,
+      coverage,
       panelOverlaps,
       greenSurfaceDetails,
       brokenTextBlocks: [...(active?.querySelectorAll("p, dd, li") || [])].filter((element) => {
@@ -164,8 +171,7 @@ try {
       assert(state.panelOverlaps.length === 0, `${mode}/${route} has overlapping top-level panels: ${JSON.stringify(state.panelOverlaps)}.`);
       assert(state.brokenTextBlocks === 0, `${mode}/${route} contains long text in an implausibly narrow column: ${JSON.stringify(state.brokenTextDetails)}.`);
       assert(state.greenSurfaceDetails.length === 0, `${mode}/${route} still contains green or teal backgrounds: ${JSON.stringify(state.greenSurfaceDetails)}.`);
-      assert(state.alignment && state.alignment.centerDelta <= 1, `${mode}/${route} topbar and content do not share a center line: ${JSON.stringify(state.alignment)}.`);
-      assert(state.alignment.leftDelta <= 1 && state.alignment.rightDelta <= 1, `${mode}/${route} topbar and content track edges do not align: ${JSON.stringify(state.alignment)}.`);
+      assert(state.coverage && state.coverage.leftDelta <= 1 && state.coverage.rightDelta <= 1, `${mode}/${route} topbar does not span the main column: ${JSON.stringify(state.coverage)}.`);
       if (mode === "focus") {
         assert(state.visibleBalanced === 0 && state.visibleDetail === 0, `${route} leaks execution or diagnostic surfaces into focus mode.`);
       } else if (mode === "balanced") {

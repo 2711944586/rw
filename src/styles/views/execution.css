@@ -311,6 +311,8 @@ body[data-density] .view {
 
   body[data-density] .topbar {
     top: 0;
+    width: auto;
+    max-width: none;
     margin: 0;
     border: 0;
     border-bottom: 1px solid var(--plan-line);

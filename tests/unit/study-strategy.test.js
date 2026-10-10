@@ -130,6 +130,11 @@ describe('study-strategy', () => {
     expect(windows.find((item) => item.key === 'overdue')?.count).toBe(1);
     expect(windows.find((item) => item.key === 'today')?.count).toBe(1);
     expect(reviewLoadSignal([{ id: 'a', dueDate: '2026-06-01' }], '2026-06-02').level).toBe('risk');
+    expect(reviewLoadSignal([], '2026-06-02')).toMatchObject({
+      level: 'ok',
+      label: '还没有复盘',
+    });
+    expect(reviewLoadSignal([{ id: 'later', dueDate: '2026-06-09', done: false }], '2026-06-02').label).toBe('无到期');
   });
 
   it('skips malformed review windows without producing NaN totals', () => {

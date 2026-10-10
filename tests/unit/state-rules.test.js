@@ -27,6 +27,7 @@ import {
   filterReviewItemsFromStart,
   filterTaskStateFromStart,
   firstSafeStateKey,
+  defaultSyncState,
   freshState,
   hasMalformedDatePrefix,
   isOnOrAfterPlanStart,
@@ -100,6 +101,8 @@ describe('state rules: freshState', () => {
     expect(state.user).toBeNull();
     expect(state.sync.status).toBe('local');
     expect(state.sync.pending).toBe(false);
+    expect(defaultSyncState({ status: 'conflict', lastError: 'duplicate key', pending: true }).status).toBe('conflict');
+    expect(defaultSyncState({ status: 'not-a-status' }).status).toBe('local');
     expect(state.entries).toEqual({});
     expect(state.scores).toEqual([]);
     expect(state.deleted).toEqual({ records: [], scores: [], tasks: [], reviews: [] });

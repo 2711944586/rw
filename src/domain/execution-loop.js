@@ -174,12 +174,88 @@ export function decodeLoadNote(note = "") {
   };
 }
 
+function isoDay(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || "").trim());
+  if (!match) return null;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return date.toISOString().slice(0, 10) === match[0] ? date : null;
+}
+
+function addIsoDays(value, days) {
+  const date = isoDay(value);
+  if (!date) return "";
+  date.setUTCDate(date.getUTCDate() + Math.round(finiteNumber(days, 0)));
+  return date.toISOString().slice(0, 10);
+}
+
+function intervalDaysFromRound(round) {
+  const match = /D\+(\d+)/.exec(String(round || ""));
+  const day = match ? Number(match[1]) : 1;
+  return Number.isFinite(day) && day > 0 ? day : 1;
+}
+
+function isOpenReview(item) {
+  return Boolean(item) && !item.done && !["done", "failed"].includes(item.status);
+}
+
+/**
+ * Move only the next future checkpoint for the same source task.
+ * A pass pushes it out to at least today plus its own interval.
+ * A fail pulls it in to tomorrow and carries the fail streak.
+ * History is kept: nothing is deleted, and a pass never creates a new card.
+ */
+export function rescheduleReviewFamily({ item = null, siblings = [], today = "", passed = false, failStreak = 0 } = {}) {
+  const todayKey = isoDay(today)?.toISOString().slice(0, 10) || "";
+  const upcoming = (Array.isArray(siblings) ? siblings : [])
+    .filter((sibling) => isOpenReview(sibling) && sibling.id !== item?.id && sibling.dueDate > todayKey)
+    .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+  const next = upcoming[0];
+  if (!next || !todayKey) {
+    return { changed: null, needsShortReview: !passed };
+  }
+  if (!passed) {
+    const tomorrow = addIsoDays(todayKey, 1);
+    return {
+      changed: {
+        id: next.id,
+        dueDate: next.dueDate > tomorrow ? tomorrow : next.dueDate,
+        failStreak,
+        leech: failStreak >= 3
+      },
+      needsShortReview: false
+    };
+  }
+  const earliest = addIsoDays(todayKey, intervalDaysFromRound(next.round));
+  if (!earliest || next.dueDate >= earliest) return { changed: null, needsShortReview: false };
+  return {
+    changed: { id: next.id, dueDate: earliest, failStreak: 0, leech: false },
+    needsShortReview: false
+  };
+}
+
+export function formatRatioPercent(part, whole) {
+  const denominator = finiteNumber(whole, 0);
+  if (denominator <= 0) return "无样本";
+  return `${Math.round(finiteNumber(part, 0) / denominator * 100)}%`;
+}
+
 /**
  * One review conclusion for every density. The banner and the weekly tiles
  * used to answer the same week with opposite advice.
- * @param {{ dueCount?: number, activeDays?: number, mistakeRatio?: number, weekHours?: number, weeklyTarget?: number, coreRatio?: number }} input
+ * A missing mistake ratio means there is no sample, not a perfect recovery.
+ * @param {{ dueCount?: number, activeDays?: number, mistakeRatio?: number|null, weekHours?: number, weeklyTarget?: number, coreRatio?: number|null }} input
  */
 export function reviewPosture({ dueCount = 0, activeDays = 0, mistakeRatio = 1, weekHours = 0, weeklyTarget = 0, coreRatio = 0 } = {}) {
+  const due = finiteNumber(dueCount, 0);
+  const daysActive = finiteNumber(activeDays, 0);
+  const hours = finiteNumber(weekHours, 0);
+  if (due <= 0 && daysActive <= 0 && hours <= 0) {
+    return {
+      status: "还没有样本",
+      action: "先记一天有效学习，再判断节奏。",
+      load: "先记录再判断"
+    };
+  }
   if (dueCount > 3) {
     return {
       status: "先清复盘",
@@ -194,7 +270,8 @@ export function reviewPosture({ dueCount = 0, activeDays = 0, mistakeRatio = 1, 
       load: "先恢复底线日"
     };
   }
-  if (mistakeRatio < 0.7) {
+  const mistakeKnown = mistakeRatio != null && Number.isFinite(Number(mistakeRatio));
+  if (mistakeKnown && Number(mistakeRatio) < 0.7) {
     return {
       status: "先修复错因",
       action: "只修复本周重复最多的一个错因。",
@@ -216,10 +293,11 @@ export function reviewPosture({ dueCount = 0, activeDays = 0, mistakeRatio = 1, 
 }
 
 /**
- * Bottom-line day when either signal is present:
- * completion stays under 60% for 3 recorded days, or two latest nights are under 7 hours.
+ * Bottom-line day when any signal is present:
+ * completion stays under 60% for 3 recorded days, two latest nights are under 7 hours,
+ * or more than 3 reviews are due.
  */
-export function shouldUseBottomLine(days = []) {
+export function shouldUseBottomLine(days = [], options = {}) {
   const recent = Array.isArray(days) ? days.slice(-3) : [];
   const lowCompletion = recent.length >= 3 && recent.every((day) => {
     const planned = finiteNumber(day?.plannedMinutes);
@@ -231,7 +309,8 @@ export function shouldUseBottomLine(days = []) {
     .filter((hours) => hours > 0)
     .slice(-2);
   const shortSleep = nights.length >= 2 && nights.every((hours) => hours < 7);
-  return { lowCompletion, shortSleep, active: lowCompletion || shortSleep };
+  const reviewDebt = finiteNumber(options?.dueCount, 0) > 3;
+  return { lowCompletion, shortSleep, reviewDebt, active: lowCompletion || shortSleep || reviewDebt };
 }
 
 export function completionRatio(plannedMinutes, doneMinutes) {

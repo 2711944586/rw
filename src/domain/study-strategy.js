@@ -333,8 +333,10 @@ export function reviewLoadSignal(reviewItems = [], today, controls = DEFAULT_PLA
   const next7 = windows.filter((item) => ['today', 'soon', 'week'].includes(item.key)).reduce((sum, item) => sum + item.count, 0);
   if (overdue > 0) return { level: 'risk', label: `${overdue} 项逾期`, action: '先清逾期复盘，今日减少新内容。' };
   if (due >= 4 || next7 >= 10) return { level: 'warn', label: `${next7} 项 7 天内`, action: '复盘债务偏高，建议把新考点上限调到 1-2。' };
+  const active = windows.reduce((sum, item) => sum + item.count, 0);
+  if (active <= 0) return { level: 'ok', label: '还没有复盘', action: '完成任务后才会出现检查点。' };
   if (due > 0) return { level: 'ok', label: `${due} 项今日到期`, action: '先完成到期复盘，再开新内容。' };
-  return { level: 'ok', label: '队列健康', action: '保持 D+1/D+3/D+7/D+14/D+30 滚动。' };
+  return { level: 'ok', label: '无到期', action: '后面的检查点还没到期。' };
 }
 
 export function recommendPlanAdjustment(metrics = {}, controls = DEFAULT_PLAN_CONTROLS, phaseId = 'A') {

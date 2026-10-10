@@ -12,6 +12,8 @@ import {
   validateCompletionEvidence,
   weeklyReviewPrompt,
   reviewPosture,
+  formatRatioPercent,
+  rescheduleReviewFamily,
   REVIEW_RESULTS
 } from "../../src/domain/execution-loop.js";
 
@@ -60,6 +62,8 @@ describe("execution loop", () => {
     ]);
     expect(sleepy.shortSleep).toBe(true);
     expect(shouldUseBottomLine([{ plannedMinutes: 100, doneMinutes: 80, sleepHours: 7.5 }]).active).toBe(false);
+    expect(shouldUseBottomLine([], { dueCount: 4 })).toMatchObject({ active: true, reviewDebt: true });
+    expect(shouldUseBottomLine([], { dueCount: 3 }).reviewDebt).toBe(false);
   });
 
   it("previews kept and replaced tasks and protects locked work", () => {
@@ -112,6 +116,52 @@ describe("execution loop", () => {
     const quiet = reviewPosture({ dueCount: 0, activeDays: 6, mistakeRatio: 1, weekHours: 14, weeklyTarget: 14, coreRatio: 0.7 });
     expect(quiet.status).toBe("维持节奏");
     expect(quiet.load).toBe("可小幅加难度");
+    const empty = reviewPosture({ dueCount: 0, activeDays: 0, mistakeRatio: null, weekHours: 0, weeklyTarget: 24, coreRatio: null });
+    expect(empty.status).toBe("还没有样本");
+    expect(empty.action).toContain("先记一天");
+    const noMistakes = reviewPosture({ dueCount: 0, activeDays: 5, mistakeRatio: null, weekHours: 10, weeklyTarget: 14, coreRatio: 0.7 });
+    expect(noMistakes.status).not.toBe("先修复错因");
+  });
+
+  it("lengthens the next checkpoint after a pass and shortens it after a fail", () => {
+    const item = { id: "task-r1", sourceTaskId: "task", round: "D+1", dueDate: "2026-10-10" };
+    const sibling = { id: "task-r3", sourceTaskId: "task", round: "D+3", dueDate: "2026-10-12", done: false, status: "due" };
+    const passed = rescheduleReviewFamily({
+      item,
+      siblings: [item, sibling],
+      today: "2026-10-10",
+      passed: true,
+      failStreak: 0
+    });
+    expect(passed.needsShortReview).toBe(false);
+    expect(passed.changed).toMatchObject({ id: "task-r3", dueDate: "2026-10-13" });
+
+    const failed = rescheduleReviewFamily({
+      item,
+      siblings: [item, sibling],
+      today: "2026-10-10",
+      passed: false,
+      failStreak: 3
+    });
+    expect(failed.needsShortReview).toBe(false);
+    expect(failed.changed).toMatchObject({ id: "task-r3", dueDate: "2026-10-11", failStreak: 3, leech: true });
+
+    const alone = rescheduleReviewFamily({
+      item,
+      siblings: [item],
+      today: "2026-10-10",
+      passed: false,
+      failStreak: 1
+    });
+    expect(alone.needsShortReview).toBe(true);
+    expect(alone.changed).toBeNull();
+  });
+
+  it("does not turn a zero denominator into 100 percent", () => {
+    expect(formatRatioPercent(0, 0)).toBe("无样本");
+    expect(formatRatioPercent(0, -1)).toBe("无样本");
+    expect(formatRatioPercent(1, 2)).toBe("50%");
+    expect(formatRatioPercent(3, 4)).toBe("75%");
   });
 
   it("keeps review grades inside the cloud result vocabulary", () => {

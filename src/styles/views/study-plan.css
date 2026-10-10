@@ -139,7 +139,6 @@ body[data-density="balanced"],
 body[data-density="detail"] {
   --density-view-width: 1180px;
   --density-track-width: 1120px;
-  --density-shell-gutter: 48px;
   --density-panel-padding: 24px;
   --density-heading-size: 22px;
   --density-copy-size: 14px;
@@ -147,8 +146,9 @@ body[data-density="detail"] {
 
 @media (min-width: 901px) {
   body[data-density] .topbar {
-    width: min(var(--density-track-width), calc(100% - var(--density-shell-gutter)));
-    margin-inline: auto;
+    width: auto;
+    max-width: none;
+    margin: 0;
     border: 0;
     border-bottom: 1px solid var(--plan-line);
     border-radius: 0;
