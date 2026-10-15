@@ -72,7 +72,8 @@ export function problemFieldForSubject(subject) {
  */
 export function validateCompletionEvidence(input = {}) {
   const minutes = Number(input.minutes);
-  const problems = Number(input.problems);
+  const rawProblems = input.problems;
+  const problems = rawProblems === "" || rawProblems == null ? 0 : Number(rawProblems);
   const mistake = textValue(input.mistake, 300);
   const nextTask = textValue(input.nextTask, 300);
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > 240) {
@@ -81,12 +82,28 @@ export function validateCompletionEvidence(input = {}) {
   if (!Number.isInteger(problems) || problems < 0 || problems > 999) {
     return { ok: false, message: "题量请填写 0-999 的整数。" };
   }
-  if (!mistake) return { ok: false, message: "请写一条错因或收获。" };
-  if (!nextTask) return { ok: false, message: "请写明日第一任务。" };
   return {
     ok: true,
     evidence: { minutes, problems, mistake, nextTask }
   };
+}
+
+/**
+ * One-click completion uses the planned minutes.
+ * Mistake notes and the next-task line stay optional.
+ */
+export function buildQuickCompletionEvidence(task = {}, extra = {}) {
+  const explicitMinutes = Number(extra.minutes);
+  const planned = Number.isInteger(explicitMinutes) && explicitMinutes >= 1
+    ? explicitMinutes
+    : Math.min(240, Math.max(1, Math.round(Number(task.minutes) || 25)));
+  const explicitProblems = extra.problems;
+  return validateCompletionEvidence({
+    minutes: planned,
+    problems: explicitProblems === "" || explicitProblems == null ? 0 : explicitProblems,
+    mistake: extra.mistake ?? "",
+    nextTask: extra.nextTask ?? ""
+  });
 }
 
 /**
@@ -109,12 +126,14 @@ export function applyCompletionEvidence(entry = {}, task = {}, evidence = {}) {
   const minuteKey = subjectEntryKey(task.subject);
   if (minuteKey) apply(minuteKey, finiteNumber(next[minuteKey]) + evidence.minutes);
   const problemKey = problemFieldForSubject(task.subject);
-  if (problemKey) apply(problemKey, finiteNumber(next[problemKey]) + evidence.problems);
+  if (problemKey && finiteNumber(evidence.problems) > 0) {
+    apply(problemKey, finiteNumber(next[problemKey]) + evidence.problems);
+  }
   next.quality = clampInteger(next.quality, 1, 5, 3);
-  next.nextTask = evidence.nextTask;
+  if (evidence.nextTask) next.nextTask = evidence.nextTask;
   const note = textValue(next.note, 2000);
-  const line = `${task.subject || "任务"}：${evidence.mistake}`;
-  next.note = note.includes(line) ? note : textValue(note ? `${note}；${line}` : line, 2000);
+  const line = evidence.mistake ? `${task.subject || "任务"}：${evidence.mistake}` : "";
+  if (line) next.note = note.includes(line) ? note : textValue(note ? `${note}；${line}` : line, 2000);
   return {
     entry: next,
     impact: {

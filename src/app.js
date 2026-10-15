@@ -139,7 +139,7 @@ import {
   sanitizeLoadTier,
   sanitizeSleepHours,
   shouldUseBottomLine,
-  validateCompletionEvidence,
+  buildQuickCompletionEvidence,
   weeklyReviewPrompt
 } from "./domain/execution-loop.js";
 
@@ -2743,7 +2743,7 @@ function bindStudySession() {
     if (field) field.value = String(minutes);
     const saved = saveState();
     renderSessionBar();
-    setLocalSaveResult(saved, "计时已结束", "在这一张表里记下题量、错因和明日第一项。", "计时未写入本机缓存");
+    setLocalSaveResult(saved, "计时已结束", "结束计时后可直接保存，错因和明日第一项可后补。", "计时未写入本机缓存");
   });
   document.getElementById("sessionResultForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -2754,11 +2754,12 @@ function bindStudySession() {
       return;
     }
     const form = event.currentTarget;
-    const evidence = validateCompletionEvidence({
-      minutes: Number(new FormData(form).get("minutes")),
-      problems: Number(new FormData(form).get("problems")),
-      mistake: new FormData(form).get("mistake"),
-      nextTask: new FormData(form).get("nextTask")
+    const data = new FormData(form);
+    const evidence = buildQuickCompletionEvidence(task, {
+      minutes: Number(data.get("minutes")),
+      problems: data.get("problems"),
+      mistake: data.get("mistake"),
+      nextTask: data.get("nextTask")
     });
     if (!evidence.ok) {
       showToast(evidence.message);
@@ -4724,46 +4725,15 @@ function renderTasks(force = false, date = planTodayISO()) {
   renderFocusBoard(tasks);
   renderAcceptance(tasks);
 
-  document.querySelectorAll("#todayTasks [data-task]").forEach((checkbox) => {
-    checkbox.addEventListener("change", () => {
-      const task = tasks.find((item) => item.id === checkbox.dataset.task);
-      if (!checkbox.checked) {
-        state.tasks[checkbox.dataset.task] = false;
-        if (task) markTaskTodo(task);
-        const saved = saveState();
-        renderTasks();
-        renderReviewQueue();
-        renderDashboard();
-        renderWeekPlanner();
-        if (!saved) {
-          setLocalSaveResult(false, "任务状态已保存", "任务状态已写入本机缓存。", "任务取消完成未写入本机缓存");
-        }
-        return;
-      }
-      checkbox.checked = false;
-      if (task) task.status = task.status === "done" ? "done" : "todo";
-      openTaskCapture(checkbox.dataset.task);
-    });
-  });
-  document.querySelectorAll("#todayTasksPreview [data-task], #dailyPlan [data-task]").forEach((checkbox) => {
+  document.querySelectorAll("#todayTasks [data-task], #todayTasksPreview [data-task], #dailyPlan [data-task]").forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
       const task = tasks.find((item) => item.id === checkbox.dataset.task);
       if (!task) return;
-      if (checkbox.checked) {
-        checkbox.checked = false;
-        openTaskCapture(task.id);
+      if (!checkbox.checked) {
+        undoTaskCompletion(task);
         return;
       }
-      state.tasks[task.id] = false;
-      markTaskTodo(task);
-      const saved = saveState();
-      renderTasks();
-      renderReviewQueue();
-      renderDashboard();
-      renderWeekPlanner();
-      if (!saved) {
-        setLocalSaveResult(false, "任务状态已保存", "任务状态已写入本机缓存。", "任务取消完成未写入本机缓存");
-      }
+      completeTaskQuickly(task);
     });
   });
   bindTaskCapture(tasks);
@@ -4798,15 +4768,17 @@ function markTaskTodo(task) {
 function renderCaptureForm(task) {
   const taskId = escapeAttr(task.id);
   const open = taskCaptureId === task.id;
+  const minutes = Number(task.actualMinutes) || Number(task.minutes) || 25;
+  const problems = Number(task.actualProblems) || 0;
   return `
     <form class="task-capture" data-capture-for="${taskId}" ${open ? "" : "hidden"}>
-      <label>有效分钟<input name="minutes" type="number" min="1" max="240" inputmode="numeric" value="${Number(task.minutes) || 25}" required></label>
-      <label>题量<input name="problems" type="number" min="0" max="999" inputmode="numeric" value="0" required></label>
-      <label class="span-2">错因或收获<input name="mistake" type="text" maxlength="300" required placeholder="错在哪"></label>
-      <label class="span-2">明日第一任务<input name="nextTask" type="text" maxlength="300" required placeholder="明天第一项"></label>
+      <label>有效分钟<input name="minutes" type="number" min="1" max="240" inputmode="numeric" value="${minutes}"></label>
+      <label>题量<input name="problems" type="number" min="0" max="999" inputmode="numeric" value="${problems}"></label>
+      <label class="span-2">错因或收获（可选）<input name="mistake" type="text" maxlength="300" placeholder="可后补"></label>
+      <label class="span-2">明日第一任务（可选）<input name="nextTask" type="text" maxlength="300" placeholder="可后补"></label>
       <div class="task-capture-actions">
         <button type="button" data-session-start="${taskId}">开始计时</button>
-        <button type="submit" class="primary-button">保存并完成</button>
+        <button type="submit" class="primary-button">补记并完成</button>
         <button type="button" data-capture-cancel="${taskId}">取消</button>
       </div>
     </form>
@@ -4820,7 +4792,7 @@ function openTaskCapture(taskId) {
   document.querySelectorAll("[data-capture-for]").forEach((form) => {
     form.hidden = form.dataset.captureFor !== taskId;
   });
-  document.querySelector(`[data-capture-for="${CSS.escape(taskId)}"] [name="mistake"]`)?.focus();
+  document.querySelector(`[data-capture-for="${CSS.escape(taskId)}"] [name="minutes"]`)?.focus();
 }
 
 function bindTaskCapture(tasks) {
@@ -4829,11 +4801,12 @@ function bindTaskCapture(tasks) {
       event.preventDefault();
       const task = tasks.find((item) => item.id === form.dataset.captureFor);
       if (!task) return;
-      const evidence = validateCompletionEvidence({
-        minutes: Number(new FormData(form).get("minutes")),
-        problems: Number(new FormData(form).get("problems")),
-        mistake: new FormData(form).get("mistake"),
-        nextTask: new FormData(form).get("nextTask")
+      const data = new FormData(form);
+      const evidence = buildQuickCompletionEvidence(task, {
+        minutes: Number(data.get("minutes")),
+        problems: data.get("problems"),
+        mistake: data.get("mistake"),
+        nextTask: data.get("nextTask")
       });
       if (!evidence.ok) {
         showToast(evidence.message);
@@ -4857,11 +4830,41 @@ function bindTaskCapture(tasks) {
   });
 }
 
-function commitTaskCompletion(task, evidence) {
-  const date = task.date || planTodayISO();
+function completeTaskQuickly(task) {
+  const planned = findPlannedTask(task?.id) || task;
+  if (!planned || isTaskDone(planned, state.tasks) || planned.status === "done") return;
+  const evidence = buildQuickCompletionEvidence(planned);
+  if (!evidence.ok) {
+    showToast(evidence.message);
+    openTaskCapture(planned.id);
+    return;
+  }
+  commitTaskCompletion(planned, evidence.evidence, { toast: "已勾选完成。错因和明日第一项可后补。" });
+}
+
+function undoTaskCompletion(task) {
+  const planned = findPlannedTask(task?.id) || task;
+  if (!planned) return;
+  state.tasks[planned.id] = false;
+  markTaskTodo(planned);
+  const saved = saveState();
+  renderTasks();
+  renderReviewQueue();
+  renderDashboard();
+  renderWeekPlanner();
+  if (!saved) {
+    setLocalSaveResult(false, "任务状态已保存", "任务状态已写入本机缓存。", "任务取消完成未写入本机缓存");
+  } else {
+    showToast("已取消完成。");
+  }
+}
+
+function commitTaskCompletion(task, evidence, options = {}) {
+  const planned = findPlannedTask(task?.id) || task;
+  const date = planned.date || task.date || planTodayISO();
   ensureLearningContainers();
   const current = entryRow(date) || {};
-  const applied = applyCompletionEvidence(current, { ...task, date }, evidence);
+  const applied = applyCompletionEvidence(current, { ...planned, date }, evidence);
   applied.entry.note = encodeLoadNote(applied.entry.note, {
     loadTier: applied.entry.loadTier,
     sleepHours: applied.entry.sleepHours,
@@ -4870,23 +4873,33 @@ function commitTaskCompletion(task, evidence) {
   applied.entry.updatedAt = new Date().toISOString();
   unmarkDeleted("records", date);
   state.entries[date] = applied.entry;
-  task.status = "done";
-  task.completedAt = new Date().toISOString();
-  task.actualMinutes = evidence.minutes;
-  task.actualProblems = evidence.problems;
-  task.evidenceSubmitted = true;
-  task.recordApplied = true;
-  task.recordImpact = applied.impact;
-  task.updatedAt = task.completedAt;
-  state.tasks[task.id] = true;
-  if (task.reviewItemId) {
-    const item = reviewRows().find((review) => review.id === task.reviewItemId);
+  const now = new Date().toISOString();
+  const completion = {
+    status: "done",
+    completedAt: now,
+    actualMinutes: evidence.minutes,
+    actualProblems: evidence.problems,
+    evidenceSubmitted: true,
+    recordApplied: true,
+    recordImpact: applied.impact,
+    updatedAt: now
+  };
+  weekPlanEntries().forEach(([, tasks]) => {
+    tasks.filter((item) => item.id === planned.id).forEach((item) => {
+      Object.assign(item, completion);
+    });
+  });
+  Object.assign(planned, completion);
+  if (planned !== task) Object.assign(task, completion);
+  state.tasks[planned.id] = true;
+  if (planned.reviewItemId) {
+    const item = reviewRows().find((review) => review.id === planned.reviewItemId);
     if (item) item.done = true;
   } else {
-    scheduleReviewForTask(task.id, task);
+    scheduleReviewForTask(planned.id, planned);
   }
   taskCaptureId = "";
-  if (openStudySession?.taskId === task.id) {
+  if (openStudySession?.taskId === planned.id) {
     rememberSession(finishStudySession(openStudySession));
     openStudySession = null;
   }
@@ -4900,7 +4913,7 @@ function commitTaskCompletion(task, evidence) {
   if (!saved) {
     setLocalSaveResult(false, "任务状态已保存", "任务状态已写入本机缓存。", "任务完成状态未写入本机缓存");
   } else {
-    showToast("已保存完成证据，并安排复盘。");
+    showToast(options.toast || "已完成，并安排复盘。");
   }
 }
 
@@ -5384,7 +5397,7 @@ function buildDailyTasks(force = false, date = planTodayISO(), options = {}) {
     state.weekPlans[date].forEach((task) => {
       if (typeof state.tasks[task.id] === "undefined") state.tasks[task.id] = task.status === "done";
     });
-    return taskBuildResult(activeExisting, true, options);
+    return taskBuildResult(state.weekPlans[date].filter((task) => task.status !== "shifted"), true, options);
   }
   const locked = existing.filter((task) => task.locked);
   const lockedActive = [...locked, ...carried].filter((task) => task.status !== "shifted");
@@ -5393,10 +5406,17 @@ function buildDailyTasks(force = false, date = planTodayISO(), options = {}) {
   const merged = [...lockedActive];
   const budget = dailyBudgetMinutes(date);
   generated.forEach((task) => {
-    if (merged.length >= targetCount) return;
-    if (!merged.some((item) => item.subject === task.subject && item.text === task.text)) merged.push(task);
+    if (merged.some((item) => item.subject === task.subject && item.text === task.text)) return;
+    merged.push(task);
   });
-  const nextTasks = normalizeTaskList(trimTasksToBudget(merged.slice(0, targetCount), budget, targetCount), date);
+  const hasEnglish = merged.some((task) => task.subject === "英语");
+  const hasPolitics = merged.some((task) => task.subject === "政治");
+  const planCount = Math.min(4, Math.max(
+    targetCount,
+    hasEnglish ? 3 : 0,
+    hasEnglish && hasPolitics && targetCount >= 3 ? 4 : 0
+  ));
+  const nextTasks = normalizeTaskList(trimTasksToBudget(preferEnglishTasks(merged, planCount), budget, planCount), date);
   const nextIds = new Set(nextTasks.map((task) => task.id));
   existing
     .filter((task) => task.status !== "shifted" && !task.locked && !nextIds.has(task.id))
@@ -5483,7 +5503,7 @@ function createDailyTasks(date = planTodayISO()) {
   const reviewReserve = controls.enabledSubjects.includes("review") && targetCount > 3 ? Math.max(15, roundToFive(budget * (weights.review || 0.08))) : 0;
   const politicsDay = Boolean(topicPolitics && weights.politics > 0 && parseDate(date).getDay() % 2 === 0);
   const englishReserve = controls.enabledSubjects.includes("english") ? Math.max(vocab.minutesFloor, Math.min(englishMinutes, 60)) : 0;
-  const nonCoreReserve = (politicsDay ? politicsMinutes : englishReserve) + reviewReserve;
+  const nonCoreReserve = englishReserve + (politicsDay ? politicsMinutes : 0) + reviewReserve;
   const minimumCore = Math.round(budget * (state.settings.coreRatio || 65) / 100);
   const coreMinutes = Math.max(coreFloor * 2, minimumCore, budget - nonCoreReserve);
   const goal = activeStudyGoal();
@@ -5509,10 +5529,11 @@ function createDailyTasks(date = planTodayISO()) {
       priority: 3
     });
   }
+  if (controls.enabledSubjects.includes("english")) {
+    tasks.push(englishTaskForDate(date, phase, topicEnglish, englishMinutes));
+  }
   if (topicPolitics && politicsDay && controls.enabledSubjects.includes("politics")) {
     tasks.push(topicTask(date, phase, "政治", topicPolitics, politicsMinutes, "基础框架、选择题、背诵"));
-  } else if (controls.enabledSubjects.includes("english")) {
-    tasks.push(englishTaskForDate(date, phase, topicEnglish, englishMinutes));
   }
 
   if (topicPolitics && !politicsDay && controls.enabledSubjects.includes("politics") && tasks.length < targetCount) {
@@ -5572,9 +5593,14 @@ function createDailyTasks(date = planTodayISO()) {
   const effectiveControls = reviewPressure >= 3
     ? { ...controls, maxNewTopics: Math.min(controls.maxNewTopics, 2) }
     : controls;
-  const effectiveTargetCount = controls.enabledSubjects.includes("english") && reviewPressure > 0
-    ? Math.min(4, Math.max(targetCount + 1, targetCount))
-    : targetCount;
+  let effectiveTargetCount = targetCount;
+  if (controls.enabledSubjects.includes("english")) {
+    effectiveTargetCount = Math.max(effectiveTargetCount, 3);
+  }
+  if (politicsDay && controls.enabledSubjects.includes("politics") && targetCount >= 3) {
+    effectiveTargetCount = Math.max(effectiveTargetCount, 4);
+  }
+  effectiveTargetCount = Math.min(4, effectiveTargetCount);
   const ordered = capacityOrderDailyTasks(tasks.filter(Boolean), {
     availableMinutes: budget,
     phaseId: phase.id,
@@ -5606,15 +5632,31 @@ function englishTaskForDate(date, phase, topic, minutes) {
 }
 
 function ensureEnglishDripTask(tasks, options) {
-  const { date, phase, topic, minutes, controls, targetCount, reviewPressure } = options;
+  const { date, phase, topic, minutes, controls, reviewPressure } = options;
   if (!controls.enabledSubjects.includes("english")) return;
   if (tasks.some((task) => task.subject === "英语")) return;
-  if (targetCount <= 2 && reviewPressure >= 2) return;
   const task = englishTaskForDate(date, phase, topic, minutes);
   task.id = `${date}-${phase.id}-english-drip`;
-  task.priority = reviewPressure ? 5 : 4;
+  task.priority = reviewPressure ? 5 : 3.5;
   task.source = "english-drip";
   tasks.push(task);
+}
+
+function preferEnglishTasks(tasks, targetCount) {
+  const list = Array.isArray(tasks) ? tasks.filter(Boolean) : [];
+  const english = list.filter((task) => task.subject === "英语");
+  if (!english.length || list.length <= targetCount) return list;
+  const rest = list.filter((task) => task.subject !== "英语");
+  const core = rest.filter((task) => (
+    task.subject === "数学"
+    || task.subject === "408"
+    || task.locked
+    || task.source === "carryover"
+    || task.reviewItemId
+  ));
+  const extras = rest.filter((task) => !core.includes(task));
+  const room = Math.max(0, targetCount - core.length - english.length);
+  return [...core, ...english, ...extras.slice(0, room)];
 }
 
 function normalizeTaskList(tasks, date) {
@@ -5696,14 +5738,19 @@ function bottomLineMinutes(phase = getCurrentPhase()) {
 
 function trimTasksToBudget(tasks, budget, targetCount) {
   const hardBudget = Math.max(0, budget || 0);
-  const hasCarryover = tasks.some((task) => task.source === "carryover");
-  const hasEnglish = tasks.some((task) => task.subject === "英语");
-  const desiredCount = Math.min(targetCount, tasks.length);
-  const minCount = Math.min(desiredCount, hasCarryover ? 2 : hasEnglish ? 4 : 3);
-  let selected = tasks.slice(0, Math.min(6, Math.max(minCount, targetCount)));
+  const list = Array.isArray(tasks) ? tasks.filter(Boolean) : [];
+  const hasCarryover = list.some((task) => task.source === "carryover");
+  const englishTasks = list.filter((task) => task.subject === "英语");
+  const hasEnglish = englishTasks.length > 0;
+  const desiredCount = Math.min(Math.max(targetCount, hasEnglish ? 3 : 0), list.length);
+  const minCount = Math.min(desiredCount, hasCarryover ? Math.max(2, englishTasks.length + 1) : hasEnglish ? 3 : 3);
+  let selected = list.slice(0, Math.min(6, Math.max(minCount, desiredCount)));
+  englishTasks.forEach((task) => {
+    if (!selected.some((item) => item.id === task.id)) selected.push(task);
+  });
   while (selected.length > minCount && selected.reduce((sum, task) => sum + task.minutes, 0) > hardBudget) {
     const removableIndex = findLowestValueTaskIndex(selected);
-    if (selected[removableIndex]?.locked) break;
+    if (selected[removableIndex]?.locked || selected[removableIndex]?.subject === "英语") break;
     selected.splice(removableIndex, 1);
   }
   const total = selected.reduce((sum, task) => sum + task.minutes, 0);
@@ -5722,7 +5769,7 @@ function trimTasksToBudget(tasks, budget, targetCount) {
   }
   while (selected.length > 1 && selected.reduce((sum, task) => sum + task.minutes, 0) > hardBudget) {
     const removableIndex = findLowestValueTaskIndex(selected);
-    if (selected[removableIndex]?.locked) break;
+    if (selected[removableIndex]?.locked || selected[removableIndex]?.subject === "英语") break;
     selected.splice(removableIndex, 1);
   }
   return selected;
@@ -5771,17 +5818,21 @@ function recentPlanMedian(date) {
 }
 
 function findLowestValueTaskIndex(tasks) {
-  const rank = { "项目": 6, "政治": 5, "英语": 4, "补弱": 3, "数学": 2, "408": 2, "复盘": 1 };
+  const rank = { "项目": 6, "政治": 5, "补弱": 3, "数学": 2, "408": 2, "复盘": 1 };
   let index = tasks.length - 1;
   let worst = -1;
   tasks.forEach((task, taskIndex) => {
+    if (task.locked || task.source === "carryover" || task.reviewItemId || task.subject === "英语") return;
     const score = (rank[task.subject] || 3) * 1000 + (task.priority || taskIndex);
-    if (task.locked || task.source === "carryover" || task.reviewItemId) return;
     if (score >= worst) {
       worst = score;
       index = taskIndex;
     }
   });
+  if (worst < 0) {
+    const fallback = tasks.findLastIndex((task) => !task.locked && task.subject !== "英语");
+    return fallback >= 0 ? fallback : tasks.length - 1;
+  }
   return index;
 }
 
@@ -5845,7 +5896,7 @@ function renderPlanCards(tasks) {
           </form>
           <div class="plan-actions">
             <button type="button" class="primary-button" data-start-session="${escapeAttr(task.id)}">开始计时</button>
-            <button type="button" class="ghost-button" data-skip-session="${escapeAttr(task.id)}">直接记录</button>
+            <button type="button" class="ghost-button" data-skip-session="${escapeAttr(task.id)}">直接完成</button>
           </div>
           <div class="plan-output density-detail-only"><strong>交付</strong>${escapeHtml(outputText)}</div>
           <details class="plan-detail density-detail-only">
@@ -5887,7 +5938,8 @@ function bindPlanSessionActions(root = document) {
   });
   root.querySelectorAll("[data-skip-session]").forEach((button) => {
     button.addEventListener("click", () => {
-      document.querySelector(`[data-capture-for="${CSS.escape(button.dataset.skipSession)}"]`)?.querySelector("input, select, textarea")?.focus();
+      const task = findPlannedTask(button.dataset.skipSession);
+      if (task) completeTaskQuickly(task);
     });
   });
 }
@@ -8129,7 +8181,7 @@ function renderSettings() {
 
   document.getElementById("standardsList").innerHTML = [
     ["数据起点", `${PLAN_START_DATE} 从头开始；早于起点的记录、模考、周计划、复盘队列和考纲掌握证据只归档，不参与统计和排程。`],
-    ["渐进时长", "10 月 14 日起按 180/240、210/300、240/360 分钟爬坡；完成率 80% 后进入 270/390m。英语默认每天新词 100，可在设置里改。"],
+    ["渐进时长", "10 月 15 日起按 180/240、210/300、240/360 分钟爬坡；完成率 80% 后进入 270/390m。英语默认每天新词 100，可在设置里改。"],
     ...highStandards
   ].map(([subject, standard]) => `
     <div class="standard-item">

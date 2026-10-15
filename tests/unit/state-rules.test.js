@@ -249,9 +249,9 @@ describe('state rules: migrateState settings migration', () => {
 
 describe('state rules: clean-start boundary', () => {
   it('treats dates before the plan start as out of scope', () => {
-    expect(isOnOrAfterPlanStart('2026-10-13')).toBe(false);
+    expect(isOnOrAfterPlanStart('2026-10-14')).toBe(false);
     expect(isOnOrAfterPlanStart(PLAN_START_DATE)).toBe(true);
-    expect(isOnOrAfterPlanStart('2026-10-14')).toBe(true);
+    expect(isOnOrAfterPlanStart('2026-10-15')).toBe(true);
     expect(isOnOrAfterPlanStart('')).toBe(false);
     expect(isOnOrAfterPlanStart('nope')).toBe(false);
   });

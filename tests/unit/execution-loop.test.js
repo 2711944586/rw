@@ -10,6 +10,7 @@ import {
   reviewGradeEffect,
   shouldUseBottomLine,
   validateCompletionEvidence,
+  buildQuickCompletionEvidence,
   weeklyReviewPrompt,
   reviewPosture,
   formatRatioPercent,
@@ -18,9 +19,9 @@ import {
 } from "../../src/domain/execution-loop.js";
 
 describe("execution loop", () => {
-  it("rejects incomplete task evidence", () => {
+  it("accepts minutes and optional notes", () => {
     expect(validateCompletionEvidence({ minutes: 0, problems: 1, mistake: "计算", nextTask: "明天" }).ok).toBe(false);
-    expect(validateCompletionEvidence({ minutes: 40, problems: 8, mistake: "", nextTask: "明天" }).ok).toBe(false);
+    expect(validateCompletionEvidence({ minutes: 40, problems: 8, mistake: "", nextTask: "" }).ok).toBe(true);
     const valid = validateCompletionEvidence({
       minutes: 40,
       problems: 8,
@@ -29,6 +30,18 @@ describe("execution loop", () => {
     });
     expect(valid.ok).toBe(true);
     expect(valid.evidence.minutes).toBe(40);
+  });
+
+  it("builds one-click evidence from planned minutes", () => {
+    const quick = buildQuickCompletionEvidence({ minutes: 45, subject: "数学" });
+    expect(quick.ok).toBe(true);
+    expect(quick.evidence).toMatchObject({ minutes: 45, problems: 0, mistake: "", nextTask: "" });
+    const timed = buildQuickCompletionEvidence({ minutes: 45 }, { minutes: 32, mistake: "左右极限" });
+    expect(timed.evidence.minutes).toBe(32);
+    expect(timed.evidence.mistake).toBe("左右极限");
+    const missing = buildQuickCompletionEvidence({});
+    expect(missing.ok).toBe(true);
+    expect(missing.evidence.minutes).toBe(25);
   });
 
   it("adds minutes and problems without overwriting an existing note line", () => {

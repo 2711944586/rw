@@ -53,10 +53,10 @@ describe("auth panel state", () => {
       configured: true,
       storageAvailable: true,
       syncLabel: "已在本机保存",
-      build: "2026-10-14-parallel-v4.4.0"
+      build: "2026-10-15-english-v4.5.0"
     });
 
-    expect(document.getElementById("authBuildText").textContent).toBe("v4.4.0");
+    expect(document.getElementById("authBuildText").textContent).toBe("v4.5.0");
     expect(document.getElementById("resetPasswordBtn").hidden).toBe(false);
   });
 

@@ -296,26 +296,33 @@ export function applyPlanControls(tasks, context = {}) {
     .map((task, index) => {
       const key = subjectKey(task.subject);
       const isReview = key === 'review' || task.reviewItemId || task.source === 'carryover';
-      const isNew = !isReview;
+      const isEnglish = key === 'english';
+      const isNew = !isReview && !isEnglish;
       let score = clampInt(task.priority ?? index + 1, 1, 99) * 10;
       if (task.source === 'carryover') score -= 100;
       if (task.reviewItemId) score -= 90;
+      if (isEnglish) score -= 70;
       if (focus !== 'auto' && key === focus) score -= 35;
       if (CORE_SUBJECTS.has(key)) score -= 8;
-      return { ...task, _strategyScore: score, _isNew: isNew };
+      return { ...task, _strategyScore: score, _isNew: isNew, _keep: isEnglish || isReview || task.locked === true };
     })
     .sort((a, b) => a._strategyScore - b._strategyScore);
 
   const selected = [];
+  const occupiesSlot = (task) => !(task.reviewItemId || task.source === 'carryover' || task.locked === true);
   for (const task of scored) {
-    if (selected.length >= targetCount) break;
+    if (task.reviewItemId || task.source === 'carryover' || task.locked === true || task._keep) {
+      selected.push(task);
+      continue;
+    }
+    if (selected.filter(occupiesSlot).length >= targetCount) continue;
     if (task._isNew && newCount >= controls.maxNewTopics) continue;
     selected.push(task);
     if (task._isNew) newCount += 1;
   }
 
   const withBudget = fitBudget(selected.length ? selected : scored.slice(0, targetCount), budget);
-  return withBudget.map(({ _strategyScore, _isNew, ...task }, index) => ({ ...task, priority: index + 1 }));
+  return withBudget.map(({ _strategyScore, _isNew, _keep, ...task }, index) => ({ ...task, priority: index + 1 }));
 }
 
 export function buildRollingReviewWindows(reviewItems = [], today, options = {}) {
@@ -387,9 +394,14 @@ function fitBudget(tasks, budget) {
   const selected = arrayValue(tasks);
   let kept = selected;
   while (kept.length > 1 && kept.reduce((sum, task) => sum + nonNegativeNumber(task?.minutes), 0) > budget) {
-    const removeIndex = kept.findLastIndex((task) => !task.reviewItemId && task.source !== 'carryover' && task.locked !== true);
-    const index = removeIndex >= 0 ? removeIndex : kept.length - 1;
-    kept = kept.filter((_, taskIndex) => taskIndex !== index);
+    const removeIndex = kept.findLastIndex((task) => (
+      !task.reviewItemId
+      && task.source !== 'carryover'
+      && task.locked !== true
+      && task.subject !== '英语'
+    ));
+    if (removeIndex < 0) break;
+    kept = kept.filter((_, taskIndex) => taskIndex !== removeIndex);
   }
   return kept;
 }

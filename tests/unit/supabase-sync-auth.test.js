@@ -303,7 +303,7 @@ describe('supabaseSync auth', () => {
 
   it('loads every cloud row across PostgREST pages', async () => {
     const rows = Array.from({ length: 1001 }, (_, index) => {
-      const date = new Date(Date.UTC(2026, 9, 14 + index)).toISOString().slice(0, 10);
+      const date = new Date(Date.UTC(2026, 9, 15 + index)).toISOString().slice(0, 10);
       return { study_date: date, math_minutes: index };
     });
     const ranges = [];

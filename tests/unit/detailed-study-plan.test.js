@@ -98,8 +98,8 @@ describe("detailed study plan", () => {
 
   it("defines a continuous and executable first 28 days", () => {
     expect(startup28DayPlan).toHaveLength(28);
-    expect(startup28DayPlan[0].date).toBe("2026-10-14");
-    expect(startup28DayPlan.at(-1).date).toBe("2026-11-10");
+    expect(startup28DayPlan[0].date).toBe("2026-10-15");
+    expect(startup28DayPlan.at(-1).date).toBe("2026-11-11");
 
     for (let index = 0; index < startup28DayPlan.length; index += 1) {
       const day = startup28DayPlan[index];

@@ -59,7 +59,12 @@ export function capacityOrderDailyTasks(tasks, input = {}) {
     seen.add(task.id);
     chosen.push(task);
   }
-  const preserved = source.filter((task) => !seen.has(task.id) && (task.locked === true || task.subject === "英语"));
+  const preserved = source.filter((task) => !seen.has(task.id) && (
+    task.locked === true
+    || task.subject === "英语"
+    || task.subject === "数学"
+    || task.subject === "408"
+  ));
   const reviewFirst = chosen.filter((task) => task.reviewItemId || task.source === "carryover");
   const rest = chosen.filter((task) => !reviewFirst.includes(task));
   return [...reviewFirst, ...preserved, ...rest];

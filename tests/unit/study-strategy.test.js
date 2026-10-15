@@ -106,7 +106,40 @@ describe('study-strategy', () => {
     });
 
     expect(plan.map((task) => task.id)).toContain('review');
-    expect(plan.filter((task) => !task.reviewItemId).length).toBe(1);
+    expect(plan.map((task) => task.id)).toContain('eng');
+    expect(plan.filter((task) => task.id === 'math' || task.id === 'cs')).toHaveLength(1);
+  });
+
+  it('keeps daily english without dropping math or 408', () => {
+    const plan = applyPlanControls([
+      { id: 'math', subject: '数学', minutes: 50, priority: 1 },
+      { id: 'cs', subject: '408', minutes: 50, priority: 2 },
+      { id: 'eng', subject: '英语', minutes: 45, priority: 3 },
+      { id: 'pol', subject: '政治', minutes: 40, priority: 4 },
+    ], {
+      budget: 180,
+      targetCount: 3,
+      controls: normalizePlanControls({ maxNewTopics: 4 }),
+    });
+
+    expect(plan.map((task) => task.id)).toEqual(['eng', 'math', 'cs']);
+  });
+
+  it('does not drop english when the day is over budget', () => {
+    const plan = applyPlanControls([
+      { id: 'math', subject: '数学', minutes: 80, priority: 1 },
+      { id: 'cs', subject: '408', minutes: 80, priority: 2 },
+      { id: 'eng', subject: '英语', minutes: 45, priority: 3 },
+      { id: 'pol', subject: '政治', minutes: 40, priority: 4 },
+    ], {
+      budget: 150,
+      targetCount: 4,
+      controls: normalizePlanControls({ maxNewTopics: 4 }),
+    });
+
+    expect(plan.some((task) => task.subject === '英语')).toBe(true);
+    expect(plan.some((task) => task.subject === '数学')).toBe(true);
+    expect(plan.some((task) => task.subject === '政治')).toBe(false);
   });
 
   it('handles malformed task lists, priorities, minutes, and context safely', () => {
@@ -124,7 +157,7 @@ describe('study-strategy', () => {
       controls: normalizePlanControls({ enabledSubjects: ['数学', '英语', '复盘'], maxNewTopics: 4 }),
     });
 
-    expect(plan.map((task) => task.id)).toEqual(['carry']);
+    expect(plan.map((task) => task.id).sort()).toEqual(['carry', 'english']);
     expect(plan.every((task) => Number.isInteger(task.priority) && task.priority > 0)).toBe(true);
   });
 

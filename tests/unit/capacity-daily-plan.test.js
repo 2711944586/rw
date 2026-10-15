@@ -41,4 +41,16 @@ describe("capacity daily plan", () => {
     );
     expect(ordered.map((task) => task.id)).toEqual(["math-1"]);
   });
+
+  it("keeps math, 408 and english when the day is slightly over budget", () => {
+    const ordered = capacityOrderDailyTasks([
+      { id: "math-1", subject: "数学", minutes: 70, priority: 2, text: "极限" },
+      { id: "cs-1", subject: "408", minutes: 70, priority: 3, text: "树" },
+      { id: "english-1", subject: "英语", minutes: 45, priority: 3.5, text: "阅读" }
+    ], {
+      availableMinutes: 180,
+      phaseId: "A"
+    });
+    expect(ordered.map((task) => task.subject).sort()).toEqual(["408", "数学", "英语"]);
+  });
 });

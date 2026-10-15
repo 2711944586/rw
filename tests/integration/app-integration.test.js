@@ -476,3 +476,43 @@ describe('app integration: persistence round-trip', () => {
     expect(document.getElementById('entryDate')).toBeTruthy();
   });
 });
+
+describe('app integration: one-click complete and daily english', () => {
+  beforeEach(async () => {
+    await mountProductionApp();
+    await goToView('today');
+  });
+
+  it('keeps english on the generated today plan', () => {
+    const subjects = [...document.querySelectorAll('#todayTasks .task-item strong')]
+      .map((node) => node.childNodes[0]?.textContent?.trim());
+    expect(subjects).toContain('英语');
+    expect(subjects).toEqual(expect.arrayContaining(['数学', '408']));
+  });
+
+  it('completes a task on checkbox click and undoes it on uncheck', async () => {
+    const checkbox = document.querySelector('#todayTasks [data-task]');
+    expect(checkbox).toBeTruthy();
+    const taskId = checkbox.dataset.task;
+
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(toastText()).toContain('已勾选完成');
+    expect(storedState().tasks[taskId]).toBe(true);
+    const completed = Object.values(storedState().weekPlans).flat().find((task) => task.id === taskId);
+    expect(completed?.status).toBe('done');
+    expect(completed?.actualMinutes).toBeGreaterThan(0);
+
+    const afterComplete = document.querySelector(`#todayTasks [data-task="${taskId}"]`);
+    afterComplete.checked = false;
+    afterComplete.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(toastText()).toContain('已取消完成');
+    expect(storedState().tasks[taskId]).toBe(false);
+    const reopened = Object.values(storedState().weekPlans).flat().find((task) => task.id === taskId);
+    expect(reopened?.status).toBe('todo');
+  });
+});
