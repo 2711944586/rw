@@ -4020,14 +4020,14 @@ function renderWeekPulse() {
     const iso = formatDateISO(date);
     const entry = entryRow(iso);
     const minutes = entry ? getEntryTotals(entry).total : 0;
-    days.push({ iso, minutes, label: `${date.getMonth() + 1}/${date.getDate()}` });
+    days.push({ iso, minutes, label: `${date.getMonth() + 1}/${date.getDate()}`, day: date.getDate() });
   }
   const recorded = days.filter((day) => day.minutes > 0).length;
   const maxMinutes = Math.max(60, ...days.map((day) => day.minutes));
   container.innerHTML = days.map((day) => {
     const height = day.minutes ? Math.max(8, Math.round(day.minutes / maxMinutes * 100)) : 0;
     const bar = height ? `<i data-height="${height}"></i>` : `<i class="pulse-empty"></i>`;
-    return `<span class="pulse-day" title="${day.iso} · ${day.minutes} 分钟">${bar}<em>${day.label}</em></span>`;
+    return `<span class="pulse-day" title="${day.iso} · ${day.minutes} 分钟">${bar}<em><span class="pulse-full">${day.label}</span><span class="pulse-short">${day.day}</span></em></span>`;
   }).join("");
   if (caption) {
     caption.textContent = recorded >= 3

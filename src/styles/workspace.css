@@ -460,11 +460,18 @@ a:focus-visible,
 
 .pulse-day em,
 .score-trend-bar em {
+  max-width: 100%;
   color: var(--workspace-text);
   font-family: var(--workspace-mono);
   font-size: 11px;
   font-style: normal;
   font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.pulse-short {
+  display: none;
 }
 
 .settings-group {
@@ -855,12 +862,20 @@ a:focus-visible,
     gap: 2px;
   }
 
+  .pulse-full {
+    display: none;
+  }
+
   .pulse-day em {
+    font-size: 11px;
+  }
+
+  .pulse-day:nth-child(even) em {
     font-size: 0;
   }
 
-  .pulse-day:nth-child(odd) em {
-    font-size: 11px;
+  .pulse-day:nth-child(odd) .pulse-short {
+    display: inline;
   }
 
   .settings-fields,
