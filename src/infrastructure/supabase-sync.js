@@ -35,6 +35,7 @@ const DEFAULT_PLAN_CONTROLS = {
   reviewLoad: 25,
   maxNewTopics: 3,
   rollingWindowDays: 30,
+  englishNewWords: 100,
   enabledSubjects: ["math", "cs408", "english", "politics", "review", "project"]
 };
 
@@ -257,6 +258,7 @@ function normalizePlanControlsSetting(value) {
   controls.reviewLoad = asInteger(controls.reviewLoad, 15, 60);
   controls.maxNewTopics = asInteger(controls.maxNewTopics, 0, 4);
   controls.rollingWindowDays = asInteger(controls.rollingWindowDays, 7, 60);
+  controls.englishNewWords = asInteger(controls.englishNewWords || DEFAULT_PLAN_CONTROLS.englishNewWords, 20, 200);
   const enabled = Array.isArray(controls.enabledSubjects) ? controls.enabledSubjects : DEFAULT_PLAN_CONTROLS.enabledSubjects;
   controls.enabledSubjects = [...new Set(enabled.map(planSubjectKey).filter((subject) => PLAN_SUBJECTS.includes(subject)))];
   if (!controls.enabledSubjects.some((subject) => subject === "math" || subject === "cs408")) {
@@ -496,7 +498,8 @@ function sanitizeCloudSnapshotPayload(payload) {
     "deletedMeta",
     "cleanStartArchive",
     "mistakes",
-    "sessions"
+    "sessions",
+    "planVersions"
   ];
   return Object.fromEntries(allowedKeys.flatMap((key) => (
     Object.prototype.hasOwnProperty.call(payload, key) ? [[key, payload[key]]] : []

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyPlanControls,
   buildRollingReviewWindows,
+  englishVocabQuota,
   getPhaseStrategy,
   getSyllabusFramework,
   isSubjectEnabled,
@@ -32,6 +33,15 @@ describe('study-strategy', () => {
     expect(controls.enabledSubjects).toContain('math');
     expect(controls.enabledSubjects).toContain('cs408');
     expect(controls.enabledSubjects).toContain('review');
+    expect(controls.englishNewWords).toBe(100);
+  });
+
+  it('defaults english vocab quota to 100 new words and clamps the range', () => {
+    expect(englishVocabQuota().newWords).toBe(100);
+    expect(englishVocabQuota().minutesFloor).toBe(45);
+    expect(englishVocabQuota().taskText).toContain('新词 100');
+    expect(englishVocabQuota({ englishNewWords: 10 }).newWords).toBe(20);
+    expect(englishVocabQuota({ englishNewWords: 500 }).newWords).toBe(200);
   });
 
   it('normalizes malformed controls and localized subject names', () => {

@@ -16,7 +16,7 @@ import { startup28DayPlan } from "../../src/data/detailed-study-plan.js";
 
 describe("study plan governance", () => {
   it("treats hours as reference capacity and records the major plan corrections", () => {
-    expect(studyCapacityPolicy.referenceHours).toBe(2200);
+    expect(studyCapacityPolicy.referenceHours).toBe(2150);
     expect(studyCapacityPolicy.label).toContain("不是必须");
     expect(studyCapacityPolicy.decisionWindow).toContain("14 天");
     expect(studyPlanCorrections.length).toBeGreaterThanOrEqual(6);

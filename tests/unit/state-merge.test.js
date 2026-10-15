@@ -264,14 +264,14 @@ describe('merge: topic state', () => {
 describe('merge: whole-state entry point', () => {
   const localState = () => ({
     settings: { density: 'balanced' },
-    entries: { '2026-09-01': { math: 10, updatedAt: '2026-09-01T00:00:00.000Z' } },
-    scores: [{ id: 's1', total: 100, updatedAt: '2026-09-01T00:00:00.000Z' }],
+    entries: { '2026-10-20': { math: 10, updatedAt: '2026-10-20T00:00:00.000Z' } },
+    scores: [{ id: 's1', date: '2026-10-20', total: 100, updatedAt: '2026-10-20T00:00:00.000Z' }],
     reviewItems: [],
-    tasks: { '2026-09-01': { id: 't1' } },
-    weekPlans: { '2026-09-01': [{ id: 't1', title: 'local', updatedAt: '2026-09-01T00:00:00.000Z' }] },
+    tasks: { '2026-10-20': { id: 't1' } },
+    weekPlans: { '2026-10-20': [{ id: 't1', title: 'local', updatedAt: '2026-10-20T00:00:00.000Z' }] },
     customTasks: [],
     project: { name: 'local' },
-    resources: { r1: { updatedAt: '2026-09-01T00:00:00.000Z', value: 'local' } },
+    resources: { r1: { updatedAt: '2026-10-20T00:00:00.000Z', value: 'local' } },
     topics: {},
     topicEvidence: {},
     deleted: { records: [], scores: [], tasks: [], reviews: [] },
@@ -282,35 +282,35 @@ describe('merge: whole-state entry point', () => {
 
   it('lets the newer record win and keeps the untouched containers', () => {
     const merged = mergeStateByUpdatedAt(localState(), {
-      entries: { '2026-09-01': { math: 55, updatedAt: '2026-09-05T00:00:00.000Z' } },
+      entries: { '2026-10-20': { math: 55, updatedAt: '2026-10-25T00:00:00.000Z' } },
     });
 
-    expect(merged.entries['2026-09-01'].math).toBe(55);
+    expect(merged.entries['2026-10-20'].math).toBe(55);
     expect(merged.settings.density).toBe('balanced');
   });
 
   it('applies tombstones carried by the cloud copy so a deleted row does not come back', () => {
     const merged = mergeStateByUpdatedAt(localState(), {
       entries: {},
-      deleted: { records: ['2026-09-01'], scores: [], tasks: [], reviews: [] },
-      deletedMeta: { records: { '2026-09-01': '2026-09-06T00:00:00.000Z' }, scores: {}, tasks: {}, reviews: {} },
+      deleted: { records: ['2026-10-20'], scores: [], tasks: [], reviews: [] },
+      deletedMeta: { records: { '2026-10-20': '2026-10-26T00:00:00.000Z' }, scores: {}, tasks: {}, reviews: {} },
     });
 
-    expect(merged.entries['2026-09-01']).toBeUndefined();
+    expect(merged.entries['2026-10-20']).toBeUndefined();
   });
 
   it('keeps a row that was recreated after its tombstone', () => {
     const merged = mergeStateByUpdatedAt(localState(), {
-      deleted: { records: ['2026-09-01'], scores: [], tasks: [], reviews: [] },
-      deletedMeta: { records: { '2026-09-01': '2026-08-31T00:00:00.000Z' }, scores: {}, tasks: {}, reviews: {} },
+      deleted: { records: ['2026-10-20'], scores: [], tasks: [], reviews: [] },
+      deletedMeta: { records: { '2026-10-20': '2026-10-12T00:00:00.000Z' }, scores: {}, tasks: {}, reviews: {} },
     });
 
-    expect(merged.entries['2026-09-01']).toBeDefined();
+    expect(merged.entries['2026-10-20']).toBeDefined();
   });
 
   it('is idempotent: merging the same cloud copy twice changes nothing', () => {
     const cloud = {
-      entries: { '2026-09-01': { math: 55, updatedAt: '2026-09-05T00:00:00.000Z' } },
+      entries: { '2026-10-20': { math: 55, updatedAt: '2026-10-25T00:00:00.000Z' } },
     };
     const once = mergeStateByUpdatedAt(localState(), cloud);
     const twice = mergeStateByUpdatedAt(once, cloud);

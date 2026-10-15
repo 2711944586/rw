@@ -85,7 +85,8 @@
 }
 
 .auth-credentials[hidden],
-.auth-actions[hidden] {
+.auth-actions[hidden],
+.auth-reset-password[hidden] {
   display: none !important;
 }
 
@@ -155,9 +156,24 @@
 }
 
 .auth-reset-password {
-  margin-left: auto;
+  justify-self: start;
+  min-height: 0;
+  margin: -4px 0 0;
+  padding: 0;
   border: 0;
+  background: transparent;
   color: var(--workspace-accent-dark);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.auth-reset-password:hover {
+  background: transparent;
+  color: var(--workspace-ink);
+}
+
+.auth-result[hidden] {
+  display: none;
 }
 
 .auth-actions .primary-button svg {
@@ -268,6 +284,7 @@
 
   .auth-actions {
     display: grid;
+    grid-template-columns: 1fr;
   }
 
   .auth-actions button {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CLEAN_START_VERSION, DEFAULT_EXAM_DATE, PLAN_LOGIC_VERSION } from '../../src/config/app-config.js';
 
 afterEach(() => {
   vi.doUnmock('@supabase/supabase-js');
@@ -302,7 +303,7 @@ describe('supabaseSync auth', () => {
 
   it('loads every cloud row across PostgREST pages', async () => {
     const rows = Array.from({ length: 1001 }, (_, index) => {
-      const date = new Date(Date.UTC(2026, 8, 1 + index)).toISOString().slice(0, 10);
+      const date = new Date(Date.UTC(2026, 9, 14 + index)).toISOString().slice(0, 10);
       return { study_date: date, math_minutes: index };
     });
     const ranges = [];
@@ -346,7 +347,7 @@ describe('supabaseSync auth', () => {
 
   it('fails the cloud load if a later page cannot be read', async () => {
     const rows = Array.from({ length: 600 }, (_, index) => {
-      const date = new Date(Date.UTC(2026, 8, 1 + index)).toISOString().slice(0, 10);
+      const date = new Date(Date.UTC(2026, 9, 13 + index)).toISOString().slice(0, 10);
       return { study_date: date, math_minutes: index };
     });
     const ranges = [];
@@ -478,12 +479,12 @@ describe('supabaseSync auth', () => {
       tableCalls[table] = (tableCalls[table] || 0) + 1;
       if (table === 'profiles') {
         return createQueryResult({
-          settings: { cleanStartVersion: '2026-08-31-from-zero-v2' },
+          settings: { cleanStartVersion: CLEAN_START_VERSION, cleanStartAppliedAt: '2026-10-14T00:00:00.000Z' },
         });
       }
       if (table === 'daily_records') {
         return createQueryResult([
-          { study_date: '2026-09-01', math_minutes: 60, quality_score: { bad: true }, next_task: { bad: true }, note: { bad: true }, updated_at: '2026-09-01T08:00:00.000Z' },
+          { study_date: '2026-10-20', math_minutes: 60, quality_score: { bad: true }, next_task: { bad: true }, note: { bad: true }, updated_at: '2026-09-01T08:00:00.000Z' },
           { math_minutes: 90 },
           { study_date: 'bad-date', math_minutes: 30 },
           { study_date: '2026-02-31', math_minutes: 45 },
@@ -495,23 +496,23 @@ describe('supabaseSync auth', () => {
       if (table === 'study_tasks') {
         return tableCalls[table] === 1
           ? createQueryResult([
-            { id: 'task-remote', task_date: '2026-09-01', subject: { bad: true }, title: { bad: true }, topic_id: '__proto__', source_task_id: 'constructor', status: 'bad-status', source: { bad: true }, contract_type: '__proto__', required_artifacts: ['推导图', { bad: true }, '__proto__', ''], locked: 'false', record_applied: 'false', evidence_submitted: 'true' },
-            { id: '', task_date: '2026-09-01', title: '无 ID 任务', status: 'done' },
+            { id: 'task-remote', task_date: '2026-10-20', subject: { bad: true }, title: { bad: true }, topic_id: '__proto__', source_task_id: 'constructor', status: 'bad-status', source: { bad: true }, contract_type: '__proto__', required_artifacts: ['推导图', { bad: true }, '__proto__', ''], locked: 'false', record_applied: 'false', evidence_submitted: 'true' },
+            { id: '', task_date: '2026-10-20', title: '无 ID 任务', status: 'done' },
           ])
           : createQueryResult([]);
       }
       if (table === 'review_items') {
         return tableCalls[table] === 1
           ? createQueryResult([
-            { id: 'review-remote', due_date: '2026-09-01', subject: { bad: true }, title: { bad: true }, failure_reason: { bad: true }, topic_id: '__proto__', source_task_id: 'constructor', status: 'bad-status', last_result: 'bad-result' },
-            { id: '', due_date: '2026-09-01', title: '无 ID 复盘', status: 'done' },
+            { id: 'review-remote', due_date: '2026-10-20', subject: { bad: true }, title: { bad: true }, failure_reason: { bad: true }, topic_id: '__proto__', source_task_id: 'constructor', status: 'bad-status', last_result: 'bad-result' },
+            { id: '', due_date: '2026-10-20', title: '无 ID 复盘', status: 'done' },
           ])
           : createQueryResult([]);
       }
       if (table === 'mock_scores') {
         return tableCalls[table] === 1
           ? createQueryResult([
-            { id: 'score-remote', mock_date: '2026-09-01', name: { bad: true }, note: { bad: true }, politics: 70, english: 60, math: 100, cs408: 90, total: { bad: true } },
+            { id: 'score-remote', mock_date: '2026-10-20', name: { bad: true }, note: { bad: true }, politics: 70, english: 60, math: 100, cs408: 90, total: { bad: true } },
           ])
           : createQueryResult([]);
       }
@@ -525,9 +526,9 @@ describe('supabaseSync auth', () => {
       }
       if (table === 'topic_progress') {
         return createQueryResult([
-          { topic_id: 'math/topic', status_value: 2, evidence: { bad: true }, mastery_status: 'bad-status', prerequisites: ['极限', { bad: true }, 'constructor', ''], updated_at: '2026-09-01T09:00:00.000Z' },
-          { topic_id: '__proto__', status_value: 2, evidence: 'bad', updated_at: '2026-09-01T09:00:00.000Z' },
-          { status_value: 1, updated_at: '2026-09-01T09:00:00.000Z' },
+          { topic_id: 'math/topic', status_value: 2, evidence: { bad: true }, mastery_status: 'bad-status', prerequisites: ['极限', { bad: true }, 'constructor', ''], updated_at: '2026-10-20T09:00:00.000Z' },
+          { topic_id: '__proto__', status_value: 2, evidence: 'bad', updated_at: '2026-10-20T09:00:00.000Z' },
+          { status_value: 1, updated_at: '2026-10-20T09:00:00.000Z' },
         ]);
       }
       return createQueryResult([]);
@@ -542,10 +543,10 @@ describe('supabaseSync auth', () => {
     });
 
     expect(state.entries).toEqual({
-      '2026-09-01': expect.objectContaining({ math: 60, quality: 3, nextTask: '', note: '' }),
+      '2026-10-20': expect.objectContaining({ math: 60, quality: 3, nextTask: '', note: '' }),
     });
     expect(state.weekPlans).toEqual({
-      '2026-09-01': [expect.objectContaining({
+      '2026-10-20': [expect.objectContaining({
         id: 'task-remote',
         subject: '复盘',
         text: '回炉错题，写明下次识别信号',
@@ -578,7 +579,7 @@ describe('supabaseSync auth', () => {
       evidence: '',
       masteryStatus: 'mastered',
       prerequisites: ['极限'],
-      updatedAt: '2026-09-01T09:00:00.000Z',
+      updatedAt: '2026-10-20T09:00:00.000Z',
     }));
     expect(state.scores).toEqual([expect.objectContaining({
       id: 'score-remote',
@@ -665,11 +666,11 @@ describe('supabaseSync auth', () => {
       sync: { cloudPaused: 'false', localImportPending: 'false' },
       entries: 'bad-entries',
       weekPlans: {
-        '2026-09-01': { id: 'loose-task', date: '2026-09-01', text: '不应同步' },
-        '2026-09-02': [
+        '2026-10-20': { id: 'loose-task', date: '2026-10-20', text: '不应同步' },
+        '2026-10-21': [
           'bad-task',
           ['bad-task-array'],
-          { id: 'task-safe', date: '2026-09-02', text: '安全任务', topicId: 'topic-safe', status: 'bad-status' },
+          { id: 'task-safe', date: '2026-10-21', text: '安全任务', topicId: 'topic-safe', status: 'bad-status' },
         ],
       },
       tasks: 'bad-task-state',
@@ -692,10 +693,10 @@ describe('supabaseSync auth', () => {
       weekend_minutes: 60,
       task_count: 3,
       core_ratio: 55,
-      target_exam_date: '2027-12-25',
+      target_exam_date: DEFAULT_EXAM_DATE,
       density_mode: 'balanced',
       retro_time: '22:00',
-      plan_version: '4.2-workbench-2026-10-10',
+      plan_version: PLAN_LOGIC_VERSION,
     });
     expect(upsertRows('daily_records')).toBeUndefined();
     expect(upsertRows('study_tasks').map((row) => row.id)).toEqual(['task-safe']);
@@ -738,15 +739,15 @@ describe('supabaseSync auth', () => {
         cleanStartAppliedAt: '2026-09-01T00:00:00.000Z',
       },
       entries: {
-        '2026-09-01': { math: 45, quality: { bad: true }, quality_score: '4', nextTask: { bad: true }, note: { bad: true }, sleepHours: 6.5, fatigue: 4, loadTier: 'bottomline' },
+        '2026-10-20': { math: 45, quality: { bad: true }, quality_score: '4', nextTask: { bad: true }, note: { bad: true }, sleepHours: 6.5, fatigue: 4, loadTier: 'bottomline' },
         'bad-date': { math: 90 },
         '2026-02-31': { math: 30 },
       },
       weekPlans: {
-        '2026-09-01': [
+        '2026-10-20': [
           {
             id: 'task-safe',
-            date: '2026-09-01',
+            date: '2026-10-20',
             subject: { bad: true },
             text: { bad: true },
             title: '安全任务标题',
@@ -776,13 +777,13 @@ describe('supabaseSync auth', () => {
             evidenceSubmitted: { bad: true },
             evidence_submitted: 'true',
           },
-          { id: '__proto__', date: '2026-09-01', subject: '数学', text: '坏任务' },
+          { id: '__proto__', date: '2026-10-20', subject: '数学', text: '坏任务' },
         ],
       },
       tasks: { 'task-safe': true, __proto__: true },
       reviewItems: [
-        { id: 'review-safe', dueDate: '2026-09-01', sourceTaskId: '__proto__', topicId: 'constructor', subject: { bad: true }, text: { bad: true }, title: '安全复盘', failureReason: { bad: true }, failure_reason: '需要重做', status: 'bad-status', done: 'false', lastResult: { bad: true }, last_result: 'again', delayCount: { bad: true }, delay_count: '3', quality: { bad: true }, quality_score: '4', intervalIndex: { bad: true }, interval_index: '2', failStreak: { bad: true }, fail_streak: '1' },
-        { id: '__proto__', dueDate: '2026-09-01', text: '坏复盘' },
+        { id: 'review-safe', dueDate: '2026-10-20', sourceTaskId: '__proto__', topicId: 'constructor', subject: { bad: true }, text: { bad: true }, title: '安全复盘', failureReason: { bad: true }, failure_reason: '需要重做', status: 'bad-status', done: 'false', lastResult: { bad: true }, last_result: 'again', delayCount: { bad: true }, delay_count: '3', quality: { bad: true }, quality_score: '4', intervalIndex: { bad: true }, interval_index: '2', failStreak: { bad: true }, fail_streak: '1' },
+        { id: '__proto__', dueDate: '2026-10-20', text: '坏复盘' },
       ],
       topics: {
         'topic-safe': 2,
@@ -802,8 +803,8 @@ describe('supabaseSync auth', () => {
         },
       },
       scores: [
-        { id: 'score-safe', date: '2026-09-01', name: { bad: true }, note: { bad: true }, politics: 70, english: 60, math: 100, cs408: 90, total: { bad: true } },
-        { id: '__proto__', date: '2026-09-01', politics: 80 },
+        { id: 'score-safe', date: '2026-10-20', name: { bad: true }, note: { bad: true }, politics: 70, english: 60, math: 100, cs408: 90, total: { bad: true } },
+        { id: '__proto__', date: '2026-10-20', politics: 80 },
       ],
       resources: {
         'math-book': 40,
@@ -813,13 +814,13 @@ describe('supabaseSync auth', () => {
       customTasks: [],
       project: {},
       deleted: {
-        records: ['bad-date', '2026-02-31', '2026-09-01'],
+        records: ['bad-date', '2026-02-31', '2026-10-20'],
         scores: ['__proto__', 'score-safe'],
         tasks: ['constructor', 'task-safe'],
         reviews: ['prototype', 'review-safe'],
       },
       deletedMeta: {
-        records: { '2026-09-01': '2026-09-02T00:00:00.000Z', 'bad-date': '2026-09-02T00:00:00.000Z', '2026-02-31': '2026-09-02T00:00:00.000Z' },
+        records: { '2026-10-20': '2026-09-02T00:00:00.000Z', 'bad-date': '2026-09-02T00:00:00.000Z', '2026-02-31': '2026-09-02T00:00:00.000Z' },
         scores: { 'score-safe': '2026-06-17T01:00:00.000Z', __proto__: '2026-06-17T01:00:00.000Z' },
         tasks: { 'task-safe': '2026-06-17T02:00:00.000Z', constructor: '2026-06-17T02:00:00.000Z' },
         reviews: { 'review-safe': '2026-06-17T03:00:00.000Z', prototype: '2026-06-17T03:00:00.000Z' },
@@ -837,7 +838,7 @@ describe('supabaseSync auth', () => {
       .flatMap(([, ids]) => ids);
 
     expect(upsertRows('daily_records')).toEqual([expect.objectContaining({
-      study_date: '2026-09-01',
+      study_date: '2026-10-20',
       quality_score: 4,
       next_task: '',
       note: '[负荷 bottomline] [睡眠 6.5h] [疲劳 4]',
@@ -892,7 +893,7 @@ describe('supabaseSync auth', () => {
       note: '',
     })]);
     expect(upsertRows('resources')).toEqual([expect.objectContaining({ resource_key: 'math-book', progress: 40 })]);
-    expect(deleteIds('daily_records', 'study_date')).toEqual(['2026-09-01']);
+    expect(deleteIds('daily_records', 'study_date')).toEqual(['2026-10-20']);
     expect(deleteIds('mock_scores', 'id')).toEqual(['score-safe']);
     expect(deleteIds('study_tasks', 'id')).toEqual(['task-safe']);
     expect(deleteIds('review_items', 'id')).toEqual(['review-safe']);

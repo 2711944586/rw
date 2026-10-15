@@ -207,7 +207,7 @@ function renderDensitySection() {
   ];
 
   return `
-    <section class="panel" style="margin-bottom:14px;">
+    <section class="panel">
       <div class="panel-head"><div><h3>显示密度</h3><p>控制界面信息量，立即生效</p></div></div>
       <div class="density-toggle" role="group" aria-label="显示密度选择">
         ${modes.map(m => `
@@ -226,11 +226,10 @@ function renderDensitySection() {
 function renderRetroTimeSection() {
   const time = getRetroTime();
   return `
-    <section class="panel" style="margin-bottom:14px;">
+    <section class="panel">
       <div class="panel-head"><div><h3>复盘提醒时间</h3><p>每日自动触发复盘的时间</p></div></div>
-      <label style="display:flex;gap:10px;align-items:center;">
-        <input type="time" id="sv-retro-time" value="${escapeAttr(time)}"
-          style="min-height:38px;border:1px solid var(--line);border-radius:var(--radius);padding:0 10px;" />
+      <label class="sv-retro-row">
+        <input type="time" id="sv-retro-time" value="${escapeAttr(time)}" />
         <button type="button" class="ghost-button" id="sv-save-retro-time" aria-label="保存复盘时间">保存</button>
       </label>
     </section>
@@ -245,13 +244,13 @@ function renderExportSection() {
   const syncText = formatLastSynced(lastSynced);
 
   return `
-    <section class="panel" style="margin-bottom:14px;">
+    <section class="panel">
       <div class="panel-head"><div><h3>数据管理</h3><p>导出及同步状态</p></div></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <div class="sv-export-row">
         <button type="button" class="primary-button" id="sv-export-data" aria-label="导出全部数据">导出全部数据</button>
-        <span style="font-size:12px;color:var(--muted);">${escapeHTML(syncText)}</span>
+        <span class="sv-export-meta">${escapeHTML(syncText)}</span>
       </div>
-      <div id="sv-export-feedback" style="margin-top:8px;font-size:12px;color:var(--muted);display:none;" aria-live="polite"></div>
+      <div id="sv-export-feedback" class="sv-export-feedback" hidden aria-live="polite"></div>
     </section>
   `;
 }
@@ -264,10 +263,10 @@ function renderTemplatesSection() {
     const name = templateName(t);
     const subject = templateSubject(t);
     return `
-      <div class="custom-task-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius);background:#fbfcfa;">
+      <div class="custom-task-row sv-template-row">
         <div>
-          <strong style="font-size:13px;color:var(--ink);">${escapeHTML(name)}</strong>
-          <span style="display:block;font-size:11px;color:var(--muted);">${escapeHTML(subject)} · ${templateMinutes(t.estimatedMinutes)}分钟</span>
+          <strong>${escapeHTML(name)}</strong>
+          <span>${escapeHTML(subject)} · ${templateMinutes(t.estimatedMinutes)}分钟</span>
         </div>
         <button type="button" class="ghost-button template-delete-btn" data-index="${index}" aria-label="删除模板: ${escapeAttr(name)}">删除</button>
       </div>
@@ -275,12 +274,12 @@ function renderTemplatesSection() {
   }).join('');
 
   return `
-    <section class="panel" style="margin-bottom:14px;">
+    <section class="panel">
       <div class="panel-head"><div><h3>自定义任务模板</h3><p>快速创建常用任务</p></div></div>
-      <div class="custom-task-list" style="margin-bottom:12px;">${rows || '<p style="color:var(--muted);font-size:13px;">暂无模板</p>'}</div>
-      <form id="sv-template-form" class="custom-task-form" style="grid-template-columns:1fr 1fr auto;gap:8px;">
-        <input type="text" id="sv-tpl-name" placeholder="模板名称" required style="min-height:38px;border:1px solid var(--line);border-radius:var(--radius);padding:0 10px;" />
-        <input type="text" id="sv-tpl-subject" placeholder="学科 (math/cs/eng/pol)" style="min-height:38px;border:1px solid var(--line);border-radius:var(--radius);padding:0 10px;" />
+      <div class="custom-task-list">${rows || '<p class="sv-template-empty">暂无模板</p>'}</div>
+      <form id="sv-template-form" class="custom-task-form">
+        <input type="text" id="sv-tpl-name" placeholder="模板名称" required />
+        <input type="text" id="sv-tpl-subject" placeholder="学科 (math/cs/eng/pol)" />
         <button type="submit" class="primary-button" aria-label="添加模板">添加</button>
       </form>
     </section>
@@ -343,8 +342,8 @@ function onSaveRetroTime() {
 async function onExport() {
   const feedback = containerEl.querySelector('#sv-export-feedback');
   if (feedback) {
+    feedback.hidden = false;
     feedback.textContent = '正在导出...';
-    feedback.style.display = 'block';
   }
 
   try {

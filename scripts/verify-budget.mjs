@@ -25,10 +25,10 @@ const BUDGETS = [
   { key: 'vendor-supabase', extension: '.js', limitKb: 60 },
   { key: 'infra', extension: '.js', limitKb: 12 },
   // execution-loop.js landed in this chunk (gzip 9.27 KB on 2026-10-09).
-  // The 2026-10-10 workbench modules (admission, phase, session, mistakes,
-  // report) raised the measured gzip size to 15.13 KB. 16 KB still fails
-  // another real jump.
-  { key: 'domain', extension: '.js', limitKb: 16 },
+  // The 2026-10-10 workbench modules raised it to 15.13 KB. Wiring
+  // generateDailyPlan through capacity-daily-plan.js measured 17.16 KB
+  // (domain-L4VRxgPy.js). 18 KB leaves under 1 KB before the next real jump.
+  { key: 'domain', extension: '.js', limitKb: 18 },
   { key: 'vendor-icons', extension: '.js', limitKb: 4 },
 ];
 

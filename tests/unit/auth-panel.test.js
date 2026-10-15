@@ -13,6 +13,7 @@ function mountAuthPanel() {
       <input id="authEmail">
       <span id="authPasswordLabel"></span>
       <input id="authPassword">
+      <button id="resetPasswordBtn" type="button">忘记密码</button>
     </div>
     <div id="authSignedOutActions"></div>
     <div id="authSignedInActions"></div>
@@ -43,6 +44,20 @@ describe("auth panel state", () => {
     expect(document.getElementById("authEmail")).toMatchObject({ value: "student@example.test", readOnly: true });
     expect(document.getElementById("authPassword")).toMatchObject({ autocomplete: "new-password" });
     expect(document.getElementById("authPasswordLabel").textContent).toBe("新密码");
+    expect(document.getElementById("resetPasswordBtn").hidden).toBe(true);
+  });
+
+  it("shortens the build stamp in the account dialog", () => {
+    renderAuthPanelState({
+      user: null,
+      configured: true,
+      storageAvailable: true,
+      syncLabel: "已在本机保存",
+      build: "2026-10-14-parallel-v4.4.0"
+    });
+
+    expect(document.getElementById("authBuildText").textContent).toBe("v4.4.0");
+    expect(document.getElementById("resetPasswordBtn").hidden).toBe(false);
   });
 
   it("returns to the normal signed-in panel after recovery ends", () => {

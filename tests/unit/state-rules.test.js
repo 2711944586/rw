@@ -249,9 +249,9 @@ describe('state rules: migrateState settings migration', () => {
 
 describe('state rules: clean-start boundary', () => {
   it('treats dates before the plan start as out of scope', () => {
-    expect(isOnOrAfterPlanStart('2026-08-30')).toBe(false);
+    expect(isOnOrAfterPlanStart('2026-10-13')).toBe(false);
     expect(isOnOrAfterPlanStart(PLAN_START_DATE)).toBe(true);
-    expect(isOnOrAfterPlanStart('2026-09-01')).toBe(true);
+    expect(isOnOrAfterPlanStart('2026-10-14')).toBe(true);
     expect(isOnOrAfterPlanStart('')).toBe(false);
     expect(isOnOrAfterPlanStart('nope')).toBe(false);
   });
@@ -322,12 +322,12 @@ describe('state rules: clean-start task and review filtering', () => {
   it('drops tasks whose id carries a pre-start or impossible date', () => {
     const tasks = {
       '2026-01-01-math': { id: '2026-01-01-math' },
-      '2026-09-01-math': { id: '2026-09-01-math' },
+      '2026-10-20-math': { id: '2026-10-20-math' },
       '2026-02-30-math': { id: '2026-02-30-math' },
       'custom-1': { id: 'custom-1' },
     };
     const kept = filterTaskStateFromStart(tasks, {});
-    expect(Object.keys(kept).sort()).toEqual(['2026-09-01-math', 'custom-1']);
+    expect(Object.keys(kept).sort()).toEqual(['2026-10-20-math', 'custom-1']);
   });
 
   it('resolves a task date from the week plan when the id carries none', () => {
@@ -359,13 +359,13 @@ describe('state rules: clean-start task and review filtering', () => {
     const filtered = filterDeletedFromStart({
       records: ['2026-01-01', PLAN_START_DATE],
       scores: ['any-score-is-kept'],
-      tasks: ['2026-01-01-math', '2026-09-01-math', '2026-02-30-math', 'custom-1'],
-      reviews: ['2026-01-01-r', '2026-09-01-r'],
+      tasks: ['2026-01-01-math', '2026-10-20-math', '2026-02-30-math', 'custom-1'],
+      reviews: ['2026-01-01-r', '2026-10-20-r'],
     });
     expect(filtered.records).toEqual([PLAN_START_DATE]);
     expect(filtered.scores).toEqual(['any-score-is-kept']);
-    expect(filtered.tasks).toEqual(['2026-09-01-math', 'custom-1']);
-    expect(filtered.reviews).toEqual(['2026-09-01-r']);
+    expect(filtered.tasks).toEqual(['2026-10-20-math', 'custom-1']);
+    expect(filtered.reviews).toEqual(['2026-10-20-r']);
   });
 });
 

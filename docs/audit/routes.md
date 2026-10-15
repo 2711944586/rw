@@ -18,5 +18,10 @@
 - `src/core/write-contract.js`
 - `src/infrastructure/persistence/entity-repository.js`
 - `src/infrastructure/persistence/session-lock.js`
+- `src/domain/capacity-daily-plan.js`（由此到达 `plan-generator.js`）
+- `src/domain/plan-capacity.js`
+- `src/domain/plan-version.js`
+
+`core/router.js` 的默认路由是 `today`，而且会动态加载仍引用 `StateManager` 的视图。不要用它替换 `app.js` 的 `setRoute`。
 
 页面仍由 `app.js` 渲染。新实体先通过仓库返回新对象，再由既有 `saveState` 写入同一个本地键。

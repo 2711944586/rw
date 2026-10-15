@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import { PLAN_START_DATE, TARGET_TOTAL_HOURS } from "../../src/config/app-config.js";
-import { firstMonthActions, monthlyPlan, phases, rampBudgets, taskBlueprints } from "../../src/data/study-content.js";
+import { firstMonthActions, monthlyPlan, phases, rampBudgets, scoreTargets, taskBlueprints } from "../../src/data/study-content.js";
 
 describe("study workflow content", () => {
   it("keeps the executable study workflow visible", () => {
@@ -27,15 +27,16 @@ describe("study workflow content", () => {
     expect(html).toContain("备考拆解");
   });
 
-  it("anchors the clean-start workflow on 2026-08-31", () => {
+  it("anchors the clean-start workflow on 2026-10-14", () => {
     const app = fs.readFileSync(new URL("../../src/app.js", import.meta.url), "utf8");
     const sync = fs.readFileSync(new URL("../../src/infrastructure/supabase-sync.js", import.meta.url), "utf8");
     const config = fs.readFileSync(new URL("../../src/config/app-config.js", import.meta.url), "utf8");
     const html = fs.readFileSync(new URL("../../index.html", import.meta.url), "utf8");
     const schema = fs.readFileSync(new URL("../../supabase/schema.sql", import.meta.url), "utf8");
 
-    expect(config).toContain('export const PLAN_START_DATE = "2026-08-31"');
-    expect(config).toContain('export const CLEAN_START_VERSION = "2026-08-31-from-zero-v2"');
+    expect(config).toContain('export const PLAN_START_DATE = "2026-10-14"');
+    expect(config).toContain('export const CLEAN_START_VERSION = "2026-10-14-from-zero-v4"');
+    expect(config).toContain('export const DEFAULT_EXAM_DATE = "2027-12-19"');
     expect(app).toContain("filterTaskStateFromStart");
     expect(app).toContain("filterDeletedFromStart");
     expect(app).toContain("早于起点的数据仅归档，不再参与计划、统计和复盘");
@@ -44,7 +45,7 @@ describe("study workflow content", () => {
     expect(sync).toContain('gte("task_date", PLAN_START_DATE)');
     expect(sync).toContain('gte("due_date", PLAN_START_DATE)');
     expect(sync).toContain('gte("mock_date", PLAN_START_DATE)');
-    expect(html).toContain("2026-08-31 开始");
+    expect(html).toContain("2026-10-14 开始");
     expect(schema).toContain("4.0-aug31-operating-plan-2026-08-31");
   });
 
@@ -68,9 +69,10 @@ describe("study workflow content", () => {
   it("keeps the revised plan continuous and fully specified", () => {
     expect(phases[0].start).toBe(PLAN_START_DATE);
     expect(rampBudgets[0].start).toBe(PLAN_START_DATE);
-    expect(monthlyPlan[0][0]).toBe("2026-08");
+    expect(monthlyPlan[0][0]).toBe("2026-10");
     expect(monthlyPlan.at(-1)[2]).toBe(TARGET_TOTAL_HOURS);
-    expect(firstMonthActions.at(-1).week).toBe("9/28-9/30");
+    expect(firstMonthActions.at(-1).week).toBe("11/09-11/10");
+    expect(monthlyPlan.reduce((sum, row) => sum + Number(row[1]), 0)).toBe(TARGET_TOTAL_HOURS);
 
     for (let index = 1; index < phases.length; index += 1) {
       const previousEnd = new Date(`${phases[index - 1].end}T00:00:00Z`);
@@ -84,5 +86,19 @@ describe("study workflow content", () => {
       expect(blueprint.resource).toBeTruthy();
       expect(blueprint.basis).toBeTruthy();
     }
+  });
+
+  it("sets math and 408 score targets to 140 and 130", () => {
+    const html = fs.readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+    const app = fs.readFileSync(new URL("../../src/app.js", import.meta.url), "utf8");
+    const bySubject = Object.fromEntries(scoreTargets.map(([subject, target]) => [subject, target]));
+
+    expect(bySubject["数学一"]).toBe(140);
+    expect(bySubject["408"]).toBe(130);
+    expect(html).toContain("75 / 80 / 140 / 130");
+    expect(html).not.toContain("75 / 80 / 130 / 135");
+    expect(app).toContain("scoreTargets.map");
+    expect(app).not.toContain("130 - avg.math");
+    expect(app).not.toContain("135 - avg.cs408");
   });
 });

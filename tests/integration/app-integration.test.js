@@ -30,7 +30,7 @@ const storedState = () => JSON.parse(window.localStorage.getItem(STORAGE_KEYS.AP
 
 function fillEntry(overrides = {}) {
   const values = {
-    entryDate: '2026-09-22',
+    entryDate: '2026-10-22',
     mathMin: '120',
     csMin: '90',
     engMin: '45',
@@ -312,7 +312,7 @@ describe('app integration: form validation', () => {
 
     expect(document.getElementById('mathMin').getAttribute('aria-invalid')).toBe('true');
     expect(toastText()).toContain('非负整数');
-    expect(storedState().entries?.['2026-09-22']).toBeUndefined();
+    expect(storedState().entries?.['2026-10-22']).toBeUndefined();
   });
 
   it('rejects a quality score outside 1-5', async () => {
@@ -321,7 +321,7 @@ describe('app integration: form validation', () => {
     submitForm('entryForm');
 
     expect(document.getElementById('qualityScore').getAttribute('aria-invalid')).toBe('true');
-    expect(storedState().entries?.['2026-09-22']).toBeUndefined();
+    expect(storedState().entries?.['2026-10-22']).toBeUndefined();
   });
 
   it('accepts a valid record and persists it', async () => {
@@ -330,7 +330,7 @@ describe('app integration: form validation', () => {
     submitForm('entryForm');
 
     expect(document.getElementById('mathMin').getAttribute('aria-invalid')).toBeNull();
-    const entry = storedState().entries?.['2026-09-22'];
+    const entry = storedState().entries?.['2026-10-22'];
     expect(entry).toBeDefined();
     expect(entry.math).toBe(120);
     expect(entry.cs408).toBe(90);
@@ -344,7 +344,7 @@ describe('app integration: form validation', () => {
       document.getElementById(id).value = '';
     }
     document.getElementById('scoreName').value = '空记录';
-    document.getElementById('scoreDate').value = '2026-09-22';
+    document.getElementById('scoreDate').value = '2026-10-22';
 
     submitForm('scoreForm');
 
@@ -357,7 +357,7 @@ describe('app integration: form validation', () => {
     for (const id of ['scorePol', 'scoreEng', 'scoreMath', 'scoreCs']) {
       document.getElementById(id).value = '';
     }
-    document.getElementById('scoreDate').value = '2026-09-22';
+    document.getElementById('scoreDate').value = '2026-10-22';
     document.getElementById('scoreMath').value = '200';
 
     submitForm('scoreForm');
@@ -404,29 +404,29 @@ describe('app integration: import', () => {
 
   it('imports a selected backup and snapshots the current local data first', async () => {
     const imported = storedState();
-    imported.entries['2026-09-22'].math = 66;
+    imported.entries['2026-10-22'].math = 66;
     confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     await selectImportFile('study-backup.json', JSON.stringify(imported));
 
     const state = storedState();
     expect(confirmSpy).toHaveBeenCalledOnce();
-    expect(state.entries['2026-09-22'].math).toBe(66);
+    expect(state.entries['2026-10-22'].math).toBe(66);
     expect(state.snapshots).toHaveLength(1);
-    expect(state.snapshots[0].payload.entries['2026-09-22'].math).toBe(120);
+    expect(state.snapshots[0].payload.entries['2026-10-22'].math).toBe(120);
     expect(document.getElementById('importFile').getAttribute('aria-busy')).toBe('false');
   });
 
   it('leaves local data untouched when backup import is declined', async () => {
     const before = storedState();
     const imported = structuredClone(before);
-    imported.entries['2026-09-22'].math = 66;
+    imported.entries['2026-10-22'].math = 66;
     confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     await selectImportFile('study-backup.json', JSON.stringify(imported));
 
     expect(confirmSpy).toHaveBeenCalledOnce();
-    expect(storedState().entries['2026-09-22'].math).toBe(120);
+    expect(storedState().entries['2026-10-22'].math).toBe(120);
     expect(storedState().snapshots).toEqual(before.snapshots);
   });
 });
@@ -467,11 +467,11 @@ describe('app integration: persistence round-trip', () => {
     await goToView('today');
     fillEntry({ mathMin: '77' });
     submitForm('entryForm');
-    expect(storedState().entries['2026-09-22'].math).toBe(77);
+    expect(storedState().entries['2026-10-22'].math).toBe(77);
 
     await mountProductionApp({ keepStorage: true });
 
-    const restored = storedState().entries['2026-09-22'];
+    const restored = storedState().entries['2026-10-22'];
     expect(restored.math).toBe(77);
     expect(document.getElementById('entryDate')).toBeTruthy();
   });

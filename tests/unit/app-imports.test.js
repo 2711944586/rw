@@ -879,6 +879,7 @@ describe("app imports", () => {
         reviewLoad: 25,
         maxNewTopics: 3,
         rollingWindowDays: 30,
+        englishNewWords: 100,
         enabledSubjects: ["math", "cs408", "english", "politics", "review", "project"]
       };
       ${helperSource}
@@ -932,6 +933,7 @@ describe("app imports", () => {
         reviewLoad: 60,
         maxNewTopics: 0,
         rollingWindowDays: 7,
+        englishNewWords: 100,
         enabledSubjects: ["english", "math", "cs408", "review"]
       }
     });
@@ -989,6 +991,7 @@ describe("app imports", () => {
       reviewLoad: 25,
       maxNewTopics: 3,
       rollingWindowDays: 30,
+      englishNewWords: 100,
       enabledSubjects: ["politics", "review", "math", "cs408"]
     });
     expect(payload.customTasks).toEqual([{
@@ -1409,7 +1412,7 @@ describe("app imports", () => {
     `)();
 
     planHelpers.ensurePlanContainers();
-    expect(planHelpers.getState()).toEqual({ weekPlans: {}, tasks: {} });
+    expect(planHelpers.getState()).toEqual({ weekPlans: {}, tasks: {}, planVersions: [] });
     planHelpers.setState({
       weekPlans: { "2026-06-08": [{ id: "t1" }, "bad-task", null] },
       tasks: []

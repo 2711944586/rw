@@ -75,6 +75,10 @@ describe("detailed study plan", () => {
     for (const protocol of Object.values(dailyStudyProtocols)) {
       expect(protocol.blocks.length).toBeGreaterThanOrEqual(4);
       expect(protocol.volume).toBeTruthy();
+      const percents = protocol.blocks
+        .map(([, share]) => Number(String(share).replace("%", "")))
+        .filter((value) => Number.isFinite(value));
+      expect(percents.reduce((sum, value) => sum + value, 0)).toBe(100);
     }
 
     expect(subjectResourceStacks.map((stack) => stack.key).sort()).toEqual(["cs408", "english", "math", "politics"]);
@@ -94,8 +98,8 @@ describe("detailed study plan", () => {
 
   it("defines a continuous and executable first 28 days", () => {
     expect(startup28DayPlan).toHaveLength(28);
-    expect(startup28DayPlan[0].date).toBe("2026-08-31");
-    expect(startup28DayPlan.at(-1).date).toBe("2026-09-27");
+    expect(startup28DayPlan[0].date).toBe("2026-10-14");
+    expect(startup28DayPlan.at(-1).date).toBe("2026-11-10");
 
     for (let index = 0; index < startup28DayPlan.length; index += 1) {
       const day = startup28DayPlan[index];
@@ -115,6 +119,15 @@ describe("detailed study plan", () => {
         expected.setUTCDate(expected.getUTCDate() + 1);
         expect(day.date).toBe(expected.toISOString().slice(0, 10));
       }
+    }
+
+    for (const day of startup28DayPlan) {
+      const subjects = day.blocks.map(([subject]) => subject);
+      expect(subjects).toEqual(expect.arrayContaining(["数学", "408", "英语"]));
+      const coreMinutes = day.blocks
+        .filter(([subject]) => subject === "数学" || subject === "408")
+        .reduce((sum, [, minutes]) => sum + minutes, 0);
+      expect(coreMinutes).toBeGreaterThanOrEqual(70);
     }
   });
 

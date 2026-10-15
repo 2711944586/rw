@@ -3,18 +3,18 @@
    Base components stay in base.css/workspace.css; mode-specific composition stays here. */
 
 :root {
-  --plan-bg: #f4f1ea;
-  --plan-canvas: #f4f1ea;
-  --plan-surface: #fffcf7;
-  --plan-surface-soft: #f7f3ec;
-  --plan-ink: #1c1915;
-  --plan-text: #3f382f;
-  --plan-muted: #6f655b;
-  --plan-line: rgba(48, 38, 26, 0.1);
-  --plan-line-strong: rgba(48, 38, 26, 0.18);
-  --plan-accent: #9a3412;
-  --plan-accent-strong: #7c2d12;
-  --plan-accent-soft: #f6e7dc;
+  --plan-bg: #f7f8fa;
+  --plan-canvas: #f7f8fa;
+  --plan-surface: #ffffff;
+  --plan-surface-soft: #f3f5f8;
+  --plan-ink: #171c29;
+  --plan-text: #3f3f46;
+  --plan-muted: #71717a;
+  --plan-line: rgba(23, 28, 41, 0.1);
+  --plan-line-strong: rgba(23, 28, 41, 0.18);
+  --plan-accent: #4867d8;
+  --plan-accent-strong: #29459f;
+  --plan-accent-soft: #dbe3f5;
   --plan-navy: #1c2433;
   --plan-warning: #9a6700;
   --plan-warning-soft: #f6f0df;
@@ -29,8 +29,8 @@
 body[data-density] {
   --primary: var(--plan-accent);
   --primary-dark: var(--plan-accent-strong);
-  --primary-darker: #203d66;
-  --primary-ink: #203d66;
+  --primary-darker: #29459f;
+  --primary-ink: #263b83;
   --primary-soft: var(--plan-accent-soft);
   --green: var(--plan-accent);
   --green-ink: var(--plan-accent-strong);
@@ -541,24 +541,29 @@ body[data-density="focus"] .resource-focus-contract {
 
 /* Balanced: continuous workflow with a compact recording column. */
 body[data-density="balanced"] #today .today-workbench {
-  grid-template-columns: minmax(0, 1.62fr) minmax(330px, 0.78fr);
+  grid-template-areas: none;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.78fr);
   gap: 20px;
   align-items: start;
+  isolation: isolate;
 }
 
 body[data-density="balanced"] #today .today-plan-panel {
+  grid-area: auto;
   grid-column: 1;
-  grid-row: 1 / span 3;
+  grid-row: 1 / span 2;
 }
 
 body[data-density="balanced"] #today .today-entry-panel {
+  grid-area: auto;
   grid-column: 2;
   grid-row: 1;
-  position: sticky;
-  top: 74px;
+  position: static;
+  top: auto;
 }
 
 body[data-density="balanced"] #today .today-review-panel {
+  grid-area: auto;
   grid-column: 2;
   grid-row: 2;
 }
@@ -640,7 +645,7 @@ body[data-density="balanced"] .plan-card.primary-task {
 }
 
 body[data-density="balanced"] .plan-card:not(.primary-task) {
-  min-height: 230px;
+  min-height: 0;
   border-radius: var(--plan-radius);
 }
 
@@ -1057,7 +1062,7 @@ body[data-density="detail"] .resource-stage-table .resource-stage-row {
 
 .resource-stage-control dl {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0;
   border-top: 1px solid var(--plan-line);
 }

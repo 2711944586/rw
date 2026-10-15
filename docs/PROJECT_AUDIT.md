@@ -53,7 +53,7 @@
 - `src/views/`（8 个视图模块）
 - `src/infrastructure/sync-service.js`、`supabase-client.js`、`offline-cache.js`
 - `src/utils/number.js`（只被 `state-manager.js` 与 `views/` 引用）
-- 尚未由生产入口直接调用的部分 `src/domain/` 模块（`plan-generator`、`calibration-engine`、`review-queue`、`retrospective-engine`、`task-contract`、`source-registry`、`project-showcase`）
+- 尚未由生产入口直接调用的部分 `src/domain/` 模块（`calibration-engine`、`review-queue`、`retrospective-engine`、`task-contract`、`source-registry`、`project-showcase`）。`plan-generator.js` 已由 `capacity-daily-plan.js` 接入，只负责今日任务的排序和取舍。
 
 它们构成已测试的目标架构。直接删除会失去迁移成果；直接启动则会与 `app.js` 的状态、路由和同步重复绑定。完成接管前应保持“可测试但不启动”。
 

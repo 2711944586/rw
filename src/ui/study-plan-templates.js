@@ -6,7 +6,7 @@ import {
 } from "../data/study-plan-governance.js";
 
 const WEEK_THEMES = [
-  "建立基线与连续性",
+  "函数、C 循环、新词 100",
   "数列、数组与函数",
   "极限、指针与结构体",
   "极限计算、线性结构与月审"

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>软微 420 学习台</title>
-  <meta name="description" content="从 2026-08-31 开始的北大软微 420 备考学习台，覆盖计划、记录、复盘、考纲证据和云同步。">
+  <meta name="description" content="从 2026-10-14 开始的北大软微 420 备考学习台，覆盖计划、记录、复盘、考纲证据和云同步。">
   <meta property="og:title" content="软微 420 学习台">
   <meta property="og:description" content="按官方信息、公开经验样本和学习科学方法生成可执行的每日计划。">
   <meta property="og:type" content="website">
@@ -42,13 +42,13 @@
       <nav class="nav-list">
         <div class="nav-section" data-workspace="desk">
           <span class="nav-label" title="今天学什么">工作台</span>
-          <a class="nav-item active" href="#dashboard" data-view="dashboard" data-title="总览" data-purpose="今天学什么、完成多少、哪项必须复盘。" data-icon="home" data-mobile-primary data-mobile-label="首页" aria-label="总览" aria-current="page">
+          <a class="nav-item active" href="#dashboard" data-view="dashboard" data-title="总览" data-purpose="今天学什么、完成多少、哪项必须复盘。" data-icon="home" data-mobile-primary data-mobile-label="总览" aria-label="总览" aria-current="page">
             <i class="nav-ico nav-ico-home" aria-hidden="true"></i><span class="nav-text">总览</span><em id="navRiskDot">待记录</em>
           </a>
           <a class="nav-item" href="#today" data-view="today" data-title="今日" data-purpose="开始下一项，做完后一次记下结果。" data-icon="today" data-mobile-primary data-mobile-label="今日" aria-label="今日">
             <i class="nav-ico nav-ico-today" aria-hidden="true"></i><span class="nav-text">今日</span><em id="navTaskCount">3 项</em>
           </a>
-          <a class="nav-item" href="#review" data-view="review" data-title="复盘" data-purpose="在一个地方处理到期回炉。" data-icon="review" data-mobile-primary data-mobile-label="复习" aria-label="复盘">
+          <a class="nav-item" href="#review" data-view="review" data-title="复盘" data-purpose="在一个地方处理到期回炉。" data-icon="review" data-mobile-primary data-mobile-label="复盘" aria-label="复盘">
             <i class="nav-ico nav-ico-review" aria-hidden="true"></i><span class="nav-text">复盘</span><em id="navReviewDue">0 到期</em>
           </a>
         </div>
@@ -81,7 +81,7 @@
         </div>
         <div class="nav-section" data-workspace="system">
           <span class="nav-label" title="账号、备份和报考目标">系统设置</span>
-          <a class="nav-item" href="#settings" data-view="settings" data-title="设置" data-purpose="核对报考目标、备份和同步。" data-icon="settings" data-mobile-primary data-mobile-label="我的" aria-label="设置">
+          <a class="nav-item" href="#settings" data-view="settings" data-title="设置" data-purpose="核对报考目标、备份和同步。" data-icon="settings" data-mobile-primary data-mobile-label="设置" aria-label="设置">
             <i class="nav-ico nav-ico-settings" aria-hidden="true"></i><span class="nav-text">设置</span><em>数据</em>
           </a>
         </div>
@@ -91,7 +91,7 @@
       </nav>
       <div class="side-card">
         <span>今日底线</span>
-        <strong id="minimumTarget">数学 45m · 408 45m · 英语 20m</strong>
+        <strong id="minimumTarget">数学 50m · 408 45m · 英语 40m</strong>
         <div class="side-progress">
           <span id="sideCoreLabel">核心占比 0%</span>
           <div class="progress-track slim"><div class="progress-fill" id="sideCoreFill"></div></div>
@@ -179,27 +179,11 @@
         </section>
         <p class="sr-only" id="focusSupportTasks"></p>
 
-        <details class="detail-section fact-detail-section" data-density-expand="detail">
-          <summary>
-            <span>资料核验</span>
-            <em>官方基准 / 历史参考 / 待发布项</em>
-          </summary>
-          <section class="fact-check-strip" aria-label="资料核验状态">
-            <div class="panel-head tight">
-              <div>
-                <h3>事实与边界</h3>
-                <p>只把已发布事实写成确定项；未发布年份保持待复核。</p>
-              </div>
-            </div>
-            <div class="live-fact-grid" id="liveFactGrid"></div>
-          </section>
-        </details>
-
         <section class="target-lane" aria-label="420 内部校准线">
           <article class="target-status-card">
             <span>420+ 内部校准线</span>
             <strong id="targetGateTitle">等待记录</strong>
-            <p id="targetGateText">按累计小时、阶段节点、核心占比和模考均分校准风险。</p>
+            <p id="targetGateText">累计小时、核心占比、模考均分。</p>
             <div class="target-gate-meta">
               <em id="targetGateHours">累计 --h</em>
               <em id="targetGateScore">监测：--</em>
@@ -208,7 +192,7 @@
           <article class="score-split-card">
             <div class="target-head">
               <span>目标分结构</span>
-              <strong>75 / 80 / 130 / 135</strong>
+              <strong>75 / 80 / 140 / 130</strong>
             </div>
             <div class="score-split-bars" id="targetSubjectGrid"></div>
           </article>
@@ -233,7 +217,7 @@
           <article class="metric-card">
             <span>距离初试</span>
             <strong id="daysLeft">--</strong>
-            <p id="examDateStatus">2027-12-25 · 推算排程日，非官方初试日期</p>
+            <p id="examDateStatus">2027-12-19 · 推算排程日，非官方初试日期</p>
           </article>
           <article class="metric-card">
             <span>本周有效学习</span>
@@ -259,13 +243,13 @@
 
         <section class="coach-strip">
           <div>
-            <span class="coach-kicker">阶段建议</span>
-            <strong id="coachTitle">先启动，再加速</strong>
-            <p id="coachText">根据当前阶段、最近 7 天数据和考纲完成度给出建议。</p>
+            <span class="coach-kicker">本周状态</span>
+            <strong id="coachTitle">阶段 A</strong>
+            <p id="coachText">本周还没有记录。</p>
           </div>
           <div class="coach-actions">
             <span id="streakBadge">连续 0 天</span>
-            <span id="paceBadge">节奏未建立</span>
+            <span id="paceBadge">待记录</span>
           </div>
         </section>
 
@@ -273,7 +257,7 @@
           <article class="strategy-card strategy-active-card">
             <span>当前策略</span>
             <strong id="activeStrategyTitle">自动策略</strong>
-            <p id="activeStrategyText">按阶段、经验路线、聚焦科目和复盘负荷生成计划。</p>
+            <p id="activeStrategyText">按阶段、经验路线和科目开关生成。</p>
             <div class="strategy-tags" id="activeStrategyTags"></div>
           </article>
           <article class="strategy-card">
@@ -285,36 +269,21 @@
           <article class="strategy-card">
             <span>下次调参</span>
             <strong id="planAdjustmentTitle">保持</strong>
-            <p id="planAdjustmentText">周复盘后只调整一个变量，避免重写整套计划。</p>
+            <p id="planAdjustmentText">周复盘后只改一个变量。</p>
           </article>
         </section>
 
-        <details class="detail-section loop-details" data-density-expand="detail">
-          <summary>
-            <span>数据流</span>
-            <em>流程状态 / 本地备份</em>
-          </summary>
-          <section class="ops-board">
-            <article class="workflow-card">
-              <div class="panel-head tight">
-                <div>
-                  <h3>流程状态</h3>
-                  <p>任务、记录、复盘、模考保持同一套数据。</p>
-                </div>
-              </div>
-              <div class="workflow-rail" id="workflowRail"></div>
-            </article>
-            <article class="storage-card">
-              <div class="panel-head tight">
-                <div>
-                  <h3>数据保险</h3>
-                  <p>本机保存，建议每周导出。</p>
-                </div>
-              </div>
-              <div class="storage-status" id="storageStatus"></div>
-            </article>
-          </section>
-        </details>
+        <section class="diag-board" aria-label="核验与数据">
+          <header class="diag-head">
+            <h3>核验与数据</h3>
+            <p>招生口径 · 方法依据 · 今日流程 · 本机备份</p>
+          </header>
+          <div class="live-fact-grid" id="liveFactGrid"></div>
+          <div class="diag-ops">
+            <div class="workflow-rail" id="workflowRail"></div>
+            <div class="storage-status" id="storageStatus"></div>
+          </div>
+        </section>
 
 
         <details class="detail-section" data-density-expand="detail">
@@ -345,7 +314,7 @@
               <div class="panel-head">
                 <div>
                   <h3>14 天学习曲线</h3>
-                  <p>按天查看投入、连续性和负荷变化。</p>
+                  <p>按天查看投入和负荷。</p>
                 </div>
               </div>
               <div class="trend-chart" id="trendChart"></div>
@@ -358,20 +327,20 @@
             <span>完整监测</span>
             <em>周配额 / 目标分 / 今日预览 / 规则 / 热力图</em>
           </summary>
-          <div class="metric-grid secondary-metrics">
-            <article class="metric-card">
-              <span>累计有效学习</span>
-              <strong id="totalHours">0h</strong>
-              <p id="totalProgressText">参考容量 2200h，不是硬性定额</p>
-            </article>
-            <article class="metric-card">
-              <span>本月完成率</span>
-              <strong id="monthProgressMetric">0%</strong>
-              <p id="monthProgressText">对齐月度总控表</p>
-            </article>
-          </div>
-          <div class="content-grid">
-            <section class="panel wide">
+          <div class="monitor-board">
+            <div class="metric-grid secondary-metrics">
+              <article class="metric-card">
+                <span>累计有效学习</span>
+                <strong id="totalHours">0h</strong>
+                <p id="totalProgressText">参考容量 2150h，不是硬性定额</p>
+              </article>
+              <article class="metric-card">
+                <span>本月完成率</span>
+                <strong id="monthProgressMetric">0%</strong>
+                <p id="monthProgressText">对齐月度总控表</p>
+              </article>
+            </div>
+            <section class="panel monitor-quota">
               <div class="panel-head">
                 <div>
                   <h3>本周配额</h3>
@@ -381,8 +350,7 @@
               </div>
               <div class="quota-grid" id="quotaGrid"></div>
             </section>
-
-            <section class="panel">
+            <section class="panel monitor-scores">
               <div class="panel-head">
                 <div>
                   <h3>目标分结构</h3>
@@ -391,19 +359,17 @@
               </div>
               <div class="score-targets" id="scoreTargets"></div>
             </section>
-
-            <section class="panel">
+            <section class="panel monitor-tasks">
               <div class="panel-head">
                 <div>
                   <h3>今日任务预览</h3>
                   <p id="todayPhaseText">根据当前阶段生成</p>
                 </div>
-              <button class="icon-button" id="regenTasks" type="button" title="刷新今日任务" aria-label="刷新今日任务"><i data-lucide="refresh-cw" aria-hidden="true"></i></button>
+                <button class="icon-button" id="regenTasks" type="button" title="刷新今日任务" aria-label="刷新今日任务"><i data-lucide="refresh-cw" aria-hidden="true"></i></button>
               </div>
               <div class="task-list" id="todayTasksPreview"></div>
             </section>
-
-            <section class="panel">
+            <section class="panel monitor-syllabus">
               <div class="panel-head">
                 <div>
                   <h3>考纲图谱</h3>
@@ -412,18 +378,7 @@
               </div>
               <div class="syllabus-mini" id="syllabusMini"></div>
             </section>
-
-            <section class="panel">
-              <div class="panel-head">
-                <div>
-                  <h3>系统规则</h3>
-                  <p>任务、复盘和核心占比规则。</p>
-                </div>
-              </div>
-              <div class="rule-stack" id="ruleStack"></div>
-            </section>
-
-            <section class="panel wide">
+            <section class="panel monitor-heat">
               <div class="panel-head">
                 <div>
                   <h3>最近 28 天热力图</h3>
@@ -432,6 +387,15 @@
               </div>
               <div class="heatmap" id="heatmap"></div>
               <div class="execution-signals" id="executionSignals" hidden></div>
+            </section>
+            <section class="panel monitor-rules">
+              <div class="panel-head">
+                <div>
+                  <h3>系统规则</h3>
+                  <p>任务、复盘和核心占比规则。</p>
+                </div>
+              </div>
+              <div class="rule-stack" id="ruleStack"></div>
             </section>
           </div>
         </details>
@@ -446,13 +410,30 @@
                 <h3>下一步</h3>
                 <p id="dailyPlanMeta">先做未完成的第一项。计时可以跳过。</p>
               </div>
-              <button class="ghost-button" id="generatePlanBtn" type="button">重新生成</button>
+              <div class="record-tools">
+                <button class="primary-button" id="startNextTaskBtn" type="button">开始下一项</button>
+                <button class="ghost-button" id="undoPlanBtn" type="button">恢复上一版</button>
+                <button class="ghost-button" id="generatePlanBtn" type="button">重新生成</button>
+              </div>
             </div>
+            <p class="plan-capacity-note" id="planCapacityNote" hidden></p>
             <div class="session-bar" id="sessionBar" hidden>
-              <strong id="sessionTaskLabel">学习计时</strong>
-              <em id="sessionClock">00:00</em>
-              <button type="button" class="ghost-button" id="sessionPauseBtn">暂停</button>
-              <button type="button" class="primary-button" id="sessionFinishBtn">结束并记录</button>
+              <div class="session-controls" id="sessionControls">
+                <strong id="sessionTaskLabel">学习计时</strong>
+                <em id="sessionClock">00:00</em>
+                <button type="button" class="ghost-button" id="sessionPauseBtn">暂停</button>
+                <button type="button" class="primary-button" id="sessionFinishBtn">结束并记录</button>
+              </div>
+              <form class="session-result" id="sessionResultForm" hidden>
+                <label>有效分钟<input name="minutes" type="number" min="1" max="240" inputmode="numeric" required></label>
+                <label>题量<input name="problems" type="number" min="0" max="999" inputmode="numeric" value="0" required></label>
+                <label class="span-2">错因或收获<input name="mistake" type="text" maxlength="300" required placeholder="错在哪，或这次最容易忘的一步"></label>
+                <label class="span-2">明日第一任务<input name="nextTask" type="text" maxlength="300" required placeholder="明天第一项"></label>
+                <div class="session-result-actions">
+                  <button type="submit" class="primary-button">保存这次结果</button>
+                  <button type="button" class="ghost-button" id="sessionResultBack">返回计时</button>
+                </div>
+              </form>
             </div>
             <div class="daily-operating-console" id="dailyOperatingConsole" aria-live="polite"></div>
             <div class="daily-progress" id="dailyTaskProgress"></div>
@@ -581,7 +562,7 @@
                 <div class="panel-head">
                   <div>
                     <h3>首月 28 天启动日历</h3>
-                    <p>从 2026-08-31 连续排到 09-27；每天写清任务、产出、复盘、缓冲和停手线。</p>
+                    <p>从 2026-10-14 连续排到 11-10；每天写清任务、产出、复盘、缓冲和停手线。</p>
                   </div>
                 </div>
                 <div class="first-month-grid" id="firstMonthGrid"></div>
@@ -765,6 +746,17 @@
             <div class="review-operations-layout density-balanced-only" id="reviewOperationsLayout"></div>
             <div class="review-diagnostic-layout density-detail-only" id="reviewDiagnosticLayout"></div>
           </section>
+          <section class="panel wide density-balanced-only">
+            <div class="panel-head">
+              <div>
+                <h3>间隔复盘队列</h3>
+                <p>先处理到期项，再看本周数字。完成任务后进入 D+1 到 D+30 复盘。</p>
+              </div>
+            </div>
+            <div class="rolling-window-chart" id="rollingWindowChart"></div>
+            <div class="review-policy" id="reviewPolicy"></div>
+            <div class="spaced-review-list" id="spacedReviewList"></div>
+          </section>
           <section class="panel wide review-metrics-panel">
             <div class="panel-head">
               <div>
@@ -787,21 +779,10 @@
             <div class="panel-head">
               <div>
                 <h3>月度计划</h3>
-                <p>按 2026-08-31 到 2027 年 12 月推算窗口的有效学习目标推进；官方日期发布后必须更新。</p>
+                <p>按 2026-10-14 到 2027-12-19 推算窗口的有效学习目标推进；官方日期发布后必须更新。</p>
               </div>
             </div>
             <div class="month-table" id="monthTable"></div>
-          </section>
-          <section class="panel wide density-balanced-only">
-            <div class="panel-head">
-              <div>
-                <h3>间隔复盘队列</h3>
-                <p>完成任务后进入 D+1 到 D+30 复盘。</p>
-              </div>
-            </div>
-            <div class="rolling-window-chart" id="rollingWindowChart"></div>
-            <div class="review-policy" id="reviewPolicy"></div>
-            <div class="spaced-review-list" id="spacedReviewList"></div>
           </section>
           <section class="panel wide density-detail-only">
             <div class="panel-head">
@@ -930,7 +911,7 @@
               </div>
             </div>
             <form class="settings-form" id="settingsForm">
-              <fieldset class="settings-group span-2">
+              <fieldset class="settings-group">
                 <legend>报考目标</legend>
                 <div class="settings-fields">
                   <label>入学年份
@@ -944,25 +925,30 @@
                     <select id="settingDirection"></select>
                   </label>
                 </div>
-                <p class="field-hint" id="goalStatusText">目标加载中</p>
-                <p class="field-hint" id="goalImpactText">调整目标不会删除已完成记录。</p>
+                <div class="settings-meta">
+                  <p class="field-hint" id="goalStatusText">目标加载中</p>
+                  <p class="settings-note" id="goalImpactText">调整目标不会删除已完成记录。</p>
+                </div>
                 <ul class="goal-subject-list" id="goalSubjectList"></ul>
               </fieldset>
-              <fieldset class="settings-group span-2">
-                <legend>辅助</legend>
-                <label class="notify-setting"><input type="checkbox" id="settingAdaptivePriority"> 显示可解释的任务优先级建议。默认关闭，不改写锁定任务。</label>
-                <label class="notify-setting"><input type="checkbox" id="settingAiAssist"> 允许在本机整理错因提示。默认关闭，不把学习记录发到外部服务。</label>
-              </fieldset>
-              <fieldset class="settings-group span-2">
+              <fieldset class="settings-group">
                 <legend>时间预算</legend>
                 <div class="settings-fields">
-                  <label>工作日上限<span class="field-unit">分钟</span><input type="number" min="90" max="600" id="settingWeekdayMinutes"></label>
-                  <label>周末上限<span class="field-unit">分钟</span><input type="number" min="120" max="720" id="settingWeekendMinutes"></label>
-                  <label>每日必做任务<input type="number" min="3" max="4" id="settingTaskCount"></label>
-                  <label>核心占比目标<span class="field-unit">%</span><input type="number" min="55" max="85" id="settingCoreRatio"></label>
+                  <label>工作日上限
+                    <span class="field-control"><input type="number" min="90" max="600" id="settingWeekdayMinutes"><span class="field-unit">分钟</span></span>
+                  </label>
+                  <label>周末上限
+                    <span class="field-control"><input type="number" min="120" max="720" id="settingWeekendMinutes"><span class="field-unit">分钟</span></span>
+                  </label>
+                  <label>每日必做任务
+                    <span class="field-control"><input type="number" min="3" max="4" id="settingTaskCount"><span class="field-unit">项</span></span>
+                  </label>
+                  <label>核心占比目标
+                    <span class="field-control"><input type="number" min="55" max="85" id="settingCoreRatio"><span class="field-unit">%</span></span>
+                  </label>
                 </div>
               </fieldset>
-              <fieldset class="settings-group span-2">
+              <fieldset class="settings-group">
                 <legend>排程方向</legend>
                 <div class="settings-fields">
                   <label>计划强度
@@ -994,27 +980,64 @@
                   </label>
                   <label>推算排程日期<input type="date" id="settingTargetExamDate"><span class="field-hint" id="settingsExamDateStatus">推算排程日，非官方初试日期</span></label>
                 </div>
+                <p class="settings-subhead">参与自动排程的科目</p>
+                <fieldset class="subject-toggle-field" id="settingEnabledSubjects">
+                  <legend class="sr-only">参与自动排程的科目</legend>
+                  <label><input type="checkbox" value="math">数学</label>
+                  <label><input type="checkbox" value="cs408">408</label>
+                  <label><input type="checkbox" value="english">英语</label>
+                  <label><input type="checkbox" value="politics">政治</label>
+                  <label><input type="checkbox" value="review">复盘</label>
+                  <label><input type="checkbox" value="project">项目</label>
+                </fieldset>
               </fieldset>
-              <fieldset class="settings-group span-2">
+              <fieldset class="settings-group">
                 <legend>复盘规则</legend>
                 <div class="settings-fields">
-                  <label>新内容上限<span class="field-unit">项</span><input type="number" min="0" max="4" id="settingMaxNewTopics"></label>
-                  <label>单项复盘预算<span class="field-unit">分钟</span><input type="number" min="15" max="60" id="settingReviewLoad"></label>
-                  <label>滚动窗口<span class="field-unit">天</span><input type="number" min="7" max="60" id="settingRollingWindowDays"></label>
-                  <label class="span-2">复盘间隔<span class="field-unit">天，逗号分隔</span><input type="text" id="settingReviewDays" placeholder="1,3,7,14,30"></label>
+                  <label>新内容上限
+                    <span class="field-control"><input type="number" min="0" max="4" id="settingMaxNewTopics"><span class="field-unit">项</span></span>
+                  </label>
+                  <label>单项复盘预算
+                    <span class="field-control"><input type="number" min="15" max="60" id="settingReviewLoad"><span class="field-unit">分钟</span></span>
+                  </label>
+                  <label>滚动窗口
+                    <span class="field-control"><input type="number" min="7" max="60" id="settingRollingWindowDays"><span class="field-unit">天</span></span>
+                  </label>
+                  <label>每日新词
+                    <span class="field-control"><input type="number" min="20" max="200" id="settingEnglishNewWords"><span class="field-unit">个</span></span>
+                  </label>
+                  <label class="span-2">复盘间隔
+                    <span class="field-control"><input type="text" id="settingReviewDays" placeholder="1,3,7,14,30"><span class="field-unit">天</span></span>
+                  </label>
                 </div>
               </fieldset>
-              <label class="span-2 notify-setting"><input type="checkbox" id="settingNotifications"> 今日开始与到期复盘提醒。默认关闭，打开后才向浏览器申请通知权限。</label>
-              <fieldset class="span-2 subject-toggle-field" id="settingEnabledSubjects">
-                <legend>参与自动排程的科目</legend>
-                <label><input type="checkbox" value="math">数学</label>
-                <label><input type="checkbox" value="cs408">408</label>
-                <label><input type="checkbox" value="english">英语</label>
-                <label><input type="checkbox" value="politics">政治</label>
-                <label><input type="checkbox" value="review">复盘</label>
-                <label><input type="checkbox" value="project">项目</label>
+              <fieldset class="settings-group">
+                <legend>辅助与提醒</legend>
+                <label class="notify-setting">
+                  <input type="checkbox" id="settingNotifications">
+                  <span>
+                    <strong>复盘提醒</strong>
+                    <em>今日开始与到期复盘提醒。默认关闭，打开后才向浏览器申请通知权限。</em>
+                  </span>
+                </label>
+                <label class="notify-setting">
+                  <input type="checkbox" id="settingAdaptivePriority">
+                  <span>
+                    <strong>任务优先级建议</strong>
+                    <em>显示可解释的优先级。默认关闭，不改写锁定任务。</em>
+                  </span>
+                </label>
+                <label class="notify-setting">
+                  <input type="checkbox" id="settingAiAssist">
+                  <span>
+                    <strong>本机错因整理</strong>
+                    <em>允许在本机整理错因提示。默认关闭，不把学习记录发到外部服务。</em>
+                  </span>
+                </label>
               </fieldset>
-              <button type="submit" class="primary-button">保存设置</button>
+              <div class="settings-actions">
+                <button type="submit" class="primary-button">保存设置</button>
+              </div>
             </form>
           </section>
           <section class="panel wide" id="studyReportPanel">
@@ -1026,6 +1049,24 @@
             </div>
             <div class="study-report" id="studyReportCard"></div>
           </section>
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>自定义任务模板</h3>
+                <p>固定任务会参与今日计划。</p>
+              </div>
+            </div>
+            <form class="custom-task-form" id="customTaskForm">
+              <label>科目<input type="text" id="customSubject" placeholder="例如：数学"></label>
+              <label>任务<input type="text" id="customText" placeholder="例如：高数极限错题回炉"></label>
+              <label>分钟<input type="number" min="10" max="240" id="customMinutes" inputmode="numeric"></label>
+              <button type="submit" class="primary-button">添加模板</button>
+            </form>
+            <div class="custom-task-list" id="customTaskList"></div>
+          </section>
+
+          <details class="settings-reference">
+            <summary>说明、来源与部署</summary>
           <section class="panel wide">
             <div class="panel-head">
               <div>
@@ -1044,22 +1085,6 @@
             </div>
             <div class="standards-list" id="standardsList"></div>
           </section>
-          <section class="panel wide">
-            <div class="panel-head">
-              <div>
-                <h3>自定义任务模板</h3>
-                <p>固定任务会参与今日计划。</p>
-              </div>
-            </div>
-            <form class="custom-task-form" id="customTaskForm">
-              <label>科目<input type="text" id="customSubject" placeholder="例如：数学"></label>
-              <label>任务<input type="text" id="customText" placeholder="例如：高数极限错题回炉"></label>
-              <label>分钟<input type="number" min="10" max="240" id="customMinutes" inputmode="numeric"></label>
-              <button type="submit" class="primary-button">添加模板</button>
-            </form>
-            <div class="custom-task-list" id="customTaskList"></div>
-          </section>
-
           <section class="panel wide deploy-panel">
             <div class="panel-head">
               <div>
@@ -1136,6 +1161,7 @@
             </div>
             <div class="boundary-grid" id="executionBoundaries"></div>
           </section>
+          </details>
         </div>
       </section>
     </main>
@@ -1183,7 +1209,7 @@
       </div>
 
       <div class="auth-credentials" id="authCredentials">
-        <label>邮箱<input type="email" id="authEmail" autocomplete="email" placeholder="you@example.com" aria-describedby="authResult"></label>
+        <label>邮箱<input type="email" id="authEmail" autocomplete="email" placeholder="请输入邮箱" aria-describedby="authResult"></label>
         <label><span id="authPasswordLabel">密码</span>
           <span class="auth-password-field">
             <input type="password" id="authPassword" autocomplete="current-password" placeholder="至少 6 位" aria-describedby="authResult">
@@ -1192,12 +1218,12 @@
             </button>
           </span>
         </label>
+        <button class="auth-reset-password" id="resetPasswordBtn" type="button">忘记密码</button>
       </div>
 
       <div class="auth-actions" id="authSignedOutActions">
         <button class="primary-button" id="signInBtn" type="button">登录并同步</button>
         <button class="ghost-button" id="signUpBtn" type="button">注册新账号</button>
-        <button class="ghost-button auth-reset-password" id="resetPasswordBtn" type="button">忘记密码</button>
       </div>
       <div class="auth-actions" id="authSignedInActions" hidden>
         <button class="primary-button" id="syncDialogBtn" type="button"><i data-lucide="refresh-cw" aria-hidden="true"></i>立即同步</button>
@@ -1207,9 +1233,9 @@
         <button class="primary-button" id="updatePasswordBtn" type="submit">设置新密码</button>
         <button class="ghost-button" id="cancelPasswordRecoveryBtn" type="button">取消</button>
       </div>
-      <div class="auth-result" id="authResult" role="status" aria-live="polite">
+      <div class="auth-result" id="authResult" role="status" aria-live="polite" hidden>
         <strong>账号状态</strong>
-        <p>填写邮箱和密码后，可以注册新账号或登录同步。</p>
+        <p></p>
       </div>
       <p class="auth-help" id="authHelp">首次使用请注册账号。如果邮箱确认已开启，请先打开确认邮件，再回到这里登录。</p>
       <div class="migration-box" id="migrationBox">

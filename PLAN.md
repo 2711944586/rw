@@ -676,3 +676,26 @@ Closes #... / PLAN.md: P0-XX
 - **学习侧**：统计帮助选择下一步学习行动，不只是展示数字；复杂算法有可验证证据、可解释且可关闭。
 
 **最高优先顺序：招生事实与数据正确性 → 首页/今日执行体验 → 架构渐进迁移 → 完整错题与复盘 → 自适应与 AI。**
+
+---
+
+## 15. 第二轮实施记录（2026-10-10）
+
+上面的复选框保持未勾选。本轮只记录已经跑过的门禁，不把「代码已写」当成「任务已验收」。
+
+- 完成条件、指标、测试、风险和实际结果见 [`docs/audit/test-evidence.md`](docs/audit/test-evidence.md)。
+- 变更范围见 [`docs/audit/change-report.md`](docs/audit/change-report.md)。
+- 颜色、网格和页面动作见 [`docs/design/design-system.md`](docs/design/design-system.md)、[`docs/design/page-specifications.md`](docs/design/page-specifications.md)、[`docs/design/responsive-matrix.md`](docs/design/responsive-matrix.md)。
+- 继续使用 Vite 的决定见 [`docs/architecture/decisions/0001-stay-on-vite.md`](docs/architecture/decisions/0001-stay-on-vite.md)。
+- 截图在 `docs/audit/screenshots/`。
+
+已在本机通过：`npm run test:coverage`（53 个文件、784 项，覆盖率见测试证据）、`npm run build`、`npm run test:budget`、`npm run test:boundaries`。一次计时加一次结果保存在上一轮浏览器记录里走通。
+
+本轮补上的事实：
+
+- 生产路由、状态、同步仍是 `app.js` 的 `setRoute`、`saveState`、`queueCloudSync`。第二套模块没有接上。`tests/unit/production-authority.test.js` 锁住这一点。
+- `generateDailyPlan` 只做排序和取舍，任务正文仍来自 `createDailyTasks`。没有用它替换整条排程。
+- 线上 12 张表的 RLS 已打开，策略是 `user_id = auth.uid()`。`daily_records` 做了会回滚的双账号读写。其余表没有逐张写入。
+- 覆盖率是实测值，没有改成 80% 门槛。
+- 实验室 LCP、CLS 和交互时长只代表本机预览，不是线上字段数据。
+- https://rw-vert.vercel.app 仍是上一轮部署。这轮没有推送，也没有部署。

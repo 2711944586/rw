@@ -97,17 +97,17 @@ describe('import boundary: malformed maps are filtered, not trusted', () => {
 
   it('filters tombstones whose embedded date is out of scope', () => {
     const sanitized = sanitizeDeleted({
-      records: ['2026-09-01', '2020-01-01', 'bad'],
+      records: ['2026-10-20', '2020-01-01', 'bad'],
       scores: ['__proto__'],
     });
     // `sanitizeDeleted` only guards the keys; the plan-start window is applied
     // by `filterDeletedFromStart`, which is where the old date gets dropped.
     const deleted = filterDeletedFromStart(sanitized);
-    const meta = sanitizeDeletedMeta({ records: { '2026-09-01': '2026-09-02T00:00:00.000Z' } }, deleted);
+    const meta = sanitizeDeletedMeta({ records: { '2026-10-20': '2026-10-21T00:00:00.000Z' } }, deleted);
 
-    expect(deleted.records).toEqual(['2026-09-01']);
+    expect(deleted.records).toEqual(['2026-10-20']);
     expect(deleted.scores).toEqual([]);
-    expect(meta.records['2026-09-01']).toBe('2026-09-02T00:00:00.000Z');
+    expect(meta.records['2026-10-20']).toBe('2026-10-21T00:00:00.000Z');
   });
 
   it('builds a user record only from a usable id and email pair', () => {

@@ -18,7 +18,7 @@ const routeSentinels = Object.freeze({
   syllabus: '#syllabusBoard',
   records: '#recordsTable',
   review: '#weeklyReview',
-  scores: '#scoreSummary',
+  scores: '#scoreTrend',
   resources: '#resourceGrid',
   settings: '#standardsList',
 });

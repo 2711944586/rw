@@ -115,10 +115,15 @@ export function initWorkspaceController() {
   });
   dialog?.addEventListener('close', () => syncDialogState(false));
   document.addEventListener('keydown', (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-      event.preventDefault();
-      dialog?.open ? closeCommands() : openCommands();
-    }
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'k') return;
+    const target = event.target;
+    const editable = target instanceof HTMLElement && (
+      Boolean(target.closest('input, textarea, select')) || target.isContentEditable
+    );
+    const insideDialog = target instanceof Element && dialog?.contains(target);
+    if (editable && !insideDialog && !dialog?.open) return;
+    event.preventDefault();
+    dialog?.open ? closeCommands() : openCommands();
   });
 
   const navigation = document.querySelector('.nav-list');

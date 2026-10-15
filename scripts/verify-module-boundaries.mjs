@@ -39,7 +39,6 @@ const PENDING_MIGRATION = [
   'core/router.js',
   'core/state-manager.js',
   'domain/calibration-engine.js',
-  'domain/plan-generator.js',
   'domain/project-showcase.js',
   'domain/retrospective-engine.js',
   'domain/review-queue.js',

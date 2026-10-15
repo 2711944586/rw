@@ -48,7 +48,8 @@ export function renderAuthPanelState({
   const userLabel = user ? `当前账号：${accountLabel}` : "未登录时也可先在本机记录。";
 
   setText("authHint", `${configuredLabel} · ${storageLabel}。${userLabel}`);
-  setText("authBuildText", `版本 ${build}`);
+  const buildLabel = String(build || "").replace(/^.*?v(\d)/, "v$1") || String(build || "");
+  setText("authBuildText", buildLabel);
   setText("authAccountText", accountLabel);
   setText("authSyncText", syncLabel);
   setText("authHelp", user
@@ -76,6 +77,8 @@ export function renderAuthPanelState({
     passwordInput.setAttribute("aria-label", passwordRecoveryPending ? "新密码" : "密码");
   }
   setText("authPasswordLabel", passwordRecoveryPending ? "新密码" : "密码");
+  const resetButton = document.getElementById("resetPasswordBtn");
+  if (resetButton) resetButton.hidden = passwordRecoveryPending;
 }
 
 export function focusAuthPanel(user, passwordRecoveryPending = false) {

@@ -11,6 +11,7 @@ export const DEFAULT_PLAN_CONTROLS = {
   reviewLoad: 25,
   maxNewTopics: 3,
   rollingWindowDays: 30,
+  englishNewWords: 100,
   enabledSubjects: ['math', 'cs408', 'english', 'politics', 'review', 'project'],
 };
 
@@ -38,7 +39,7 @@ export const strategySources = [
   {
     title: '英语稳定经验',
     source: '英语一阅读方法与公开经验贴综合',
-    use: '单词每天不断档，阅读以定位句、同义替换、干扰项原因和精读复盘为核心；低负荷日也保留 20 分钟微积累。',
+    use: '单词每天固定新词配额，先清到期复习再学新词；阅读留下定位句、同义替换和干扰项原因。',
   },
   {
     title: '政治后置经验',
@@ -48,7 +49,7 @@ export const strategySources = [
   {
     title: '学习科学依据',
     source: 'Dunlosky 2013 / Karpicke retrieval practice',
-    use: '计划默认用主动回忆、间隔复盘和可验收产出，而不是只把视频或阅读时长写进计划。',
+    use: '计划默认用主动回忆、间隔复盘和可验收产出排每日任务。',
   },
   {
     title: '执行经验边界',
@@ -60,42 +61,42 @@ export const strategySources = [
 export const phaseStrategies = {
   A: {
     label: '启动与负荷校准',
-    method: '8 月 31 日起四周爬坡，补函数图像、代数变形、C 语言基础和英语句法；不追补过去月份，每天只追求完成证据。',
-    reviewRule: '首周只做轻量 D+1，之后逐步加入 D+3/D+7；完成率连续达到 80% 才增加一个学习块。',
+    method: '每天数学函数/代数 60m、C 循环数组函数 60m、英语新词 100 + 到期复习。资料各固定一套。',
+    reviewRule: '当天留下题量或代码；次日 D+1 闭卷重做。完成率连续两周 80% 再加一个学习块。',
   },
   B: {
     label: '基础主干',
-    method: '高数基础、线代启动、数据结构主干和英语阅读同步推进，每科固定一套主线，完成 70% 前不扩张资料。',
+    method: '每天高数基础题 90m、王道数据结构 90m、英语新词 100 与 1 篇真题阅读。主线完成 70% 前不加第二套资料。',
     reviewRule: '错题 D+1/D+3 必清，周末合并同类错因，连续两周未回炉就减少新内容。',
   },
   C: {
     label: '一轮闭合',
-    method: '数学三大模块和 408 四门建立完整框架，核心占比维持 65%+，每周至少一次章节小测。',
+    method: '每天高数/线代/概率 120m、408 四门 120m、英语新词 100。每周一次章节测，核心占比 65%+。',
     reviewRule: '复盘必须挂回考纲小节，过期 7 天视作未掌握，不靠“看懂”标记通过。',
   },
   D: {
     label: '强化真题',
-    method: '按题型和系统链路做分章真题，先解决识别信号与表达，再增加速度和综合度。',
+    method: '每天分章真题 120-135m，先写识别信号再限时。专题正确率不到 80% 不进入整套。',
     reviewRule: 'D+14 从题目回到章节框架；专题验收不过关就不进入整套刷量。',
   },
   E: {
     label: '暑期套卷',
-    method: '数学和 408 从分章过渡到整套真题，英语写作和政治选择题启动；试卷数量服从复盘质量。',
+    method: '每周数学、408 各 1-2 套限时真题；英语保持新词 100 并开始作文；政治启动选择题。',
     reviewRule: '套卷后 48 小时完成错题复盘；回炉率低于 70% 时暂停新增模拟卷。',
   },
   F: {
     label: '报名稳定',
-    method: '核验招生信息并完成报名，用近 5 套表现定位弱项，真题优先于模拟题数量。',
+    method: '核验研招网科目并完成报名。每周 2 套真题，按近 5 套错因补弱，少开新模拟卷。',
     reviewRule: '套卷后 48 小时完成二次归因，同一错因重复两次就建立定向补弱任务。',
   },
   G: {
     label: '冲刺补弱',
-    method: '围绕近 5 套趋势修复高频失分，完成网上确认，政治主观题进入关键词默写。',
+    method: '只修近 5 套里每科最多 3 个高频失分。完成网上确认。政治默写主观题关键词。',
     reviewRule: '只保留高频错题、公式链、大题表达和反复失分专题。',
   },
   H: {
     label: '考前收束',
-    method: '模拟、错题、背诵和手感维持，不再大规模开新内容。',
+    method: '每天错题抽测、公式默写、英语新词复习和作文各一份。不再开新资料。',
     reviewRule: 'D+30 月度回炉和考前清单合并执行。',
   },
 };
@@ -114,7 +115,7 @@ export const syllabusFrameworks = {
   ],
   english: [
     ['词汇与语法', '核心词、熟词僻义、长难句、翻译顺序', '每天不断档，在真题语境里复现。'],
-    ['阅读理解', '定位、同义替换、题型、干扰项', '精读不是全文翻译，而是复盘证据句。'],
+    ['阅读理解', '定位、同义替换、题型、干扰项', '精读只复盘证据句：定位、同义替换、干扰项。'],
     ['写作与翻译', '小作文、大作文、翻译、新题型、完形', '后期模板定稿，限时写作和纠错同步。'],
   ],
   politics: [
@@ -176,6 +177,7 @@ export function normalizePlanControls(raw = {}) {
   next.reviewLoad = clampInt(next.reviewLoad, 15, 60);
   next.maxNewTopics = clampInt(next.maxNewTopics, 0, 4);
   next.rollingWindowDays = clampInt(next.rollingWindowDays, 7, 60);
+  next.englishNewWords = clampInt(next.englishNewWords, 20, 200);
   const enabled = Array.isArray(next.enabledSubjects) ? next.enabledSubjects : DEFAULT_PLAN_CONTROLS.enabledSubjects;
   next.enabledSubjects = [...new Set(enabled.map(subjectKey).filter((item) => VALID_SUBJECTS.includes(item)))];
   if (!next.enabledSubjects.some((item) => CORE_SUBJECTS.has(item))) {
@@ -219,11 +221,26 @@ export function isSubjectEnabled(subject, controls = DEFAULT_PLAN_CONTROLS) {
   return normalized.enabledSubjects.includes(subjectKey(subject));
 }
 
+export function englishVocabQuota(controls = DEFAULT_PLAN_CONTROLS) {
+  const newWords = clampInt(normalizePlanControls(controls).englishNewWords, 20, 200);
+  return {
+    newWords,
+    errorWords: 20,
+    sentence: 1,
+    label: `新词 ${newWords}`,
+    reviewLabel: '到期复习',
+    errorLabel: '错词 20',
+    sentenceLabel: '定位 1 句',
+    taskText: `新词 ${newWords} + 到期复习 + 错词 20，留 1 句定位/切分证据`,
+    minutesFloor: Math.max(25, Math.min(70, 20 + Math.round(newWords * 0.25)))
+  };
+}
+
 export function getPhaseStrategy(phaseId, track = 'balanced') {
   const base = hasOwn(phaseStrategies, phaseId) ? phaseStrategies[phaseId] : phaseStrategies.A;
   const trackTexts = {
     balanced: '四科均衡执行，数学和 408 保持主线。',
-    mathHeavy: '数学优先，适合数学进度落后或目标 130+。',
+    mathHeavy: '数学优先，适合数学进度落后或目标 140+。',
     cs408Heavy: '408 优先，适合跨考补计算机体系。',
     englishSteady: '英语每日不断档，阅读精读优先。',
     latePolitics: '政治后置，暑期后再逐步加量。',
@@ -239,7 +256,7 @@ export function subjectPlanWeights(phaseId, controls = DEFAULT_PLAN_CONTROLS) {
   const weights = {
     math: phaseId === 'A' ? 0.35 : 0.33,
     cs408: phaseId === 'A' ? 0.35 : 0.35,
-    english: phaseId === 'A' ? 0.16 : 0.14,
+    english: phaseId === 'A' ? 0.20 : 0.16,
     politics: politicsActive ? 0.12 : 0,
     review: phaseId === 'A' ? 0.08 : 0.10,
     project: ['C', 'D', 'E'].includes(phaseId) ? 0.04 : 0,
@@ -248,7 +265,7 @@ export function subjectPlanWeights(phaseId, controls = DEFAULT_PLAN_CONTROLS) {
   if (normalized.experienceTrack === 'mathHeavy') weights.math += 0.08;
   if (normalized.experienceTrack === 'cs408Heavy') weights.cs408 += 0.08;
   if (normalized.experienceTrack === 'englishSteady') weights.english += 0.07;
-  if (normalized.experienceTrack !== 'latePolitics') weights.english = Math.max(weights.english, phaseId === 'A' ? 0.16 : 0.12);
+  if (normalized.experienceTrack !== 'latePolitics') weights.english = Math.max(weights.english, phaseId === 'A' ? 0.20 : 0.14);
   if (normalized.experienceTrack === 'latePolitics' && !['G', 'H'].includes(phaseId)) weights.politics = 0;
   if (normalized.focusSubject !== 'auto' && weights[normalized.focusSubject] !== undefined) {
     weights[normalized.focusSubject] += normalized.focusSubject === 'review' ? 0.08 : 0.10;
@@ -367,12 +384,14 @@ function estimateReviewMinutes(item, fallback) {
 
 function fitBudget(tasks, budget) {
   if (!budget) return tasks;
-  let selected = arrayValue(tasks);
-  while (selected.length > 1 && selected.reduce((sum, task) => sum + nonNegativeNumber(task?.minutes), 0) > budget) {
-    const removeIndex = selected.findLastIndex((task) => !task.reviewItemId && task.source !== 'carryover');
-    selected.splice(removeIndex >= 0 ? removeIndex : selected.length - 1, 1);
+  const selected = arrayValue(tasks);
+  let kept = selected;
+  while (kept.length > 1 && kept.reduce((sum, task) => sum + nonNegativeNumber(task?.minutes), 0) > budget) {
+    const removeIndex = kept.findLastIndex((task) => !task.reviewItemId && task.source !== 'carryover' && task.locked !== true);
+    const index = removeIndex >= 0 ? removeIndex : kept.length - 1;
+    kept = kept.filter((_, taskIndex) => taskIndex !== index);
   }
-  return selected;
+  return kept;
 }
 
 function diffDays(dateStr, baseStr) {

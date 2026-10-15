@@ -20,7 +20,7 @@ export const WORKSPACES = Object.freeze([
     label: '工作台',
     views: Object.freeze(['dashboard', 'today', 'review']),
     mobileView: 'dashboard',
-    mobileLabel: '首页',
+    mobileLabel: '总览',
   },
   {
     id: 'plan',
@@ -34,7 +34,7 @@ export const WORKSPACES = Object.freeze([
     label: '知识与复习',
     views: Object.freeze(['syllabus', 'resources']),
     mobileView: 'review',
-    mobileLabel: '复习',
+    mobileLabel: '复盘',
   },
   {
     id: 'analytics',
@@ -55,7 +55,7 @@ export const WORKSPACES = Object.freeze([
     label: '系统设置',
     views: Object.freeze(['settings']),
     mobileView: 'settings',
-    mobileLabel: '我的',
+    mobileLabel: '设置',
   },
 ]);
 

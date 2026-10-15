@@ -89,6 +89,7 @@ import {
   CLEAN_START_VERSION,
   DEFAULT_EXAM_DATE,
   DEFAULT_EXAM_DATE_STATUS,
+  LEGACY_DEFAULT_EXAM_DATES,
   DELETED_TYPES,
   DENSITY_BUTTON_SELECTOR,
   MAX_IMPORT_FILE_BYTES,
@@ -146,6 +147,7 @@ import {
   DEFAULT_PLAN_CONTROLS,
   applyPlanControls,
   buildRollingReviewWindows,
+  englishVocabQuota,
   getPhaseStrategy,
   getSyllabusFramework,
   normalizePlanControls,
@@ -174,6 +176,9 @@ import { buildStudyReport } from "./domain/study-report.js";
 import { outcomeSnapshot, weeklyDiagnosis } from "./domain/analytics-evidence.js";
 import { PRIORITY_WEIGHTS_V1, scoreTaskPriority } from "./domain/priority-score.js";
 import { localReviewPrompt } from "./domain/local-assist.js";
+import { planCapacityMessage } from "./domain/plan-capacity.js";
+import { capacityOrderDailyTasks } from "./domain/capacity-daily-plan.js";
+import { appendPlanVersion, createPlanVersion, undoPlanVersion } from "./domain/plan-version.js";
 import { WRITE_CONTRACT } from "./core/write-contract.js";
 import { createEntityRepository, replaceMistake, replaceSessions } from "./infrastructure/persistence/entity-repository.js";
 import { clearSessionLock, lockHeldByOtherTab, writeSessionLock } from "./infrastructure/persistence/session-lock.js";
@@ -193,8 +198,8 @@ if ("scrollRestoration" in window.history) {
 }
 
 const defaultSettings = {
-  weekdayMinutes: 180,
-  weekendMinutes: 300,
+  weekdayMinutes: 210,
+  weekendMinutes: 330,
   taskCount: 3,
   coreRatio: 65,
   density: "balanced",
@@ -260,7 +265,7 @@ let lastStorageFailureNoticeAt = 0;
 let selectedResourceSubject = "math";
 let selectedStartupWeek = 0;
 let openStudySession = null;
-let taskCountdown = null;
+let pendingSessionResult = null;
 let sessionTicker = null;
 let lastAuthResult = {
   status: "idle",
@@ -390,6 +395,7 @@ function migrateState(parsed) {
     if (settings.density === "focus") settings.density = "balanced";
     if (!["balanced", "detail"].includes(settings.density)) settings.density = "balanced";
     settings.targetExamDate = sanitizeDateOrFallback(settings.targetExamDate, DEFAULT_EXAM_DATE) || DEFAULT_EXAM_DATE;
+    if (LEGACY_DEFAULT_EXAM_DATES.includes(settings.targetExamDate)) settings.targetExamDate = DEFAULT_EXAM_DATE;
     settings.studyGoal = normalizeGoalInput(settings.studyGoal || settingsInput.studyGoal);
     settings.adaptivePriority = sanitizeBoolean(settings.adaptivePriority);
     settings.aiAssist = sanitizeBoolean(settings.aiAssist);
@@ -443,6 +449,7 @@ function migrateState(parsed) {
       customTasks: sanitizeCustomTasks(customTasksState || []),
       mistakes: stateArray(source.mistakes).map((item) => createMistake(item)).filter((item) => item.summary || item.topicId),
       sessions: stateArray(source.sessions).filter(isPlainStateObject).slice(-40),
+      planVersions: sanitizePlanVersions(source.planVersions),
       reviewItems: filterReviewItemsFromStart(rawReviewItems),
       deleted,
       deletedMeta,
@@ -590,7 +597,20 @@ function ensureRuntimeContainers() {
 function ensurePlanContainers() {
   state.weekPlans = stateObject(state.weekPlans);
   state.tasks = stateObject(state.tasks);
+  state.planVersions = sanitizePlanVersions(state.planVersions);
   return state.weekPlans;
+}
+
+function sanitizePlanVersions(value) {
+  return stateArray(value).filter(isPlainStateObject).slice(-20).map((version) => ({
+    id: safeScalarText(version.id, "", 200),
+    date: sanitizeDateKey(version.date),
+    createdAt: safeScalarText(version.createdAt, "", 40),
+    reason: safeScalarText(version.reason, "", 200),
+    changedTaskIds: stateArray(version.changedTaskIds).map((id) => safeScalarText(id, "", 160)).filter(Boolean).slice(0, 40),
+    previousVersionId: safeScalarText(version.previousVersionId, "", 200),
+    beforeTasks: stateArray(version.beforeTasks).filter(isPlainStateObject).slice(0, 12)
+  })).filter((version) => version.id && version.date);
 }
 
 function planTasksForDate(date) {
@@ -1215,7 +1235,8 @@ function sanitizeSnapshotPayload(payload) {
     "deletedMeta",
     "cleanStartArchive",
     "mistakes",
-    "sessions"
+    "sessions",
+    "planVersions"
   ];
   return cloneJson(Object.fromEntries(allowedKeys.flatMap((key) => (
     Object.prototype.hasOwnProperty.call(payload, key) ? [[key, payload[key]]] : []
@@ -1263,6 +1284,7 @@ function freshState() {
     scores: [],
     mistakes: [],
     sessions: [],
+    planVersions: [],
     topics: {},
     topicEvidence: {},
     tasks: {},
@@ -2181,6 +2203,11 @@ function bindForms() {
     if (!result) return;
     setLocalSaveResult(result?.saved !== false, "今日计划已重新生成", result.message, "今日计划未写入本机缓存");
   });
+  document.getElementById("undoPlanBtn")?.addEventListener("click", () => {
+    const result = undoLastPlanVersion();
+    if (!result) return;
+    setLocalSaveResult(result.saved !== false, "已恢复上一版计划", result.message, "上一版计划未写入本机缓存");
+  });
 
   document.querySelectorAll("#scorePol, #scoreEng, #scoreMath, #scoreCs").forEach((input) => {
     input.addEventListener("input", clearScoreValidation);
@@ -2686,9 +2713,9 @@ function todayPhaseText(date = planTodayISO()) {
   const resolution = getPhaseResolution(date);
   const phase = resolution.phase;
   if (!phase) return "阶段未配置";
-  if (resolution.status === "completed") return "备考周期已结束。历史阶段仍可回看，不再按阶段 A 排新任务。";
-  if (resolution.status === "not-started") return `计划未开始。下一阶段 ${phase.id}：${phase.focus || ""}`;
-  return `阶段 ${phase.id}：${phase.focus || ""}`;
+  if (resolution.status === "completed") return "备考周期已结束。历史阶段仍可回看。";
+  if (resolution.status === "not-started") return `计划未开始。下一阶段 ${phase.id} ${phase.name}`;
+  return `阶段 ${phase.id} ${phase.name} · ${phase.focus || ""}`;
 }
 
 function activeStudyGoal() {
@@ -2705,19 +2732,66 @@ function bindStudySession() {
   });
   document.getElementById("sessionFinishBtn")?.addEventListener("click", () => {
     if (!openStudySession) return;
-    openStudySession = finishStudySession(openStudySession);
-    const task = findPlannedTask(openStudySession.taskId);
-    if (task) {
-      state.tasks[task.id] = true;
-      task.actualMinutes = openStudySession.effectiveMinutes;
-      task.sessionId = openStudySession.id;
-    }
-    rememberSession(openStudySession);
+    const finished = finishStudySession(openStudySession);
+    const task = findPlannedTask(finished.taskId);
+    rememberSession(finished);
+    pendingSessionResult = finished;
     openStudySession = null;
+    const minutes = Math.min(240, Math.max(1, Number(finished.effectiveMinutes) || Number(task?.minutes) || 25));
+    const form = document.getElementById("sessionResultForm");
+    const field = form?.querySelector("[name='minutes']");
+    if (field) field.value = String(minutes);
     const saved = saveState();
     renderSessionBar();
-    renderAll();
-    setLocalSaveResult(saved, "本次学习已结束", "计时已写入本机。可在同一张卡片补题量和错因。", "计时未写入本机缓存");
+    setLocalSaveResult(saved, "计时已结束", "在这一张表里记下题量、错因和明日第一项。", "计时未写入本机缓存");
+  });
+  document.getElementById("sessionResultForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const session = pendingSessionResult;
+    const task = findPlannedTask(session?.taskId);
+    if (!task) {
+      showToast("没有找到这次计时对应的任务。");
+      return;
+    }
+    const form = event.currentTarget;
+    const evidence = validateCompletionEvidence({
+      minutes: Number(new FormData(form).get("minutes")),
+      problems: Number(new FormData(form).get("problems")),
+      mistake: new FormData(form).get("mistake"),
+      nextTask: new FormData(form).get("nextTask")
+    });
+    if (!evidence.ok) {
+      showToast(evidence.message);
+      return;
+    }
+    const summary = String(evidence.evidence.mistake || "").trim();
+    if (summary) {
+      state = replaceMistake(entityRepository.read(), createMistake({
+        subject: task.subject,
+        summary,
+        taskId: task.id,
+        source: "session"
+      }));
+    }
+    task.sessionId = session.id;
+    pendingSessionResult = null;
+    commitTaskCompletion(task, evidence.evidence);
+  });
+  document.getElementById("sessionResultBack")?.addEventListener("click", () => {
+    const task = findPlannedTask(pendingSessionResult?.taskId);
+    pendingSessionResult = null;
+    if (task) beginStudySession(task);
+    else renderSessionBar();
+  });
+  document.getElementById("startNextTaskBtn")?.addEventListener("click", () => {
+    const date = planTodayISO();
+    const tasks = normalizeTaskList(planTasksForDate(date), date).filter((task) => task.status !== "shifted");
+    const next = tasks.find((task) => !isTaskDone(task, state.tasks));
+    if (!next) {
+      showToast(tasks.length ? "今天的任务都已完成。" : "还没有今日任务。");
+      return;
+    }
+    beginStudySession(next);
   });
   window.addEventListener("beforeunload", () => {
     if (openStudySession?.status === "running") {
@@ -2804,6 +2878,7 @@ function restoreOpenSession() {
 
 function beginStudySession(task) {
   if (!task?.id) return;
+  pendingSessionResult = null;
   const claim = claimStudySession(openStudySession, task.id);
   openStudySession = claim.session;
   if (sessionCrossedMidnight(openStudySession)) {
@@ -2819,14 +2894,19 @@ function beginStudySession(task) {
 function renderSessionBar() {
   const bar = document.getElementById("sessionBar");
   if (!bar) return;
-  bar.hidden = !openStudySession || openStudySession.status === "finished";
-  if (!openStudySession || bar.hidden) {
+  const controls = document.getElementById("sessionControls");
+  const form = document.getElementById("sessionResultForm");
+  const awaitingResult = Boolean(pendingSessionResult);
+  bar.hidden = (!openStudySession || openStudySession.status === "finished") && !awaitingResult;
+  if (controls) controls.hidden = awaitingResult || bar.hidden;
+  if (form) form.hidden = !awaitingResult;
+  if (!openStudySession || controls?.hidden) {
     window.clearInterval(sessionTicker);
     sessionTicker = null;
-    return;
   }
+  if (bar.hidden || awaitingResult) return;
   const task = findPlannedTask(openStudySession.taskId);
-  setText("sessionTaskLabel", task ? `${task.subject} · ${task.text}` : "学习计时");
+  setText("sessionTaskLabel", task ? `${task.subject} · ${displayTaskText(task)}` : "学习计时");
   const pause = document.getElementById("sessionPauseBtn");
   if (pause) pause.textContent = openStudySession.status === "paused" ? "继续" : "暂停";
   const paint = () => {
@@ -2838,10 +2918,6 @@ function renderSessionBar() {
   };
   paint();
   if (!sessionTicker && openStudySession.status === "running") sessionTicker = window.setInterval(paint, 1000);
-  if (openStudySession.status !== "running" && sessionTicker) {
-    window.clearInterval(sessionTicker);
-    sessionTicker = null;
-  }
 }
 
 function taskPriorityNote(task) {
@@ -2883,6 +2959,7 @@ function bindSettings() {
         maxNewTopics: numericSettings.maxNewTopics,
         reviewLoad: numericSettings.reviewLoad,
         rollingWindowDays: numericSettings.rollingWindowDays,
+        englishNewWords: numericSettings.englishNewWords,
         enabledSubjects: Array.from(document.querySelectorAll("#settingEnabledSubjects input:checked")).map((input) => input.value),
       }),
       notificationsEnabled: Boolean(document.getElementById("settingNotifications")?.checked),
@@ -2941,7 +3018,8 @@ function readSettingsNumericValues() {
     coreRatio: readRequiredIntegerSetting("settingCoreRatio"),
     maxNewTopics: readRequiredIntegerSetting("settingMaxNewTopics"),
     reviewLoad: readRequiredIntegerSetting("settingReviewLoad"),
-    rollingWindowDays: readRequiredIntegerSetting("settingRollingWindowDays")
+    rollingWindowDays: readRequiredIntegerSetting("settingRollingWindowDays"),
+    englishNewWords: readRequiredIntegerSetting("settingEnglishNewWords")
   };
 }
 
@@ -2974,7 +3052,8 @@ function settingsNumericFieldRules(values) {
     { id: "settingCoreRatio", value: values.coreRatio, min: 55, max: 85 },
     { id: "settingMaxNewTopics", value: values.maxNewTopics, min: 0, max: 4 },
     { id: "settingReviewLoad", value: values.reviewLoad, min: 15, max: 60 },
-    { id: "settingRollingWindowDays", value: values.rollingWindowDays, min: 7, max: 60 }
+    { id: "settingRollingWindowDays", value: values.rollingWindowDays, min: 7, max: 60 },
+    { id: "settingEnglishNewWords", value: values.englishNewWords, min: 20, max: 200 }
   ];
 }
 
@@ -2983,7 +3062,7 @@ function isValidSettingNumber(value, min, max) {
 }
 
 function settingsNumericFieldSelector() {
-  return "#settingWeekdayMinutes, #settingWeekendMinutes, #settingTaskCount, #settingCoreRatio, #settingMaxNewTopics, #settingReviewLoad, #settingRollingWindowDays";
+  return "#settingWeekdayMinutes, #settingWeekendMinutes, #settingTaskCount, #settingCoreRatio, #settingMaxNewTopics, #settingReviewLoad, #settingRollingWindowDays, #settingEnglishNewWords";
 }
 
 function validateReviewDaysSetting(reviewDays) {
@@ -3536,7 +3615,9 @@ function setAuthResult(status, title, message) {
 function renderAuthResult() {
   const box = document.getElementById("authResult");
   if (!box) return;
-  box.dataset.status = lastAuthResult.status || "idle";
+  const status = lastAuthResult.status || "idle";
+  box.dataset.status = status;
+  box.hidden = status === "idle";
   box.innerHTML = `
     <strong>${escapeHtml(lastAuthResult.title || "账号状态")}</strong>
     <p>${escapeHtml(lastAuthResult.message || "")}</p>
@@ -3774,10 +3855,36 @@ function setSelectValue(id, value) {
 // Dynamic values are therefore carried on `data-*` attributes in the markup and
 // applied here through CSSOM. CSP does not police CSSOM writes, so the strict
 // `style-src 'self'` policy can stay in place.
+const SUBJECT_DONUT_COLORS = Object.freeze([
+  "var(--subject-swatch-math)",
+  "var(--subject-swatch-cs408)",
+  "var(--subject-swatch-english)",
+  "var(--subject-swatch-politics)",
+  "var(--subject-swatch-project)"
+]);
+
+function applySubjectDonutBackground(element, value) {
+  const shares = String(value || "").split(",").map((part) => Number(part));
+  const total = shares.reduce((sum, share) => sum + (Number.isFinite(share) && share > 0 ? share : 0), 0);
+  if (!total) {
+    element.style.background = "conic-gradient(var(--surface-soft) 0 360deg)";
+    return;
+  }
+  let cursor = 0;
+  const stops = shares.map((share, index) => {
+    const amount = Number.isFinite(share) && share > 0 ? share : 0;
+    const start = cursor;
+    cursor += amount / total * 360;
+    return `${SUBJECT_DONUT_COLORS[index] || "var(--muted)"} ${start}deg ${cursor}deg`;
+  });
+  element.style.background = `conic-gradient(${stops.join(", ")})`;
+}
+
 const DEFERRED_STYLE_RULES = Object.freeze([
   { attribute: "data-fill", apply: (element, value) => { element.style.width = `${value}%`; } },
   { attribute: "data-height", apply: (element, value) => { element.style.height = `${value}%`; } },
-  { attribute: "data-var-value", apply: (element, value) => { element.style.setProperty("--value", value); } }
+  { attribute: "data-var-value", apply: (element, value) => { element.style.setProperty("--value", value); } },
+  { attribute: "data-subject-shares", apply: applySubjectDonutBackground }
 ]);
 
 function applyDeferredStyles(root = document) {
@@ -4079,14 +4186,12 @@ function renderLiveFactChecks() {
   const container = document.getElementById("liveFactGrid");
   if (!container) return;
   container.innerHTML = liveFactChecks.map((item) => `
-    <article class="fact-check-card ${factStatusClass(item.status)}">
+    <article class="fact-check-card ${factStatusClass(item.status)}" title="${escapeAttr(`${item.detail} · ${item.source} · ${SOURCE_CHECK_DATE}`)}">
       <div>
         <span>${escapeHtml(item.label)}</span>
         <em>${escapeHtml(item.status)}</em>
       </div>
       <strong>${escapeHtml(item.value)}</strong>
-      <p>${escapeHtml(item.detail)}</p>
-      <small>${escapeHtml(item.source)} · ${SOURCE_CHECK_DATE}</small>
     </article>
   `).join("");
 }
@@ -4125,7 +4230,7 @@ function renderCurveMetric() {
   if (previousAvg) {
     const percent = Math.round(ratio * 100);
     metric = `${percent}%`;
-    text = ratio >= 1.12 ? `近 7 天比前一周高 ${percent - 100}%，确认不是单日硬冲。` :
+    text = ratio >= 1.12 ? `近 7 天比前一周高 ${percent - 100}%。` :
       ratio <= 0.78 ? `近 7 天比前一周低 ${100 - percent}%，先恢复底线日。` :
       "与前一周基本持平，保持当前负荷。";
   }
@@ -4224,17 +4329,17 @@ function renderTargetLane({ week, totalMinutes, monthTarget, monthMinutes }) {
   const last5 = [...scoreRows()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   const scoreAvg = averageScores(last5).total;
 
-    let title = `${month} 节点还差 ${remaining.toFixed(0)}h`;
-  let text = `本阶段重点：${mathFocus}；${csFocus}。完成后记录题量、错因和复盘日期。`;
+    let title = `${month} 还差 ${remaining.toFixed(0)}h`;
+  let text = `数学 ${mathFocus} · 408 ${csFocus}`;
   if (totalHours >= cumulative) {
-    title = `${month} 节点已达累计线`;
-    text = "继续检查核心占比、错题回炉和考点掌握。";
+    title = `${month} 累计线已到`;
+    text = `数学 ${mathFocus} · 408 ${csFocus} · ${scoreWatch}`;
   } else if (coreRatio && coreRatio < 0.55) {
     title = "核心占比偏低";
-    text = "本周优先安排数学和 408，减少非核心任务。";
+    text = "本周先排数学和 408。";
   } else if (monthPercent >= 90) {
-    title = "本月节奏接近目标";
-    text = `继续按阶段验收推进。监测口径：${scoreWatch}。`;
+    title = "本月接近目标";
+    text = `监测：${scoreWatch}`;
   }
 
   setText("targetGateTitle", title);
@@ -4313,10 +4418,9 @@ function renderStorageStatus() {
     ["备份", exportDate ? `${exportDate}` : "未导出", exportAge === null ? "建议现在导出一次 JSON" : exportAge > 7 ? `已 ${exportAge} 天未导出` : "备份节奏正常"]
   ];
   container.innerHTML = rows.map(([label, value, text]) => `
-    <div class="storage-row">
+    <div class="storage-row" title="${escapeAttr(text)}">
       <span>${label}</span>
       <strong>${value}</strong>
-      <p>${text}</p>
     </div>
   `).join("");
 }
@@ -4333,7 +4437,7 @@ function addDays(date, days) {
 
 function minimumTargetText(phase) {
   const politics = phase.quotas.politics ? " · 政治 20m" : "";
-  return `数学 45m · 408 45m · 英语 20m${politics}`;
+  return `数学 50m · 408 45m · 英语 40m${politics}`;
 }
 
 function setText(id, value) {
@@ -4395,7 +4499,7 @@ function renderQuotas(week, phase) {
     const percent = target ? Math.min(100, hours / target * 100) : 0;
     const targetLabel = target ? `本周目标 ${target}h` : "本阶段暂不安排";
     return `
-      <div class="quota">
+      <div class="quota-item">
         <span>${label} · ${targetLabel}</span>
         <strong>${hours.toFixed(1)}h</strong>
         <div class="progress-track"><div class="progress-fill" data-fill="${percent}"></div></div>
@@ -4427,10 +4531,10 @@ function renderRingGrid({ phase, weekMinutes, coreMinutes, totalMinutes, monthPr
     return `
       <div class="ring-card">
         <div class="ring" data-var-value="${clamped}">
-          <span>${value}</span>
+          <span>${escapeHtml(value)}</span>
         </div>
-        <strong>${label}</strong>
-        <em>${target}</em>
+        <strong>${escapeHtml(label)}</strong>
+        <em>${escapeHtml(String(target))}</em>
       </div>
     `;
   }).join("");
@@ -4444,25 +4548,37 @@ function renderSubjectChart(week, phase) {
     ["政治", "politics", phase.quotas.politics],
     ["项目", "project", phase.quotas.project]
   ];
-  const maxTarget = Math.max(...subjects.map(([, , target]) => target || 1));
   const container = document.getElementById("subjectChart");
   if (!container) return;
-  container.innerHTML = subjects.map(([label, key, target]) => {
-    const hours = sumMinutes(week, key) / 60;
-    const baseline = target || maxTarget;
-    const fill = target ? Math.min(100, hours / target * 100) : hours ? Math.min(100, hours / baseline * 100) : 0;
-    const visualFill = fill ? Math.max(5, fill) : 0;
-    return `
-      <div class="subject-bar subject-${key}">
-        <div class="subject-bar-track">
-          <div class="subject-bar-fill" data-height="${visualFill}"></div>
-        </div>
-        <strong>${hours.toFixed(1)}</strong>
-        <span>${label}</span>
-        <em>${target}h</em>
+  const rows = subjects.map(([label, key, target]) => ({
+    label,
+    key,
+    target: Number(target) || 0,
+    hours: sumMinutes(week, key) / 60
+  }));
+  const totalHours = rows.reduce((sum, row) => sum + row.hours, 0);
+  const shares = rows.map((row) => row.hours.toFixed(3)).join(",");
+  container.innerHTML = `
+    <div class="subject-donut" data-subject-shares="${escapeAttr(shares)}" aria-hidden="true">
+      <div class="subject-donut-hole">
+        <strong>${totalHours.toFixed(1)}h</strong>
+        <span>本周</span>
       </div>
-    `;
-  }).join("");
+    </div>
+    <ul class="subject-legend">
+      ${rows.map((row) => {
+        const percent = totalHours ? Math.round(row.hours / totalHours * 100) : 0;
+        return `
+          <li class="subject-legend-item subject-${row.key}">
+            <i aria-hidden="true"></i>
+            <span>${escapeHtml(row.label)}</span>
+            <strong>${row.hours.toFixed(1)}h</strong>
+            <em>${percent}%</em>
+          </li>
+        `;
+      }).join("")}
+    </ul>
+  `;
 }
 
 function renderTrendChart(phase = getCurrentPhase()) {
@@ -4516,16 +4632,16 @@ function learningCurveSnapshot(days, phase = getCurrentPhase()) {
   const weeklyTarget = Number(phase.weeklyTarget) || 0;
   const targetDaily = weeklyTarget ? weeklyTarget / 7 : 0;
   const trendRatio = previousAvg ? recentAvg / previousAvg : recentAvg ? 1 : 0;
-  const trendText = trendRatio >= 1.12 ? "近 7 天高于前 7 天，确认不是靠单日硬冲。" :
-    trendRatio <= 0.78 && previousAvg ? "近 7 天明显回落，下周先恢复底线日和核心任务。" :
-    activeDays ? "投入基本平稳，可以继续按当前阶段推进。" :
-    "先连续记录 3 天，再判断曲线。";
+  const trendText = trendRatio >= 1.12 ? "近 7 天高于前 7 天。" :
+    trendRatio <= 0.78 && previousAvg ? "近 7 天回落，先恢复底线日。" :
+    activeDays ? "近 7 天与前 7 天接近。" :
+    "记录满 3 天后给出对比。";
   const loadStatus = recentAvg >= targetDaily * 0.9 ? "ok" : recentAvg >= targetDaily * 0.65 ? "warn" : "risk";
   const continuityStatus = activeDays >= 6 ? "ok" : activeDays >= 4 ? "warn" : "risk";
   return [
     ["7 天均值", `${recentAvg.toFixed(1)}h/天`, targetDaily ? `阶段参考 ${targetDaily.toFixed(1)}h/天。` : "阶段目标未设定。", loadStatus],
     ["曲线判断", previousAvg ? `${Math.round(trendRatio * 100)}%` : "待建立", trendText, trendRatio >= 0.78 || !previousAvg ? "ok" : "risk"],
-    ["连续性", `${activeDays}/7 天`, activeDays >= 6 ? "节奏稳定，允许小幅加难度。" : "先保学习天数，再谈加量。", continuityStatus]
+    ["学习天数", `${activeDays}/7 天`, activeDays >= 6 ? "近 7 天有 6 天记录。" : "近 7 天记录不足 6 天。", continuityStatus]
   ];
 }
 
@@ -4549,14 +4665,13 @@ function renderTasks(force = false, date = planTodayISO()) {
     const blueprint = taskBlueprint(task);
     const taskId = escapeAttr(task.id);
     const subject = escapeHtml(task.subject);
-    const text = escapeHtml(task.text);
     return `
       <div class="task-block ${checked ? "done" : ""}">
         <label class="task-item task-prescription">
           <input type="checkbox" data-task="${taskId}" ${checked}>
           <span>
             <strong>${subject}<em>${escapeHtml(blueprint.metric)}</em></strong>
-            <span class="task-topic">${text}</span>
+            <span class="task-topic">${escapeHtml(displayTaskText(task))}</span>
             <span class="task-output">${escapeHtml(blueprint.output)}</span>
             <span class="task-steps">学法：${escapeHtml(method.learn)}</span>
             <span class="task-steps">练习：${escapeHtml(method.practice)}</span>
@@ -4574,7 +4689,7 @@ function renderTasks(force = false, date = planTodayISO()) {
     return `
       <label class="task-item task-compact">
         <input type="checkbox" data-task="${escapeAttr(task.id)}" ${checked}>
-        <span><strong>${escapeHtml(task.subject)}</strong><span>${escapeHtml(task.text)}</span></span>
+        <span><strong>${escapeHtml(task.subject)}</strong><span>${escapeHtml(displayTaskText(task))}</span></span>
         <em class="task-time">${Number(task.minutes) || 0}m</em>
       </label>
     `;
@@ -4582,6 +4697,15 @@ function renderTasks(force = false, date = planTodayISO()) {
 
   document.getElementById("todayTasks").innerHTML = fullHtml;
   document.getElementById("todayTasksPreview").innerHTML = compactHtml;
+  const capacity = planCapacityMessage({
+    planned: tasks.reduce((sum, task) => sum + (Number(task.minutes) || 0), 0),
+    available: dailyBudgetMinutes(date)
+  });
+  const capacityNote = document.getElementById("planCapacityNote");
+  if (capacityNote) {
+    capacityNote.hidden = !capacity.conflict;
+    capacityNote.textContent = capacity.message;
+  }
   document.getElementById("dailyPlan").innerHTML = renderPlanCards(tasks);
   bindPlanSessionActions(document.getElementById("dailyPlan") || document);
   renderSessionBar();
@@ -4593,7 +4717,7 @@ function renderTasks(force = false, date = planTodayISO()) {
   if (taskFlow) taskFlow.innerHTML = renderTaskFlow(tasks);
   const nextTask = tasks.find((task) => !isTaskDone(task, state.tasks));
   document.getElementById("dailyPlanMeta").textContent = nextTask
-    ? `下一步：${nextTask.subject} · ${nextTask.text}`
+    ? `下一步：${nextTask.subject} · ${displayTaskText(nextTask)}`
     : (tasks.length ? "今天的任务都已勾完。可以补记结果或去处理复盘。" : "还没有任务。点重新生成得到今天的第一项。");
   document.getElementById("todayPhaseText").textContent = todayPhaseText(date);
   setText("navTaskCount", `${tasks.length} 项`);
@@ -4678,14 +4802,13 @@ function renderCaptureForm(task) {
     <form class="task-capture" data-capture-for="${taskId}" ${open ? "" : "hidden"}>
       <label>有效分钟<input name="minutes" type="number" min="1" max="240" inputmode="numeric" value="${Number(task.minutes) || 25}" required></label>
       <label>题量<input name="problems" type="number" min="0" max="999" inputmode="numeric" value="0" required></label>
-      <label class="span-2">错因或收获<input name="mistake" type="text" maxlength="300" required placeholder="例如：左右极限条件漏了"></label>
-      <label class="span-2">明日第一任务<input name="nextTask" type="text" maxlength="300" required placeholder="例如：闭卷重做两道变式"></label>
+      <label class="span-2">错因或收获<input name="mistake" type="text" maxlength="300" required placeholder="错在哪"></label>
+      <label class="span-2">明日第一任务<input name="nextTask" type="text" maxlength="300" required placeholder="明天第一项"></label>
       <div class="task-capture-actions">
-        <button type="button" data-session-start="${taskId}">开始 45 分钟</button>
+        <button type="button" data-session-start="${taskId}">开始计时</button>
         <button type="submit" class="primary-button">保存并完成</button>
         <button type="button" data-capture-cancel="${taskId}">取消</button>
       </div>
-      <p class="task-session" data-session-for="${taskId}" hidden></p>
     </form>
   `;
 }
@@ -4727,9 +4850,11 @@ function bindTaskCapture(tasks) {
     });
   });
   document.querySelectorAll("[data-session-start]").forEach((button) => {
-    button.addEventListener("click", () => startTaskSession(button.dataset.sessionStart));
+    button.addEventListener("click", () => {
+      const task = tasks.find((item) => item.id === button.dataset.sessionStart);
+      if (task) beginStudySession(task);
+    });
   });
-  paintTaskSession();
 }
 
 function commitTaskCompletion(task, evidence) {
@@ -4761,7 +4886,11 @@ function commitTaskCompletion(task, evidence) {
     scheduleReviewForTask(task.id, task);
   }
   taskCaptureId = "";
-  stopTaskSession(false);
+  if (openStudySession?.taskId === task.id) {
+    rememberSession(finishStudySession(openStudySession));
+    openStudySession = null;
+  }
+  pendingSessionResult = null;
   const saved = saveState();
   if (date === (document.getElementById("entryDate")?.value || planTodayISO())) loadEntryForm();
   renderTasks();
@@ -4773,39 +4902,6 @@ function commitTaskCompletion(task, evidence) {
   } else {
     showToast("已保存完成证据，并安排复盘。");
   }
-}
-
-function startTaskSession(taskId) {
-  taskCountdown = {
-    taskId,
-    endsAt: Date.now() + 45 * 60 * 1000
-  };
-  window.clearInterval(startTaskSession.timer);
-  startTaskSession.timer = window.setInterval(paintTaskSession, 1000);
-  paintTaskSession();
-}
-
-function stopTaskSession(openCapture = true) {
-  const taskId = taskCountdown?.taskId || "";
-  taskCountdown = null;
-  window.clearInterval(startTaskSession.timer);
-  paintTaskSession();
-  if (openCapture && taskId) openTaskCapture(taskId);
-}
-
-function paintTaskSession() {
-  document.querySelectorAll("[data-session-for]").forEach((node) => {
-    const running = taskCountdown && node.dataset.sessionFor === taskCountdown.taskId;
-    node.hidden = !running;
-    if (!running) return;
-    const remaining = Math.max(0, taskCountdown.endsAt - Date.now());
-    const minutes = Math.floor(remaining / 60000);
-    const seconds = Math.floor((remaining % 60000) / 1000);
-    node.textContent = remaining === 0
-      ? "45 分钟已到。填写证据后保存。"
-      : `剩余 ${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-    if (remaining === 0) stopTaskSession(true);
-  });
 }
 
 function regenerateTodayPlan() {
@@ -4826,10 +4922,37 @@ function regenerateTodayPlan() {
   }
   const shifted = current.filter((task) => task.status === "shifted");
   const merged = mergeRegeneratedTasks(active, generated);
+  ensurePlanContainers();
+  const previous = state.planVersions.at(-1);
+  const changedTaskIds = diff.replaced.map((item) => item.id).filter(Boolean);
+  state.planVersions = appendPlanVersion(state.planVersions, createPlanVersion({
+    date,
+    reason: "重新生成今日计划",
+    changedTaskIds,
+    previousVersionId: previous?.id || "",
+    beforeTasks: active
+  }));
   state.weekPlans[date] = normalizeTaskList([...shifted, ...merged], date);
   const saved = saveState();
   renderTasks();
-  return { saved, message: `${summary}。今日任务已保存到本机。` };
+  return { saved, message: `${summary}。今日任务已保存到本机。可用“恢复上一版”退回。` };
+}
+
+function undoLastPlanVersion() {
+  ensurePlanContainers();
+  const current = state.planVersions.at(-1);
+  if (!current?.beforeTasks?.length) {
+    showToast("还没有可以恢复的上一版。");
+    return null;
+  }
+  const undone = undoPlanVersion(state.planVersions);
+  const date = undone.version.date || planTodayISO();
+  const shifted = normalizeTaskList(planTasksForDate(date), date).filter((task) => task.status === "shifted");
+  state.planVersions = undone.versions;
+  state.weekPlans[date] = normalizeTaskList([...shifted, ...undone.version.beforeTasks], date);
+  const saved = saveState();
+  renderTasks();
+  return { saved, message: `${date} 已回到这次重排之前。锁定和已完成记录仍在。` };
 }
 
 function revertTaskFromEntry(task) {
@@ -5209,13 +5332,13 @@ function renderFocusBoard(tasks) {
 
   setText("deskDateLabel", `${planTodayISO()} · ${phaseHeadline(resolution)}`);
   setText("deskPhaseLine", resolution.status === "completed"
-    ? "考试周期已结束。历史记录仍可回看，不再排入阶段 A。"
+    ? "考试周期已结束。历史记录仍可回看。"
     : resolution.status === "not-started"
-      ? "计划尚未到开始日。可以先核对报考目标。"
-      : (phase?.focus || ""));
-  setText("commandText", primary ? primary.text : (tasks.length ? "今天的任务都已完成" : "还没有今日任务"));
+      ? "计划尚未到开始日。先核对报考目标。"
+      : (phase?.focus || `${phase?.id || ""} ${phase?.name || ""}`));
+  setText("commandText", primary ? displayTaskText(primary) : (tasks.length ? "今天的任务都已完成" : "还没有今日任务"));
   setText("focusPrimarySubject", primary ? primary.subject : (tasks.length ? "已完成" : "未生成"));
-  setText("focusPrimaryTask", primary ? primary.text : (tasks.length ? "可以处理到期复盘，或到今日页补记结果。" : "打开今日页生成第一份计划。"));
+  setText("focusPrimaryTask", primary ? displayTaskText(primary) : (tasks.length ? "可以处理到期复盘，或到今日页补记结果。" : "打开今日页生成第一份计划。"));
   setText("focusPrimaryTime", primary ? `${primary.minutes}m` : "--");
   setText("focusTodayProgress", `${doneCount} / ${tasks.length} 项`);
   setText("deskDoneCount", `${doneCount}/${tasks.length || 0}`);
@@ -5351,14 +5474,15 @@ function createDailyTasks(date = planTodayISO()) {
     priority: 1
   }));
 
-  const coreFloor = phase.id === "A" ? 35 : 45;
+  const coreFloor = phase.id === "A" ? 45 : 50;
+  const vocab = englishVocabQuota(controls);
   const minutesFor = (key, floor, cap = 240) => Math.max(floor, Math.min(cap, roundToFive(budget * (weights[key] || 0))));
-  const englishMinutes = minutesFor("english", 20, 70);
+  const englishMinutes = minutesFor("english", vocab.minutesFloor, 90);
   const politicsMinutes = minutesFor("politics", 25, 75);
   const projectMinutes = minutesFor("project", 20, 60);
   const reviewReserve = controls.enabledSubjects.includes("review") && targetCount > 3 ? Math.max(15, roundToFive(budget * (weights.review || 0.08))) : 0;
   const politicsDay = Boolean(topicPolitics && weights.politics > 0 && parseDate(date).getDay() % 2 === 0);
-  const englishReserve = controls.enabledSubjects.includes("english") ? Math.max(20, Math.min(englishMinutes, 45)) : 0;
+  const englishReserve = controls.enabledSubjects.includes("english") ? Math.max(vocab.minutesFloor, Math.min(englishMinutes, 60)) : 0;
   const nonCoreReserve = (politicsDay ? politicsMinutes : englishReserve) + reviewReserve;
   const minimumCore = Math.round(budget * (state.settings.coreRatio || 65) / 100);
   const coreMinutes = Math.max(coreFloor * 2, minimumCore, budget - nonCoreReserve);
@@ -5407,7 +5531,7 @@ function createDailyTasks(date = planTodayISO()) {
     date,
     phase,
     topic: topicEnglish,
-    minutes: Math.max(20, Math.min(englishMinutes, 35)),
+    minutes: Math.max(vocab.minutesFloor, Math.min(englishMinutes, 55)),
     controls,
     targetCount,
     reviewPressure
@@ -5451,7 +5575,13 @@ function createDailyTasks(date = planTodayISO()) {
   const effectiveTargetCount = controls.enabledSubjects.includes("english") && reviewPressure > 0
     ? Math.min(4, Math.max(targetCount + 1, targetCount))
     : targetCount;
-  return applyPlanControls(trimTasksToBudget(tasks.filter(Boolean), budget, Math.max(effectiveTargetCount, tasks.length)), {
+  const ordered = capacityOrderDailyTasks(tasks.filter(Boolean), {
+    availableMinutes: budget,
+    phaseId: phase.id,
+    consecutiveMissedDays: missedStudyDays(date),
+    historyMedian: recentPlanMedian(date)
+  });
+  return applyPlanControls(trimTasksToBudget(ordered, budget, Math.max(effectiveTargetCount, ordered.length)), {
     controls: effectiveControls,
     targetCount: effectiveTargetCount,
     budget
@@ -5466,11 +5596,12 @@ function createDailyTasks(date = planTodayISO()) {
 }
 
 function englishTaskForDate(date, phase, topic, minutes) {
-  const task = topicTask(date, phase, "英语", topic, minutes, "单词、长难句、真题阅读");
+  const vocab = englishVocabQuota(state.settings?.planControls);
+  const task = topicTask(date, phase, "英语", topic, minutes, "新词、长难句、真题阅读");
   return {
     ...task,
     priority: 3.5,
-    text: `${task.text}；新词 20 + 复习词 60 + 错词 10，至少留 1 句定位/切分证据`
+    text: `${task.text}；${vocab.taskText}`
   };
 }
 
@@ -5526,7 +5657,7 @@ function dailyBudgetMinutes(date = planTodayISO()) {
   const settingCap = isWeekend ? state.settings.weekendMinutes : state.settings.weekdayMinutes;
   const rampCap = isWeekend ? ramp.weekend : ramp.weekday;
   const current = parseDate(date);
-  const earlyRampEnd = parseDate("2026-09-27");
+  const earlyRampEnd = parseDate(phases[0]?.end || PLAN_START_DATE);
   const userCap = current <= earlyRampEnd ? Math.min(settingCap || rampCap, rampCap) : Math.max(settingCap, rampCap);
   const floor = bottomLineMinutes(phase);
   const normalBudget = phase.id === "A" ? Math.min(userCap, Math.max(Math.min(floor, userCap), rampCap)) : Math.max(floor, userCap);
@@ -5571,21 +5702,72 @@ function trimTasksToBudget(tasks, budget, targetCount) {
   const minCount = Math.min(desiredCount, hasCarryover ? 2 : hasEnglish ? 4 : 3);
   let selected = tasks.slice(0, Math.min(6, Math.max(minCount, targetCount)));
   while (selected.length > minCount && selected.reduce((sum, task) => sum + task.minutes, 0) > hardBudget) {
-    selected.splice(findLowestValueTaskIndex(selected), 1);
+    const removableIndex = findLowestValueTaskIndex(selected);
+    if (selected[removableIndex]?.locked) break;
+    selected.splice(removableIndex, 1);
   }
   const total = selected.reduce((sum, task) => sum + task.minutes, 0);
   if (total > hardBudget && total > 0) {
-    const scale = hardBudget / total;
-    selected = selected.map((task) => {
-      const floor = task.subject === "数学" || task.subject === "408" ? 30 : task.subject === "复盘" ? 15 : 15;
-      return { ...task, minutes: Math.max(floor, floorToFive(task.minutes * scale)) };
-    });
+    const lockedMinutes = selected.filter((task) => task.locked).reduce((sum, task) => sum + task.minutes, 0);
+    const flexibleMinutes = total - lockedMinutes;
+    const room = Math.max(0, hardBudget - lockedMinutes);
+    if (flexibleMinutes > room && flexibleMinutes > 0) {
+      const scale = room / flexibleMinutes;
+      selected = selected.map((task) => {
+        if (task.locked) return task;
+        const floor = task.subject === "数学" || task.subject === "408" ? 30 : task.subject === "复盘" ? 15 : 15;
+        return { ...task, minutes: Math.max(floor, floorToFive(task.minutes * scale)) };
+      });
+    }
   }
   while (selected.length > 1 && selected.reduce((sum, task) => sum + task.minutes, 0) > hardBudget) {
     const removableIndex = findLowestValueTaskIndex(selected);
+    if (selected[removableIndex]?.locked) break;
     selected.splice(removableIndex, 1);
   }
   return selected;
+}
+
+function missedStudyDays(date) {
+  const cursor = parseDate(date);
+  let missed = 0;
+  let sawStudy = false;
+  // A brand-new log has no earlier study day. Counting those empty days as a
+  // streak would force a recovery plan and drop politics and project work.
+  for (let index = 1; index <= 7; index += 1) {
+    const day = new Date(cursor);
+    day.setDate(cursor.getDate() - index);
+    const entry = entryRow(formatDateISO(day));
+    if (entry && getEntryTotals(entry).total > 0) {
+      sawStudy = true;
+      break;
+    }
+    missed += 1;
+  }
+  if (sawStudy) return missed;
+  const today = formatDateISO(cursor);
+  const hasOlderStudy = entriesArray().some((entry) => entry.date < today && entry.total > 0);
+  return hasOlderStudy ? missed : 0;
+}
+
+function recentPlanMedian(date) {
+  const counts = [];
+  const minutes = [];
+  const cursor = parseDate(date);
+  for (let index = 1; index <= 7; index += 1) {
+    const day = new Date(cursor);
+    day.setDate(cursor.getDate() - index);
+    const key = formatDateISO(day);
+    const planned = stateArray(state.weekPlans?.[key]).filter((task) => task && task.status !== "shifted");
+    if (!planned.length) continue;
+    counts.push(planned.length);
+    minutes.push(planned.reduce((sum, task) => sum + (Number(task.minutes) || 0), 0));
+  }
+  if (!counts.length) return { taskCount: 0, minutes: 0 };
+  const middle = Math.floor(counts.length / 2);
+  const sortedCounts = [...counts].sort((left, right) => left - right);
+  const sortedMinutes = [...minutes].sort((left, right) => left - right);
+  return { taskCount: sortedCounts[middle], minutes: sortedMinutes[middle] };
 }
 
 function findLowestValueTaskIndex(tasks) {
@@ -5594,7 +5776,7 @@ function findLowestValueTaskIndex(tasks) {
   let worst = -1;
   tasks.forEach((task, taskIndex) => {
     const score = (rank[task.subject] || 3) * 1000 + (task.priority || taskIndex);
-    if (task.source === "carryover" || task.reviewItemId) return;
+    if (task.locked || task.source === "carryover" || task.reviewItemId) return;
     if (score >= worst) {
       worst = score;
       index = taskIndex;
@@ -5650,23 +5832,23 @@ function renderPlanCards(tasks) {
             <em>${task.source === "carryover" ? `顺延自 ${escapeHtml(task.carriedFrom || "前序任务")}` : index === 0 ? "当前主任务" : "支撑任务"}</em>
             <em>${escapeHtml(blueprint.metric)}</em>
           </div>
-          <p>${escapeHtml(task.text)}</p>
+          <p>${escapeHtml(displayTaskText(task))}</p>
           ${taskPriorityNote(task)}
           <form class="mistake-form" data-task-id="${escapeAttr(task.id)}">
             <input type="hidden" name="taskId" value="${escapeAttr(task.id)}">
             <input type="hidden" name="subject" value="${escapeAttr(task.subject)}">
             <input type="hidden" name="source" value="task">
-            <label>错题摘要<input name="summary" type="text" maxlength="240" placeholder="一句话写下错在哪"></label>
+            <label>错题<input name="summary" type="text" maxlength="240" placeholder="错在哪" autocomplete="off"></label>
             <label>错因<select name="errorType"><option>概念</option><option>方法</option><option>计算</option><option>审题</option><option>时间管理</option><option>自定义</option></select></label>
-            <label>考点编号<input name="topicId" type="text" maxlength="80" placeholder="可选，例如 math/极限与连续/数列极限"></label>
-            <button type="submit" class="ghost-button">记下错题</button>
+            <label>考点<input name="topicId" type="text" maxlength="80" placeholder="可选" autocomplete="off"></label>
+            <button type="submit" class="ghost-button">记下</button>
           </form>
           <div class="plan-actions">
             <button type="button" class="primary-button" data-start-session="${escapeAttr(task.id)}">开始计时</button>
             <button type="button" class="ghost-button" data-skip-session="${escapeAttr(task.id)}">直接记录</button>
           </div>
-          <div class="plan-output density-balanced-only"><strong>交付</strong>${escapeHtml(outputText)}</div>
-          <details class="plan-detail density-balanced-only">
+          <div class="plan-output density-detail-only"><strong>交付</strong>${escapeHtml(outputText)}</div>
+          <details class="plan-detail density-detail-only">
             <summary>执行方法与验收</summary>
             <ul>
               <li>${escapeHtml(dailyAction)}</li>
@@ -5726,17 +5908,11 @@ function renderDailyOperatingConsole(tasks, date = planTodayISO()) {
   container.innerHTML = `
     <section class="operating-focus density-focus-only" aria-label="专注模式今日动作">
       <div><span>${escapeHtml(startupLabel)}</span><strong>${escapeHtml(openTask?.subject || "先完成启动校准")} · ${Number(openTask?.minutes) || 0}m</strong></div>
-      <p>${escapeHtml(openTask?.text || dailyOperatingSchedule[0].action)}</p>
+      <p>${escapeHtml(openTask ? displayTaskText(openTask) : dailyOperatingSchedule[0].action)}</p>
       <em><strong>停手线</strong>${escapeHtml(role.stopRule)}</em>
     </section>
     <section class="operating-balanced density-balanced-only" aria-label="平衡模式今日执行流程">
-      <header><div><span>${escapeHtml(startupLabel)}</span><strong>${escapeHtml(load.label)} · 计划 ${total}m</strong></div><p>${escapeHtml(load.buffer)}</p></header>
-      <div class="operating-rail">
-        ${dailyOperatingSchedule.map((step, index) => `
-          <article><span>${String(index + 1).padStart(2, "0")} · ${escapeHtml(step.window)}</span><strong>${escapeHtml(step.label)}</strong><p>${escapeHtml(step.action)}</p></article>
-        `).join("")}
-      </div>
-      <footer><strong>今日停手线</strong><span>${escapeHtml(role.stopRule)}</span></footer>
+      <header><div><span>${escapeHtml(startupLabel)}</span><strong>${escapeHtml(load.label)} · 计划 ${total}m</strong></div></header>
     </section>
     <section class="operating-detail density-detail-only" aria-label="详尽模式今日执行协议">
       <header><div><span>${escapeHtml(startupLabel)}</span><strong>今日执行协议</strong><p>${escapeHtml(load.allocation)}</p></div><div><span>启用条件</span><p>${escapeHtml(load.trigger)}</p></div></header>
@@ -5777,26 +5953,25 @@ function renderScienceProtocol(tasks, date = planTodayISO()) {
     .reduce((sum, task) => sum + (task.minutes || 0), 0);
   const coreRatio = total ? Math.round(coreMinutes / total * 100) : 0;
   const hasEnglish = tasks.some((task) => task.subject === "英语");
-  const dayRole = weeklyCycleForDate(date);
-  const spacingRule = learningScienceRules.find((item) => item.key === "spacing");
+  const sleepHours = sanitizeNumber(entryRow(date)?.sleepHours);
+  const sleepLabel = sleepHours <= 0 ? "未记" : sleepHours < 7 ? `${sleepHours}h 不足` : `${sleepHours}h`;
   const rows = [
-    ["主动回忆", tasks.some((task) => ["数学", "408", "复盘"].includes(task.subject)) ? "已安排" : "需补", "题量、闭卷重做、过程图优先。"],
-    ["自适应复盘", reviewDue ? `${reviewDue} 项到期` : reviewLoadSignal(reviewRows(), date, state.settings.planControls).label, reviewDue ? "只抽取最高优先级；失败会把下一次提前到明天，通过会把下一次推后。" : spacingRule?.guardrail || "默认检查点会按表现调整。"],
-    ["英语不断档", hasEnglish ? "已保留" : "需手动补", "最低 20 分钟：新词、复习词、错词和 1 句定位。"],
-    ["核心占比", `${coreRatio}%`, `目标 ${state.settings.coreRatio || 65}% 左右，低负荷日先守数学和 408。`],
-    ["今日节律", dayRole.role, `${dayRole.action} ${dayRole.output}`]
+    ["主动回忆", tasks.some((task) => ["数学", "408", "复盘"].includes(task.subject)) ? "已安排" : "需补"],
+    ["英语不断档", hasEnglish ? "已保留" : "需补"],
+    ["到期复盘", reviewDue ? `${reviewDue} 项` : "0 项"],
+    ["核心占比", `${coreRatio}%`],
+    ["睡眠", sleepLabel]
   ];
   container.innerHTML = `
     <div class="science-head">
-      <span>学习科学协议</span>
+      <span>今日检查</span>
       <strong>${tasks.length} 项 · ${total}m</strong>
     </div>
     <div class="science-checks">
-      ${rows.map(([label, value, text]) => `
+      ${rows.map(([label, value]) => `
         <article>
           <span>${escapeHtml(label)}</span>
           <strong>${escapeHtml(value)}</strong>
-          <p>${escapeHtml(text)}</p>
         </article>
       `).join("")}
     </div>
@@ -5812,11 +5987,12 @@ function renderEnglishDrip(tasks, date = planTodayISO()) {
   const minutes = sanitizeNumber(entry.english);
   const reading = sanitizeNumber(entry.reading);
   const streak = englishStreak(date);
+  const vocab = englishVocabQuota(state.settings?.planControls);
   const planText = englishTask
     ? englishTask.text
     : topic
       ? `微积累${topic.group}：${topic.topic}`
-      : "微积累单词 + 长难句 + 阅读定位";
+      : vocab.taskText;
   container.innerHTML = `
     <div class="english-drip-head">
       <span>英语细水长流</span>
@@ -5824,10 +6000,10 @@ function renderEnglishDrip(tasks, date = planTodayISO()) {
     </div>
     <p>${escapeHtml(planText)}</p>
     <div class="english-drip-steps">
-      <em>新词20</em>
-      <em>复习60</em>
-      <em>错词10</em>
-      <em>定位1句</em>
+      <em>${escapeHtml(vocab.label)}</em>
+      <em>${escapeHtml(vocab.reviewLabel)}</em>
+      <em>${escapeHtml(vocab.errorLabel)}</em>
+      <em>${escapeHtml(vocab.sentenceLabel)}</em>
     </div>
     <div class="english-drip-foot">
       <span>今日记录 ${minutes}m</span>
@@ -5860,7 +6036,7 @@ function renderTaskFlow(tasks) {
             <strong>${escapeHtml(task.subject)}</strong>
             <span>${Number(task.minutes) || 0}m</span>
           </div>
-          <p>${escapeHtml(task.text)}</p>
+          <p>${escapeHtml(displayTaskText(task))}</p>
           <div class="flow-steps">
             ${blueprint.steps.map((step) => `<em>${escapeHtml(step)}</em>`).join("")}
           </div>
@@ -5898,15 +6074,17 @@ function manualTopic(subjectTitle, group, topic) {
   };
 }
 
+function displayTaskText(task) {
+  return String(task?.text || "").replace(/；\d+m：[\s\S]*$/, "");
+}
+
 function topicTask(date, phase, subject, topic, minutes, fallback) {
   const detail = topic ? `${topic.group}：${topic.topic}` : fallback;
   const stateLabel = topic && topic.state === 1 ? "复盘" : "推进";
-  const prescription = phaseSubjectPlan(phase.id, subject);
-  const action = prescription?.dailyTask ? `；${prescription.dailyTask}` : "";
   return {
     id: `${date}-${phase.id}-${subject}-${topic ? topic.id : "fallback"}`,
     subject,
-    text: `${stateLabel}${detail}${action}`,
+    text: `${stateLabel}${detail}`,
     minutes
   };
 }
@@ -5994,7 +6172,7 @@ function renderReviewQueue() {
   const reviews = reviewRows();
   const due = reviews.filter((item) => isReviewDue(item, planDate));
   const upcoming = reviews.filter((item) => isReviewUpcoming(item, planDate)).slice(0, 8);
-  const todayHtml = due.length ? due.map(renderReviewItem).join("") : `<div class="empty-state">今天没有到期复盘。完成任务后会自动安排 D+1/D+3/D+7/D+14/D+30。</div>`;
+  const todayHtml = due.length ? due.map(renderReviewItem).join("") : `<div class="empty-state">今天没有到期复盘</div>`;
   document.getElementById("reviewQueue").innerHTML = todayHtml;
   document.getElementById("spacedReviewList").innerHTML = [...due, ...upcoming].length ? [...due, ...upcoming].map(renderReviewItem).join("") : `<div class="empty-state">复盘队列为空。先完成今日任务，系统会自动生成复盘。</div>`;
   renderReviewPolicy(due.length, upcoming.length);
@@ -6207,8 +6385,8 @@ function renderReviewItem(item) {
       <div>
         <strong>${escapeHtml(item.round)} · ${escapeHtml(item.subject)}</strong>
         <p>${escapeHtml(item.text)}</p>
-        <p class="review-why">${escapeHtml(explanation.why)} ${escapeHtml(explanation.impact)}</p>
-        <div class="review-guide">
+        <p class="review-why density-detail-only">${escapeHtml(explanation.why)} ${escapeHtml(explanation.impact)}</p>
+        <div class="review-guide density-detail-only">
           <span>${escapeHtml(guide.action)}</span>
           <span>通过：${escapeHtml(guide.pass)}</span>
           <span>未过：${escapeHtml(guide.fail)}</span>
@@ -6874,11 +7052,19 @@ function syllabusGroupMeta(subject, group) {
   return { type, ...syllabusGroupTypeMeta[type] };
 }
 
+function topicMasteryLabel(topicKey, value) {
+  const openMistakes = mistakesForTopic(mistakeRows(), topicKey).some((item) => item.status !== "mastered");
+  if (value <= 0) return "未开始";
+  if (value === 1) return openMistakes ? "学习中" : "巩固中";
+  return openMistakes ? "已学完" : "较稳定";
+}
+
 function renderTopic(subject, group, topic) {
   const id = topicId(subject, group, topic);
   const value = topicStateValue(id);
   const className = value === 2 ? "done" : value === 1 ? "review" : "";
   const label = value === 2 ? "已掌握" : value === 1 ? "需复盘" : "未开始";
+  const mastery = topicMasteryLabel(id, value);
   const guide = topicGuide(subject, group, topic);
   const evidence = topicEvidenceRow(id);
   return `
@@ -6893,6 +7079,7 @@ function renderTopic(subject, group, topic) {
         </span>
         <span class="topic-side">
           <span class="topic-state">${escapeHtml(label)}</span>
+          <small class="topic-mastery">${escapeHtml(mastery)}</small>
           <em>${escapeHtml(guide.drill)}</em>
         </span>
       </button>
@@ -6962,7 +7149,7 @@ function topicGuide(subject, group, topic) {
       drill: "20 题"
     },
     english: {
-      explain: "先背词，再定位句子结构，最后解释错选项原因。",
+      explain: "先清到期词，再学 100 个新词，然后定位句子结构并解释错选项原因。",
       output: "交付：生词、长难句、定位句、错因各一组。",
       drill: "1 组"
     },
@@ -7002,9 +7189,9 @@ function topicGuide(subject, group, topic) {
     "cs408/计网-基础与链路": ["先建立分层视角，知道每层解决什么问题。", "交付：层次图 + 链路层过程说明。", "15-25 题"],
     "cs408/计网-网络层": ["IP、子网和路由必须能算、能画、能解释。", "交付：子网划分 + 路由转发表。", "20 题"],
     "cs408/计网-传输与应用": ["TCP 是重心，握手、可靠传输、拥塞控制要手推。", "交付：时序图 + 窗口变化过程。", "20 题"],
-    "english/词汇": ["目标不是背完列表，而是在真题里认出同义替换。", "交付：高频词 + 熟词僻义 + 错词复现。", "20-40min"],
+    "english/词汇": ["每天先清到期词，再学新词配额，并在真题里核对同义替换。", "交付：高频词 + 熟词僻义 + 错词复现。", "40-55min"],
     "english/语法长难句": ["先找主干，再处理从句、非谓语和插入成分。", "交付：长句切分 + 翻译顺序。", "3-5 句"],
-    "english/阅读理解": ["阅读分数靠定位和排除，不靠全文翻译。", "交付：定位句 + 错选项原因。", "1 篇"],
+    "english/阅读理解": ["先定位证据句，再核对同义替换和干扰项。", "交付：定位句 + 错选项原因。", "1 篇"],
     "politics/马原": ["马原先理解原理，再做材料匹配。", "交付：原理关键词 + 选择题错因。", "20 题"],
     "politics/主观题": ["后期再重投入，先练关键词和答题层次。", "交付：关键词默写 + 材料定位。", "1 题"]
   };
@@ -7043,7 +7230,7 @@ function specificTopicGuide(subject, group, topic) {
     "cs408/数据结构-树/二叉树遍历": ["遍历题先确定根的位置，再根据先中后序还原结构。", "交付：手推遍历序列，写递归/非递归思路。", "20 题"],
     "cs408/数据结构-图/DFS": ["DFS 是沿一条路走到底再回退，重点是访问标记和递归栈。", "交付：画搜索树，写伪代码和复杂度。", "15-20 题"],
     "cs408/数据结构-图/BFS": ["BFS 按层扩展，队列是关键，常用于最短步数。", "交付：画队列变化和访问序列。", "15-20 题"],
-    "english/词汇/高频核心词": ["先保证真题高频词能反应，不追求一次背完所有词。", "交付：当天新词、复习词、错词各有记录。", "20-40min"],
+    "english/词汇/高频核心词": ["先清到期词，再学当日新词配额。", "交付：新词 100、到期复习、错词有记录。", "40-55min"],
     "english/阅读理解/定位句识别": ["题干关键词回原文定位，答案必须有原文依据。", "交付：每题写定位句和干扰项原因。", "1 篇"],
     "politics/马原/辩证法": ["辩证法主看联系、发展、矛盾，材料题要匹配原理。", "交付：原理关键词 + 选择题错因归类。", "20 题"]
   };
@@ -7478,39 +7665,41 @@ function renderCoach(week, phase) {
   const streak = currentStreak();
   const mathProgress = syllabusProgress("math").percent;
   const csProgress = syllabusProgress("cs408").percent;
-  const englishProgress = syllabusProgress("english").percent;
   const englishDays = lastDaysEntries(7).filter((entry) => sanitizeNumber(entry.english) >= 15).length;
   const dueCount = dueReviewItems(planTodayISO()).length;
-  const next = nextMilestone();
+  const vocab = englishVocabQuota(state.settings?.planControls);
+  const corePercent = Math.round(coreRatio * 100);
+  const weekLine = weekHours
+    ? `本周 ${weekHours.toFixed(1)}h / ${phase.weeklyTarget}h · 核心 ${corePercent || 0}% · 连续 ${streak} 天`
+    : "本周还没有记录。完成任务后在今日页记账。";
 
-  let title = `${phase.name}：先稳住每日底线`;
-  let text = `本阶段重点是：${phase.focus}`;
-  let pace = "节奏未建立";
+  let title = `阶段 ${phase.id} ${phase.name}`;
+  let text = weekLine;
+  let pace = weekHours ? "已记录" : "待记录";
 
   if (streak >= 7 && weekHours >= phase.weeklyTarget * 0.9 && coreRatio >= 0.65) {
-    title = "节奏健康，可以推进新内容";
-    text = `继续保持数学+408 的核心占比。下一节点 ${next[0]}，参考累计 ${next[2]}h。`;
-    pace = "节奏健康";
+    title = `阶段 ${phase.id} · 本周达标`;
+    pace = "达标";
   } else if (weekHours < phase.weeklyTarget * 0.7 && streak >= 3) {
-    title = "执行偏轻，先补核心时长";
-    text = "下周减少新增资料，补足数学和 408 日均时间。";
-    pace = "需要加固";
+    title = `阶段 ${phase.id} · 本周偏少`;
+    text = `${weekLine}。先补数学和 408。`;
+    pace = "偏少";
   } else if (mathProgress < csProgress - 15) {
-    title = "数学考纲进度偏慢";
-    text = "今日任务优先安排数学未完成条目。";
-    pace = "数学补强";
+    title = "数学考纲落后";
+    text = `${weekLine}。下一任务排数学。`;
+    pace = "数学";
   } else if (csProgress < mathProgress - 15) {
-    title = "408 考纲进度偏慢";
-    text = "今日任务优先安排 408 未完成条目。";
-    pace = "408 补强";
-  } else if (englishDays < 5) {
-    title = "英语连续性不足";
-    text = `英语一当前图谱 ${englishProgress}%。先保证每天 20 分钟单词和定位句，不用一次补很多。`;
-    pace = "英语不断档";
+    title = "408 考纲落后";
+    text = `${weekLine}。下一任务排 408。`;
+    pace = "408";
+  } else if (englishDays < 5 && weekHours) {
+    title = "英语天数不足";
+    text = `${weekLine}。今天先做 ${vocab.label} 和到期复习。`;
+    pace = "英语";
   } else if (dueCount >= 3) {
-    title = "复盘债务偏高";
-    text = "今日新内容自动收紧，先清最高优先级复盘，其余在复盘页按 D 轮处理。";
-    pace = "先复盘";
+    title = `复盘到期 ${dueCount} 项`;
+    text = `${weekLine}。先清复盘页最高优先级。`;
+    pace = "复盘";
   }
 
   document.getElementById("coachTitle").textContent = title;
@@ -7590,12 +7779,17 @@ function renderScores() {
     ["当前短板", weak]
   ];
 
-  document.getElementById("scoreSummary").innerHTML = chips.map(([label, value]) => `
+  const scoreSummary = document.getElementById("scoreSummary");
+  if (scoreSummary) {
+    scoreSummary.innerHTML = sorted.length
+      ? chips.map(([label, value]) => `
     <div class="score-chip">
       <span>${label}</span>
       <strong>${value}</strong>
     </div>
-  `).join("");
+  `).join("")
+      : "";
+  }
 
   const trend = document.getElementById("scoreTrend");
   if (trend) {
@@ -7674,12 +7868,12 @@ function renderScores() {
 
 function weakestScoreSubject(avg) {
   if (!avg.total) return "--";
-  const gaps = [
-    ["政治", 75 - avg.politics],
-    ["英语", 80 - avg.english],
-    ["数学", 130 - avg.math],
-    ["408", 135 - avg.cs408]
-  ].sort((a, b) => b[1] - a[1]);
+  const scoreKeys = { "政治": "politics", "英语一": "english", "数学一": "math", "408": "cs408" };
+  const gaps = scoreTargets.map(([subject, target]) => {
+    const key = scoreKeys[subject];
+    const label = subject === "英语一" ? "英语" : subject === "数学一" ? "数学" : subject;
+    return [label, target - (avg[key] || 0)];
+  }).sort((a, b) => b[1] - a[1]);
   return gaps[0][1] > 0 ? gaps[0][0] : "保持";
 }
 
@@ -7920,6 +8114,7 @@ function renderSettings() {
   setValue("settingMaxNewTopics", controls.maxNewTopics);
   setValue("settingReviewLoad", controls.reviewLoad);
   setValue("settingRollingWindowDays", controls.rollingWindowDays);
+  setValue("settingEnglishNewWords", controls.englishNewWords);
   setSelectValue("settingPlanIntensity", controls.planIntensity);
   setSelectValue("settingFocusSubject", controls.focusSubject);
   setSelectValue("settingExperienceTrack", controls.experienceTrack);
@@ -7934,7 +8129,7 @@ function renderSettings() {
 
   document.getElementById("standardsList").innerHTML = [
     ["数据起点", `${PLAN_START_DATE} 从头开始；早于起点的记录、模考、周计划、复盘队列和考纲掌握证据只归档，不参与统计和排程。`],
-    ["渐进时长", "首四周从工作日 90m、周末 150m 起步，再按 120/180m、150/210m 爬坡；完成率连续达到 80% 后进入 180/300m 主干预算。"],
+    ["渐进时长", "10 月 14 日起按 180/240、210/300、240/360 分钟爬坡；完成率 80% 后进入 270/390m。英语默认每天新词 100，可在设置里改。"],
     ...highStandards
   ].map(([subject, standard]) => `
     <div class="standard-item">
